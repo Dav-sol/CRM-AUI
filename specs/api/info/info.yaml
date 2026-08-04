@@ -1,0 +1,12 @@
+title: Automatize It API
+
+summary: CRM de Postventa y Automatización mediante WhatsApp Cloud API.
+
+description: |
+  API oficial de Automatize It.
+
+  Permite administrar clientes, compras, campañas,
+  automatizaciones, conversaciones y mensajería mediante
+  WhatsApp Cloud API.
+
+version: 1.0.0

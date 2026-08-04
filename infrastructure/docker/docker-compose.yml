@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: automatizeit-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: automatizeit
+      POSTGRES_USER: automatizeit
+      POSTGRES_PASSWORD: automatizeit
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - automatizeit_postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: automatizeit-redis
+    restart: unless-stopped
+
+    ports:
+      - "6380:6379"
+
+    volumes:
+      - automatizeit_redis_data:/data
+
+volumes:
+  automatizeit_postgres_data:
+  automatizeit_redis_data:

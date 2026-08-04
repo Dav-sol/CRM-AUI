@@ -1,0 +1,72 @@
+/auth/login:
+  post:
+    tags:
+      - Authentication
+
+    summary: Authenticate user
+
+    description: |
+      Authenticates a user using email and password.
+
+    operationId: login
+
+    requestBody:
+      required: true
+
+      content:
+        application/json:
+          schema:
+            type: object
+
+            required:
+              - email
+              - password
+
+            properties:
+
+              email:
+                type: string
+                format: email
+                example: admin@automatizeit.com
+
+              password:
+                type: string
+                format: password
+                example: MySecurePassword123
+
+    responses:
+
+      "200":
+        description: Authentication successful
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                data:
+
+                  type: object
+
+                  properties:
+
+                    accessToken:
+                      type: string
+
+                    refreshToken:
+                      type: string
+
+                    expiresIn:
+                      type: integer
+                      example: 3600
+
+                    user:
+                      $ref: "../components/schemas/user.yaml"
+
+      "401":
+        $ref: "../components/responses/error.yaml"

@@ -1,0 +1,33 @@
+# Dependencies
+node_modules
+
+# Build
+dist
+coverage
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Prisma
+generated/
+
+# Turbo
+.turbo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Nest
+*.tsbuildinfo

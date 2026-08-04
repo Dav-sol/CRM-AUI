@@ -1,0 +1,3 @@
+apis:
+  automatize-it:
+    root: ./specs/api/openapi.yaml

@@ -1,0 +1,36 @@
+description: Authentication successful
+
+content:
+
+  application/json:
+
+    schema:
+
+      type: object
+
+      properties:
+
+        data:
+
+          type: object
+
+          required:
+            - accessToken
+            - refreshToken
+            - expiresIn
+            - user
+
+          properties:
+
+            accessToken:
+              type: string
+
+            refreshToken:
+              type: string
+
+            expiresIn:
+              type: integer
+              example: 3600
+
+            user:
+              $ref: ../schemas/User.yaml

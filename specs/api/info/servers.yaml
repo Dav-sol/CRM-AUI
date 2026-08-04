@@ -1,0 +1,8 @@
+- url: http://localhost:3000/api/v1
+  description: Local Development
+
+- url: https://api-dev.automatizeit.co/api/v1
+  description: Development
+
+- url: https://api.automatizeit.co/api/v1
+  description: Production

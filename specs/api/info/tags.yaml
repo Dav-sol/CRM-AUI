@@ -1,0 +1,29 @@
+- name: Authentication
+  description: User authentication
+
+- name: Customers
+  description: Customer management
+
+- name: Products
+  description: Product catalog
+
+- name: Purchases
+  description: Customer purchases
+
+- name: Imports
+  description: Excel import process
+
+- name: Automations
+  description: Automation engine
+
+- name: Campaigns
+  description: Marketing campaigns
+
+- name: Conversations
+  description: WhatsApp conversations
+
+- name: Messages
+  description: WhatsApp messages
+
+- name: Dashboard
+  description: Dashboard metrics
