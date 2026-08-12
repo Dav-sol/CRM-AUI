@@ -1,0 +1,24 @@
+type: object
+description: Pagination metadata for collection responses.
+required:
+  - page
+  - limit
+  - total
+  - pages
+properties:
+  page:
+    type: integer
+    minimum: 1
+    example: 1
+  limit:
+    type: integer
+    minimum: 1
+    example: 20
+  total:
+    type: integer
+    minimum: 0
+    example: 125
+  pages:
+    type: integer
+    minimum: 0
+    example: 7

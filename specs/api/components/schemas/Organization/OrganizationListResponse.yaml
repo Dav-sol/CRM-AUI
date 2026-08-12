@@ -1,0 +1,12 @@
+type: object
+description: Standard paginated response containing organizations.
+required:
+  - data
+  - meta
+properties:
+  data:
+    type: array
+    items:
+      $ref: "./OrganizationSummary.yaml"
+  meta:
+    $ref: "../../responses/pagination.yaml"

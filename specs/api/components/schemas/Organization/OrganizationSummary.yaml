@@ -1,0 +1,31 @@
+type: object
+description: Lightweight organization representation for lists and selectors.
+required:
+  - id
+  - uuid
+  - name
+  - slug
+  - status
+properties:
+  id:
+    type: string
+    readOnly: true
+    example: clx123abc0001
+  uuid:
+    type: string
+    format: uuid
+    readOnly: true
+    example: 550e8400-e29b-41d4-a716-446655440000
+  name:
+    type: string
+    example: Baterías del Caribe
+  slug:
+    type: string
+    example: baterias-del-caribe
+  status:
+    type: string
+    enum:
+      - ACTIVE
+      - SUSPENDED
+      - INACTIVE
+    example: ACTIVE

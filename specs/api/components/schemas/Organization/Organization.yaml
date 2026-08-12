@@ -1,0 +1,86 @@
+type: object
+description: Organization tenant of the platform.
+required:
+  - id
+  - uuid
+  - name
+  - slug
+  - status
+  - createdAt
+  - updatedAt
+properties:
+  id:
+    type: string
+    readOnly: true
+    description: Internal organization identifier.
+    example: clx123abc0001
+  uuid:
+    type: string
+    format: uuid
+    readOnly: true
+    description: Public organization identifier.
+    example: 550e8400-e29b-41d4-a716-446655440000
+  name:
+    type: string
+    minLength: 1
+    description: Organization name.
+    example: Baterías del Caribe
+  slug:
+    type: string
+    pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    description: URL-safe unique organization slug.
+    example: baterias-del-caribe
+  nit:
+    type:
+      - string
+      - "null"
+    description: Optional unique tax identification number.
+    example: "900123456-7"
+  email:
+    type:
+      - string
+      - "null"
+    format: email
+    description: Optional organization email address.
+    example: contacto@bateriasdelcaribe.com
+  phone:
+    type:
+      - string
+      - "null"
+    description: Optional organization phone number.
+    example: "+576001234567"
+  city:
+    type:
+      - string
+      - "null"
+    description: Optional organization city.
+    example: Barranquilla
+  status:
+    type: string
+    enum:
+      - ACTIVE
+      - SUSPENDED
+      - INACTIVE
+    readOnly: true
+    description: Administrative status of the organization.
+    example: ACTIVE
+  createdAt:
+    type: string
+    format: date-time
+    readOnly: true
+    description: Creation timestamp in UTC.
+    example: "2026-08-11T14:00:00Z"
+  updatedAt:
+    type: string
+    format: date-time
+    readOnly: true
+    description: Last update timestamp in UTC.
+    example: "2026-08-11T14:00:00Z"
+  deletedAt:
+    type:
+      - string
+      - "null"
+    format: date-time
+    readOnly: true
+    description: Soft-delete timestamp.
+    example: null

@@ -1,0 +1,36 @@
+type: object
+description: Request body for creating an organization.
+required:
+  - name
+  - slug
+properties:
+  name:
+    type: string
+    minLength: 1
+    example: Baterías del Caribe
+  slug:
+    type: string
+    pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    example: baterias-del-caribe
+  nit:
+    type:
+      - string
+      - "null"
+    example: "900123456-7"
+  email:
+    type:
+      - string
+      - "null"
+    format: email
+    example: contacto@bateriasdelcaribe.com
+  phone:
+    type:
+      - string
+      - "null"
+    example: "+576001234567"
+  city:
+    type:
+      - string
+      - "null"
+    example: Barranquilla
+additionalProperties: false

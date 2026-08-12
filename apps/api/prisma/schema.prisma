@@ -9,40 +9,312 @@ datasource db {
 
 model Organization {
   id        String   @id @default(cuid())
+  uuid      String   @unique @default(uuid())
   name      String
   slug      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  nit       String?  @unique
+  email     String?
+  phone     String?
+  city      String?
+  status    OrganizationStatus @default(ACTIVE)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
   Role      Role[]
   users     User[]
+  customers Customer[]
+  products  Product[]
+  purchases Purchase[]
+  campaigns Campaign[]
+  automations Automation[]
+  conversations Conversation[]
+  messages  Message[]
+  imports   Import[]
+  audits    Audit[]
+
+  @@map("organizations")
 }
 
 model User {
   id             String       @id @default(cuid())
-  organizationId String
-  roleId         String
-  firstName      String
-  lastName       String
+  uuid           String       @unique @default(uuid())
+  organizationId String       @map("organization_id")
+  roleId         String       @map("role_id")
+  firstName      String       @map("first_name")
+  lastName       String       @map("last_name")
   email          String       @unique
-  passwordHash   String
+  passwordHash   String       @map("password_hash")
   status         UserStatus   @default(INVITED)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  lastLogin      DateTime?    @map("last_login")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  deletedAt      DateTime?    @map("deleted_at")
+
   organization   Organization @relation(fields: [organizationId], references: [id])
   role           Role         @relation(fields: [roleId], references: [id])
+  conversations  Conversation[] @relation("ConversationAdvisor")
+  imports        Import[]
+  audits         Audit[]
 
   @@index([organizationId])
+  @@map("users")
 }
 
 model Role {
   id             String        @id @default(cuid())
-  organizationId String?
+  uuid           String        @unique @default(uuid())
+  organizationId String?       @map("organization_id")
   name           RoleType
-  createdAt      DateTime      @default(now())
+  createdAt      DateTime      @default(now()) @map("created_at")
+
   organization   Organization? @relation(fields: [organizationId], references: [id])
   users          User[]
 
   @@unique([organizationId, name])
+  @@map("roles")
+}
+
+model Customer {
+  id             String       @id @default(cuid())
+  uuid           String       @unique @default(uuid())
+  organizationId String       @map("organization_id")
+  codcli         String
+  name           String
+  phone          String?
+  email          String?
+  address        String?
+  city           String?
+  status         CustomerStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  deletedAt      DateTime?    @map("deleted_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  purchases      Purchase[]
+  conversations  Conversation[]
+
+  @@unique([organizationId, codcli])
+  @@index([organizationId])
+  @@index([phone])
+  @@map("customers")
+}
+
+model Product {
+  id             String         @id @default(cuid())
+  uuid           String         @unique @default(uuid())
+  organizationId String         @map("organization_id")
+  code           String
+  name           String
+  category       String?
+  status         ProductStatus  @default(ACTIVE)
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  deletedAt      DateTime?      @map("deleted_at")
+
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  purchases      Purchase[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("products")
+}
+
+model Purchase {
+  id             String            @id @default(cuid())
+  uuid           String            @unique @default(uuid())
+  organizationId String            @map("organization_id")
+  customerId     String            @map("customer_id")
+  productId      String            @map("product_id")
+  invoiceNumber  String            @map("invoice_number")
+  purchaseDate   DateTime          @map("purchase_date")
+  quantity       Int
+  value          Decimal           @db.Decimal(12, 2)
+  status         PurchaseStatus    @default(COMPLETED)
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  deletedAt      DateTime?         @map("deleted_at")
+
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  customer       Customer          @relation(fields: [customerId], references: [id])
+  product        Product           @relation(fields: [productId], references: [id])
+  commercialCycle CommercialCycle?
+  automations    Automation[]
+
+  @@unique([organizationId, invoiceNumber, customerId, productId, purchaseDate])
+  @@index([organizationId])
+  @@index([customerId])
+  @@index([purchaseDate])
+  @@index([invoiceNumber])
+  @@map("purchases")
+}
+
+model CommercialCycle {
+  id             String            @id @default(cuid())
+  uuid           String            @unique @default(uuid())
+  purchaseId     String            @unique @map("purchase_id")
+  status         CommercialCycleStatus @default(ACTIVE)
+  startDate      DateTime          @map("start_date")
+  endDate        DateTime?         @map("end_date")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  deletedAt      DateTime?         @map("deleted_at")
+
+  purchase       Purchase          @relation(fields: [purchaseId], references: [id])
+  automations    Automation[]
+
+  @@map("commercial_cycles")
+}
+
+model Campaign {
+  id             String         @id @default(cuid())
+  uuid           String         @unique @default(uuid())
+  organizationId String         @map("organization_id")
+  name           String
+  description    String?
+  type           CampaignType
+  template       String
+  status         CampaignStatus @default(DRAFT)
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  deletedAt      DateTime?      @map("deleted_at")
+
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  automations    Automation[]
+
+  @@index([organizationId])
+  @@map("campaigns")
+}
+
+model Automation {
+  id             String             @id @default(cuid())
+  uuid           String             @unique @default(uuid())
+  organizationId String             @map("organization_id")
+  campaignId     String?            @map("campaign_id")
+  purchaseId     String             @map("purchase_id")
+  commercialCycleId String?         @map("commercial_cycle_id")
+  scheduledDate  DateTime           @map("scheduled_date")
+  executedDate   DateTime?          @map("executed_date")
+  status         AutomationStatus   @default(PENDING)
+  priority       Int                @default(0)
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  deletedAt      DateTime?          @map("deleted_at")
+
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  campaign       Campaign?          @relation(fields: [campaignId], references: [id])
+  purchase       Purchase           @relation(fields: [purchaseId], references: [id])
+  commercialCycle CommercialCycle?  @relation(fields: [commercialCycleId], references: [id])
+  messages       Message[]
+
+  @@index([organizationId])
+  @@index([purchaseId])
+  @@index([scheduledDate])
+  @@index([status])
+  @@map("automations")
+}
+
+model Conversation {
+  id             String             @id @default(cuid())
+  uuid           String             @unique @default(uuid())
+  organizationId String             @map("organization_id")
+  customerId     String             @map("customer_id")
+  advisorId      String?            @map("advisor_id")
+  channel        ChannelType
+  status         ConversationStatus @default(OPEN)
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  deletedAt      DateTime?          @map("deleted_at")
+
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  customer       Customer           @relation(fields: [customerId], references: [id])
+  advisor        User?              @relation("ConversationAdvisor", fields: [advisorId], references: [id])
+  messages       Message[]
+
+  @@index([organizationId])
+  @@index([customerId])
+  @@index([advisorId])
+  @@index([status])
+  @@map("conversations")
+}
+
+model Message {
+  id             String           @id @default(cuid())
+  uuid           String           @unique @default(uuid())
+  organizationId String           @map("organization_id")
+  conversationId String           @map("conversation_id")
+  automationId   String?          @map("automation_id")
+  type           MessageType
+  content        String
+  direction      MessageDirection
+  status         MessageStatus    @default(QUEUED)
+  sentAt         DateTime?        @map("sent_at")
+  deliveredAt    DateTime?        @map("delivered_at")
+  readAt         DateTime?        @map("read_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  deletedAt      DateTime?        @map("deleted_at")
+
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  conversation   Conversation     @relation(fields: [conversationId], references: [id])
+  automation     Automation?      @relation(fields: [automationId], references: [id])
+
+  @@index([organizationId])
+  @@index([conversationId])
+  @@index([automationId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("messages")
+}
+
+model Import {
+  id             String         @id @default(cuid())
+  uuid           String         @unique @default(uuid())
+  organizationId String         @map("organization_id")
+  userId         String         @map("user_id")
+  type           ImportType
+  fileName       String         @map("file_name")
+  filePath       String         @map("file_path")
+  status         ImportStatus   @default(PENDING)
+  totalRecords   Int            @default(0) @map("total_records")
+  processedRecords Int          @default(0) @map("processed_records")
+  errorRecords   Int            @default(0) @map("error_records")
+  errors         Json?
+  startedAt      DateTime?      @map("started_at")
+  completedAt    DateTime?      @map("completed_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  deletedAt      DateTime?      @map("deleted_at")
+
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  user           User           @relation(fields: [userId], references: [id])
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([status])
+  @@map("imports")
+}
+
+model Audit {
+  id             String     @id @default(cuid())
+  uuid           String     @unique @default(uuid())
+  organizationId String     @map("organization_id")
+  userId         String?    @map("user_id")
+  module         String
+  action         String
+  description    String?
+  metadata       Json?
+  createdAt      DateTime   @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  user           User?      @relation(fields: [userId], references: [id])
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([module])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audits")
 }
 
 enum UserStatus {
@@ -55,4 +327,103 @@ enum RoleType {
   ADMINISTRADOR
   GERENTE
   ASESOR
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PurchaseStatus {
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum CommercialCycleStatus {
+  ACTIVE
+  FINISHED
+  CANCELLED
+}
+
+enum CampaignType {
+  AUTOMATIC
+  MANUAL
+  REPURCHASE
+  SPECIAL
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  FINISHED
+  CANCELLED
+}
+
+enum AutomationStatus {
+  PENDING
+  SCHEDULED
+  EXECUTED
+  CANCELLED
+  ERROR
+  PAUSED
+}
+
+enum ChannelType {
+  WHATSAPP_CLIENTS
+  WHATSAPP_SOCIAL
+}
+
+enum ConversationStatus {
+  OPEN
+  CLOSED
+  ARCHIVED
+}
+
+enum MessageType {
+  AUTOMATIC
+  MANUAL
+  INCOMING
+  OUTGOING
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum ImportType {
+  CUSTOMERS
+  PURCHASES
+  PRODUCTS
+}
+
+enum ImportStatus {
+  PENDING
+  VALIDATING
+  PROCESSING
+  COMPLETED
+  FAILED
+  PARTIAL
 }

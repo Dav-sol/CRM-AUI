@@ -1,0 +1,7 @@
+type: object
+description: Standard response containing a single organization.
+required:
+  - data
+properties:
+  data:
+    $ref: "./OrganizationDetails.yaml"
