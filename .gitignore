@@ -31,3 +31,7 @@ Thumbs.db
 
 # Nest
 *.tsbuildinfo
+# AI agent local artifacts
+.opencode/*.json
+.opencode/auth/
+.opencode/state/
