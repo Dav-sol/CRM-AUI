@@ -1,0 +1,828 @@
+/products:
+  get:
+    tags:
+      - Products
+
+    summary: List products of the organization
+
+    description: |
+      Returns a paginated list of products ordered by -createdAt.
+      Organization users only see their own organization; PLATFORM_OWNER sees all.
+      Soft-deleted products are excluded.
+
+    operationId: listProducts
+
+    security:
+      - bearerAuth: []
+
+    parameters:
+
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+
+      - name: search
+        in: query
+        required: false
+        description: Case-insensitive match over code, name, or category.
+        schema:
+          type: string
+
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+            - ACTIVE
+            - INACTIVE
+
+      - name: category
+        in: query
+        required: false
+        description: Exact match over the free-text category.
+        schema:
+          type: string
+
+      - name: createdFrom
+        in: query
+        required: false
+        description: |
+          Lower bound on createdAt. Date-only (`YYYY-MM-DD`) means the start
+          of that day (`>= 00:00:00` UTC); a full ISO datetime keeps its exact
+          instant.
+        schema:
+          type: string
+          format: date-time
+
+      - name: createdTo
+        in: query
+        required: false
+        description: |
+          Upper bound on createdAt. Date-only (`YYYY-MM-DD`) includes the
+          whole requested day (`<= 23:59:59.999` UTC); a full ISO datetime
+          keeps its exact instant.
+        schema:
+          type: string
+          format: date-time
+
+      - name: sort
+        in: query
+        required: false
+        description: Field sorted by; "-" prefix means descending. Defaults to -createdAt.
+        schema:
+          type: string
+          pattern: "^-?(code|name|category|status|createdAt|updatedAt)$"
+
+    responses:
+
+      "200":
+        description: Paginated product list
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Product/ProductListResponse.yaml"
+
+      "400":
+        description: |
+          Two distinct shapes exist, depending on the failure source:
+
+          - **ValidationPipe (DTO)**: malformed query parameters (page/limit/status/category/createdFrom/createdTo/sort pattern). The global exception filter passes the ValidationPipe payload through as `{"statusCode": 400, "message": [string], "error": "Bad Request"}`.
+          - **Business logic**: a non-whitelisted `sort` field throws `BAD_REQUEST` in the service, following the standard error envelope.
+
+        content:
+
+          application/json:
+
+            schema:
+
+              oneOf:
+
+                - type: object
+                  description: ValidationPipe DTO failure (payload passthrough).
+                  required:
+                    - statusCode
+                    - message
+                    - error
+                  properties:
+                    statusCode:
+                      type: integer
+                      example: 400
+                    message:
+                      type: array
+                      items:
+                        type: string
+                      example:
+                        - sort must match ^-?(code|name|category|status|createdAt|updatedAt)$ regular expression
+                    error:
+                      type: string
+                      example: Bad Request
+
+                - type: object
+                  description: Service business failure (error envelope).
+                  required:
+                    - error
+                  properties:
+                    error:
+                      type: object
+                      required:
+                        - code
+                        - message
+                      properties:
+                        code:
+                          type: string
+                          example: BAD_REQUEST
+                        message:
+                          type: string
+                          example: Invalid sort field
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+
+      "500":
+        description: Internal error
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: INTERNAL_ERROR
+                    message:
+                      type: string
+
+  post:
+    tags:
+      - Products
+
+    summary: Create a product
+
+    description: |
+      Creates a product for the organization of the authenticated user
+      (PLATFORM_OWNER must send organizationId, which is validated to exist).
+      OPERADOR is not allowed (403).
+      Duplicate codes within the organization return 409 CONFLICT
+      (schema.prisma:128), including collisions with soft-deleted products.
+
+    operationId: createProduct
+
+    security:
+      - bearerAuth: []
+
+    requestBody:
+
+      required: true
+
+      content:
+
+        application/json:
+
+          schema:
+            $ref: "../components/schemas/Product/CreateProductRequest.yaml"
+
+    responses:
+
+      "201":
+        description: Product created
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Product/ProductResponse.yaml"
+
+      "400":
+        description: |
+          Two distinct shapes exist, depending on the failure source:
+
+          - **ValidationPipe (DTO)**: malformed body (code/name length, status enum). The global exception filter passes the ValidationPipe payload through as `{"statusCode": 400, "message": [string], "error": "Bad Request"}`.
+          - **Business logic**: organizationId misuse by organization users or PLATFORM_OWNER, or unknown organization — `VALIDATION_ERROR` envelope.
+
+        content:
+
+          application/json:
+
+            schema:
+
+              oneOf:
+
+                - type: object
+                  description: ValidationPipe DTO failure (payload passthrough).
+                  required:
+                    - statusCode
+                    - message
+                    - error
+                  properties:
+                    statusCode:
+                      type: integer
+                      example: 400
+                    message:
+                      type: array
+                      items:
+                        type: string
+                      example:
+                        - code must be shorter than or equal to 50 characters
+                    error:
+                      type: string
+                      example: Bad Request
+
+                - type: object
+                  description: Service business failure (error envelope).
+                  required:
+                    - error
+                  properties:
+                    error:
+                      type: object
+                      required:
+                        - code
+                        - message
+                      properties:
+                        code:
+                          type: string
+                          example: VALIDATION_ERROR
+                        message:
+                          type: string
+                          example: organizationId is required for PLATFORM_OWNER
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+
+      "403":
+        description: OPERADOR is read-only in v1
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+
+      "409":
+        description: Duplicate product code within the organization
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CONFLICT
+                    message:
+                      type: string
+                      example: A product with this code already exists
+
+      "500":
+        description: Internal error
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: INTERNAL_ERROR
+                    message:
+                      type: string
+
+/products/{id}:
+  parameters:
+
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+
+  get:
+    tags:
+      - Products
+
+    summary: Get a product by id
+
+    description: |
+      Returns a single product. Returns 404 PRODUCT_NOT_FOUND for unknown ids,
+      soft-deleted products, or products of another organization.
+
+    operationId: getProduct
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Product detail
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Product/ProductResponse.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+
+      "404":
+        description: Product not found, soft-deleted, or not accessible in this organization
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: PRODUCT_NOT_FOUND
+                    message:
+                      type: string
+                      example: Product not found
+
+      "500":
+        description: Internal error
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: INTERNAL_ERROR
+                    message:
+                      type: string
+
+  patch:
+    tags:
+      - Products
+
+    summary: Update a product
+
+    description: |
+      Updates mutable fields of a product (name, category, status). code is
+      immutable and rejected with 400. OPERADOR is not allowed (403).
+
+    operationId: updateProduct
+
+    security:
+      - bearerAuth: []
+
+    requestBody:
+
+      required: true
+
+      content:
+
+        application/json:
+
+          schema:
+            $ref: "../components/schemas/Product/UpdateProductRequest.yaml"
+
+    responses:
+
+      "200":
+        description: Product updated
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Product/ProductResponse.yaml"
+
+      "400":
+        description: |
+          ValidationPipe (DTO) failure only — there is no business 400 on PATCH:
+          malformed name/category/status or an immutable code attempt. The
+          global exception filter passes the ValidationPipe payload through as
+          `{"statusCode": 400, "message": [string], "error": "Bad Request"}`.
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+              required:
+                - statusCode
+                - message
+                - error
+              properties:
+                statusCode:
+                  type: integer
+                  example: 400
+                message:
+                  type: array
+                  items:
+                    type: string
+                  example:
+                    - code is immutable and cannot be updated
+                error:
+                  type: string
+                  example: Bad Request
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+
+      "403":
+        description: OPERADOR is read-only in v1
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+
+      "404":
+        description: Product not found, soft-deleted, or not accessible in this organization
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: PRODUCT_NOT_FOUND
+                    message:
+                      type: string
+                      example: Product not found
+
+      "500":
+        description: Internal error
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: INTERNAL_ERROR
+                    message:
+                      type: string
+
+  delete:
+    tags:
+      - Products
+
+    summary: Soft-delete a product
+
+    description: |
+      Soft-deletes a product setting deletedAt/deletedBy; history is preserved
+      and the record is hidden from queries. Purchases keep their historical
+      product summaries. OPERADOR is not allowed (403).
+
+    operationId: deleteProduct
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Product soft-deleted
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              required:
+                - data
+
+              properties:
+
+                data:
+                  type: object
+
+                  required:
+                    - success
+
+                  properties:
+
+                    success:
+                      type: boolean
+                      example: true
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+
+      "403":
+        description: OPERADOR is read-only in v1
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+
+      "404":
+        description: Product not found, already soft-deleted, or not accessible in this organization
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: PRODUCT_NOT_FOUND
+                    message:
+                      type: string
+                      example: Product not found
+
+      "500":
+        description: Internal error
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: INTERNAL_ERROR
+                    message:
+                      type: string

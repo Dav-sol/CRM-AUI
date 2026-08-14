@@ -12,6 +12,7 @@ import { PasswordResetModule } from './modules/password-reset/password-reset.mod
 import { InvitationsModule } from './modules/invitations/invitations.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { PurchasesModule } from './modules/purchases/purchases.module';
+import { ProductsModule } from './modules/products/products.module';
 
 @Module({
   imports: [
@@ -38,6 +39,8 @@ import { PurchasesModule } from './modules/purchases/purchases.module';
     CustomersModule,
 
     PurchasesModule,
+
+    ProductsModule,
   ],
 })
 export class AppModule {}

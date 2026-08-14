@@ -1,0 +1,26 @@
+type: object
+
+description: Request body to update a product. code is immutable and rejected with 400.
+
+properties:
+
+  code:
+    type: string
+    maxLength: 50
+    description: Immutable after creation; attempts return 400 "code is immutable and cannot be updated".
+
+  name:
+    type: string
+    maxLength: 200
+
+  category:
+    type: string
+    maxLength: 100
+    description: Free-text category (no catalog in v1).
+
+  status:
+    type: string
+    enum:
+      - ACTIVE
+      - INACTIVE
+    description: No transitions workflow in v1.

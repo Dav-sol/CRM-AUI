@@ -1,0 +1,56 @@
+type: object
+
+description: Full product record as returned by get/create/update operations.
+
+required:
+  - id
+  - uuid
+  - code
+  - name
+  - status
+  - createdAt
+  - updatedAt
+
+properties:
+
+  id:
+    type: string
+
+  uuid:
+    type: string
+
+  code:
+    type: string
+    description: ERP-facing reference; immutable after creation.
+
+  name:
+    type: string
+
+  category:
+    type: string
+    nullable: true
+    description: Free-text category (no catalog in v1).
+
+  status:
+    type: string
+    enum:
+      - ACTIVE
+      - INACTIVE
+
+  createdAt:
+    type: string
+    format: date-time
+
+  updatedAt:
+    type: string
+    format: date-time
+
+  createdBy:
+    type: string
+    nullable: true
+    description: Actor user id from the JWT on creation.
+
+  updatedBy:
+    type: string
+    nullable: true
+    description: Actor user id from the JWT on last update.

@@ -1,0 +1,44 @@
+type: object
+
+description: Product summary used in list responses.
+
+required:
+  - id
+  - uuid
+  - code
+  - name
+  - status
+  - createdAt
+  - updatedAt
+
+properties:
+
+  id:
+    type: string
+
+  uuid:
+    type: string
+
+  code:
+    type: string
+
+  name:
+    type: string
+
+  category:
+    type: string
+    nullable: true
+
+  status:
+    type: string
+    enum:
+      - ACTIVE
+      - INACTIVE
+
+  createdAt:
+    type: string
+    format: date-time
+
+  updatedAt:
+    type: string
+    format: date-time
