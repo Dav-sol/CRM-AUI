@@ -1,4 +1,4 @@
-openapi: 3.1.0
+openapi: 3.0.3
 
 info:
   $ref: "./info/info.yaml"
@@ -9,13 +9,40 @@ servers:
 tags:
   $ref: "./info/tags.yaml"
 
-paths: {}
+paths:
+  /auth/login:
+    $ref: "./paths/auth.yaml#/~1auth~1login"
+  /auth/refresh:
+    $ref: "./paths/auth.yaml#/~1auth~1refresh"
+  /auth/logout:
+    $ref: "./paths/auth.yaml#/~1auth~1logout"
+  /auth/me:
+    $ref: "./paths/auth.yaml#/~1auth~1me"
+  /auth/password-reset/request:
+    $ref: "./paths/auth.yaml#/~1auth~1password-reset~1request"
+  /auth/password-reset/confirm:
+    $ref: "./paths/auth.yaml#/~1auth~1password-reset~1confirm"
+  /invitations:
+    $ref: "./paths/invitations.yaml#/~1invitations"
+  /invitations/accept:
+    $ref: "./paths/invitations.yaml#/~1invitations~1accept"
+  /organizations/{id}:
+    $ref: "./paths/organizations.yaml#/~1organizations~1{id}"
+  /customers:
+    $ref: "./paths/customers.yaml#/~1customers"
+  /customers/{id}:
+    $ref: "./paths/customers.yaml#/~1customers~1{id}"
+  /purchases:
+    $ref: "./paths/purchases.yaml#/~1purchases"
+  /purchases/{id}:
+    $ref: "./paths/purchases.yaml#/~1purchases~1{id}"
+  /products:
+    $ref: "./paths/products.yaml#/~1products"
+  /products/{id}:
+    $ref: "./paths/products.yaml#/~1products~1{id}"
 
 components:
 
   securitySchemes:
     bearerAuth:
       $ref: "./components/security/bearer-auth.yaml"
-
-security:
-  - bearerAuth: []

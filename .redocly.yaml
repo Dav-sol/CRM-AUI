@@ -1,3 +1,9 @@
+extends:
+  - recommended
+
 apis:
   automatize-it:
     root: ./specs/api/openapi.yaml
+
+rules:
+  no-empty-servers: off

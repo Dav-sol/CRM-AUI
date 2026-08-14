@@ -1,7 +1,5 @@
 title: Automatize It API
 
-summary: CRM de Postventa y Automatización mediante WhatsApp Cloud API.
-
 description: |
   API oficial de Automatize It.
 
@@ -10,3 +8,7 @@ description: |
   WhatsApp Cloud API.
 
 version: 1.0.0
+
+license:
+  name: ISC
+  url: https://opensource.org/licenses/ISC

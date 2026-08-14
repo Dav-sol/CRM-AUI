@@ -1,6 +1,12 @@
 - name: Authentication
   description: User authentication
 
+- name: Invitations
+  description: User invitations
+
+- name: Organizations
+  description: Organization management
+
 - name: Customers
   description: Customer management
 

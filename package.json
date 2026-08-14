@@ -8,10 +8,10 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "api:lint": "redocly lint specs/api/openapi.yaml",
+    "api:lint": "redocly lint --config .redocly.yaml",
     "api:bundle": "redocly bundle specs/api/openapi.yaml -o specs/api/dist/openapi.yaml",
     "api:docs": "redocly preview-docs specs/api/openapi.yaml",
-    "api:spectral": "spectral lint specs/api/openapi.yaml",
+    "api:spectral": "redocly bundle specs/api/openapi.yaml -o specs/api/dist/openapi.yaml && spectral lint specs/api/dist/openapi.yaml",
     "api:generate": "orval --config orval.config.ts",
     "api:validate": "npm run api:lint && npm run api:spectral"
   },

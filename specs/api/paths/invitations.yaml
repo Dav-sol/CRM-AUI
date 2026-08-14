@@ -172,6 +172,8 @@
 
     operationId: acceptInvitation
 
+    security: []
+
     requestBody:
       required: true
 
