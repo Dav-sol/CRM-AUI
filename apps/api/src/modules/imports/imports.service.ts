@@ -7,7 +7,7 @@ import {
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { createHash, randomUUID } from 'crypto';
-import { mkdir, writeFile } from 'fs/promises';
+import { mkdir, unlink, writeFile } from 'fs/promises';
 import { resolve, basename } from 'path';
 import { Import, Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
@@ -15,11 +15,7 @@ import { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
 import { CreateImportDto } from './dto/create-import.dto';
 import { QueryImportsDto } from './dto/query-imports.dto';
-import {
-  ACTIVE_IMPORT_STATUSES,
-  MAX_FILE_SIZE_BYTES,
-  UPLOADS_DIR,
-} from './imports.constants';
+import { ACTIVE_IMPORT_STATUSES, UPLOADS_DIR } from './imports.constants';
 import { FileValidatorService } from './file-validator.service';
 import { ImportsProcessor } from './imports.processor';
 
@@ -119,7 +115,7 @@ export class ImportsService {
         throw new PayloadTooLargeException({
           error: {
             code: 'PAYLOAD_TOO_LARGE',
-            message: `file exceeds the maximum size of ${MAX_FILE_SIZE_BYTES} bytes`,
+            message: 'File exceeds the maximum size of 25 MB',
           },
         });
       }
@@ -205,19 +201,57 @@ export class ImportsService {
     );
     await writeFile(resolve(process.cwd(), filePath), file.buffer);
 
-    const job = await this.prisma.import.create({
-      data: {
-        organizationId,
-        userId: user.id,
-        type: dto.type,
-        fileName,
-        filePath,
-        fileHash,
-        idempotencyKey: idempotencyKey ?? null,
-        status: 'PENDING',
-        createdBy: user.id,
-      },
-    });
+    let job: Import;
+    try {
+      job = await this.prisma.import.create({
+        data: {
+          organizationId,
+          userId: user.id,
+          type: dto.type,
+          fileName,
+          filePath,
+          fileHash,
+          idempotencyKey: idempotencyKey ?? null,
+          status: 'PENDING',
+          createdBy: user.id,
+        },
+      });
+    } catch (error) {
+      await unlink(resolve(process.cwd(), filePath)).catch(() => undefined);
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        if (idempotencyKey) {
+          const replayed = await this.prisma.import.findFirst({
+            where: { organizationId, userId: user.id, idempotencyKey },
+          });
+          if (replayed) {
+            return { job: toSummary(replayed), created: false };
+          }
+        }
+        const duplicate = await this.prisma.import.findFirst({
+          where: { organizationId, fileHash },
+        });
+        if (duplicate) {
+          await this.auditService.record({
+            module: MODULE,
+            action: 'import.create',
+            outcome: 'failure',
+            userId: user.id,
+            organizationId,
+            metadata: { reason: 'duplicate_file' },
+          });
+          throw new ConflictException({
+            error: {
+              code: 'DUPLICATE_FILE',
+              message: 'This file has already been imported',
+            },
+          });
+        }
+      }
+      throw error;
+    }
 
     await this.auditService.record({
       module: MODULE,
@@ -289,7 +323,11 @@ export class ImportsService {
 
     await this.prisma.import.update({
       where: { id: job.id },
-      data: { status: 'CANCELLED', updatedBy: user.id },
+      data: {
+        status: 'CANCELLED',
+        completedAt: new Date(),
+        updatedBy: user.id,
+      },
     });
 
     await this.auditService.record({
@@ -338,6 +376,14 @@ export class ImportsService {
       },
     });
     if (active > 0) {
+      await this.auditService.record({
+        module: MODULE,
+        action: 'import.retry',
+        outcome: 'failure',
+        userId: user.id,
+        organizationId: job.organizationId,
+        metadata: { reason: 'active_job_conflict', type: job.type },
+      });
       throw new ConflictException({
         error: {
           code: 'IMPORT_ACTIVE',

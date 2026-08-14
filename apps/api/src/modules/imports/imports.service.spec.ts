@@ -6,6 +6,7 @@ import {
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
@@ -16,6 +17,7 @@ import { FileValidatorService } from './file-validator.service';
 jest.mock('fs/promises', () => ({
   mkdir: jest.fn().mockResolvedValue(undefined),
   writeFile: jest.fn().mockResolvedValue(undefined),
+  unlink: jest.fn().mockResolvedValue(undefined),
 }));
 
 const orgUser: AuthUser = {
@@ -170,6 +172,53 @@ describe('ImportsService', () => {
       ).rejects.toThrow(ConflictException);
     });
 
+    it('maps a P2002 race on create to 409 DUPLICATE_FILE without a key', async () => {
+      prisma.import.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(job);
+      prisma.import.count.mockResolvedValue(0);
+      prisma.import.create.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('unique', {
+          code: 'P2002',
+          clientVersion: '6.16.2',
+        }),
+      );
+
+      await expect(
+        service.create(orgUser, { type: 'CUSTOMERS' }, file),
+      ).rejects.toThrow(ConflictException);
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'import.create',
+          outcome: 'failure',
+        }),
+      );
+    });
+
+    it('maps a P2002 race on create to a replay when the key matches', async () => {
+      prisma.import.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(job);
+      prisma.import.count.mockResolvedValue(0);
+      prisma.import.create.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('unique', {
+          code: 'P2002',
+          clientVersion: '6.16.2',
+        }),
+      );
+
+      const result = await service.create(
+        orgUser,
+        { type: 'CUSTOMERS' },
+        file,
+        'key-1',
+      );
+
+      expect(result.created).toBe(false);
+      expect(result.job.uuid).toBe('job-1');
+    });
+
     it('replays the existing job when the Idempotency-Key matches', async () => {
       prisma.import.findFirst.mockResolvedValueOnce(job);
       prisma.import.count.mockResolvedValue(0);
@@ -292,7 +341,11 @@ describe('ImportsService', () => {
 
       expect(prisma.import.update).toHaveBeenCalledWith({
         where: { id: 'i-1' },
-        data: { status: 'CANCELLED', updatedBy: 'u-1' },
+        data: {
+          status: 'CANCELLED',
+          completedAt: expect.any(Date) as Date,
+          updatedBy: 'u-1',
+        },
       });
       expect(auditService.record).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -360,6 +413,12 @@ describe('ImportsService', () => {
       prisma.import.count.mockResolvedValue(1);
       await expect(service.retry(orgUser, 'job-1')).rejects.toThrow(
         ConflictException,
+      );
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'import.retry',
+          outcome: 'failure',
+        }),
       );
     });
   });

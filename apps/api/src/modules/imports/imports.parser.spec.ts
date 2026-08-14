@@ -116,6 +116,15 @@ describe('imports.parser', () => {
       );
     });
 
+    it('reports an overlong phone exactly once', () => {
+      const issues = validateRow(
+        'CUSTOMERS',
+        row({ codcli: 'C1', name: 'Juan', phone: '1'.repeat(31) }),
+      );
+      expect(issues).toHaveLength(1);
+      expect(issues[0]?.field).toBe('phone');
+    });
+
     it('validates purchases with int4 and money constraints', () => {
       expect(
         validateRow(

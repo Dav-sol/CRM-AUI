@@ -45,7 +45,16 @@ export class ImportsProcessor {
         `import ${job.uuid} failed unexpectedly`,
         error instanceof Error ? error.stack : String(error),
       );
-      await this.finalizeFailed(job, 'unexpected processing error');
+      try {
+        await this.finalizeFailed(job, 'unexpected processing error');
+      } catch (finalizeError) {
+        this.logger.error(
+          `could not finalize import ${job.uuid} as failed`,
+          finalizeError instanceof Error
+            ? finalizeError.stack
+            : String(finalizeError),
+        );
+      }
     }
   }
 
@@ -101,14 +110,18 @@ export class ImportsProcessor {
       ? parsed.rows.filter((row) => retryRowNumbers.has(row.number))
       : parsed.rows;
     if (rows.length === 0) {
-      await this.prisma.import.update({
-        where: { id: job.id },
+      const completed = await this.prisma.import.updateMany({
+        where: { id: job.id, status: 'VALIDATING' },
         data: {
           status: 'COMPLETED',
           completedAt: new Date(),
           errors: Prisma.JsonNull,
+          updatedBy: job.userId,
         },
       });
+      if (completed.count === 0) {
+        return;
+      }
       await this.auditService.record({
         module: MODULE,
         action: 'import.complete',
@@ -128,14 +141,17 @@ export class ImportsProcessor {
       return;
     }
 
-    await this.prisma.import.update({
-      where: { id: job.id },
+    const transitioned = await this.prisma.import.updateMany({
+      where: { id: job.id, status: 'VALIDATING' },
       data: {
         totalRecords: parsed.rows.length,
         status: 'PROCESSING',
         updatedBy: job.userId,
       },
     });
+    if (transitioned.count === 0) {
+      return;
+    }
 
     await this.auditService.record({
       module: MODULE,

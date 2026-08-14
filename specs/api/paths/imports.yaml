@@ -197,7 +197,7 @@
                       example: PAYLOAD_TOO_LARGE
                     message:
                       type: string
-                      example: file exceeds the maximum size of 26214400 bytes
+                      example: File exceeds the maximum size of 25 MB
 
       "415":
         description: Only XLSX and CSV files are supported (FR-002)
@@ -319,7 +319,7 @@
         description: Field sorted by; "-" prefix means descending. Defaults to -createdAt.
         schema:
           type: string
-          pattern: "^-?(createdAt|updatedAt|status)$"
+          pattern: "^-?(type|status|createdAt|updatedAt)$"
 
     responses:
 

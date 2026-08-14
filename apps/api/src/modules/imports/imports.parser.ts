@@ -354,16 +354,7 @@ export function validateRow(type: ImportType, row: ParsedRow): RowIssue[] {
     if (!name) {
       pushIssue(issues, row.number, 'name', 'name is required');
     }
-    const phone = text('phone', 30);
-    if (phone.length > 30) {
-      pushIssue(
-        issues,
-        row.number,
-        'phone',
-        'value exceeds 30 characters',
-        phone,
-      );
-    }
+    text('phone', 30);
     const email = text('email', 254);
     if (email && !EMAIL_PATTERN.test(email)) {
       pushIssue(issues, row.number, 'email', 'invalid email format', email);

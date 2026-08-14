@@ -317,6 +317,7 @@ model Import {
   @@index([status])
   @@index([organizationId, status])
   @@unique([organizationId, fileHash])
+  @@unique([organizationId, userId, idempotencyKey])
   @@map("imports")
 }
 

@@ -427,6 +427,28 @@ describe('ImportsProcessor', () => {
         data: { completedAt: expect.any(Date) as Date },
       });
     });
+
+    it('aborts when the job was cancelled during parsing (guarded transition)', async () => {
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from('codcli,name\nC1,Juan\n'),
+      );
+      prisma.import.updateMany
+        .mockResolvedValueOnce({ count: 1 })
+        .mockResolvedValueOnce({ count: 0 });
+
+      await processor.process(csvJob('CUSTOMERS', 'uploads/x.csv'));
+
+      expect(prisma.customer.create).not.toHaveBeenCalled();
+      expect(prisma.import.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'COMPLETED' }) as object,
+        }),
+      );
+      expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+        'ImportCompleted',
+        expect.anything(),
+      );
+    });
   });
 
   describe('unexpected failures (US12)', () => {
