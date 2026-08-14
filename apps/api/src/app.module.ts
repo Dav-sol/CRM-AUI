@@ -11,6 +11,7 @@ import { UsersModule } from './modules/users/users.module';
 import { PasswordResetModule } from './modules/password-reset/password-reset.module';
 import { InvitationsModule } from './modules/invitations/invitations.module';
 import { CustomersModule } from './modules/customers/customers.module';
+import { PurchasesModule } from './modules/purchases/purchases.module';
 
 @Module({
   imports: [
@@ -35,6 +36,8 @@ import { CustomersModule } from './modules/customers/customers.module';
     InvitationsModule,
 
     CustomersModule,
+
+    PurchasesModule,
   ],
 })
 export class AppModule {}

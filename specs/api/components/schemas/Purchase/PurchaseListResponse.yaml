@@ -1,0 +1,41 @@
+type: object
+
+description: Envelope for the paginated purchase list.
+
+required:
+  - data
+  - meta
+
+properties:
+
+  data:
+    type: array
+    items:
+      $ref: "./PurchaseSummary.yaml"
+
+  meta:
+    type: object
+
+    required:
+      - page
+      - limit
+      - total
+      - pages
+
+    properties:
+
+      page:
+        type: integer
+        minimum: 1
+
+      limit:
+        type: integer
+        minimum: 1
+        maximum: 100
+
+      total:
+        type: integer
+        description: Total matching purchases (deleted excluded).
+
+      pages:
+        type: integer

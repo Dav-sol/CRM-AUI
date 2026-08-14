@@ -1,0 +1,11 @@
+type: object
+
+description: Envelope for a single purchase operation.
+
+required:
+  - data
+
+properties:
+
+  data:
+    $ref: "./PurchaseDetails.yaml"

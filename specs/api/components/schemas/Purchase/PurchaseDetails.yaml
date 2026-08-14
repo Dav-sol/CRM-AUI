@@ -1,0 +1,5 @@
+type: object
+
+description: Full purchase detail returned by GET /purchases/{id} and write operations.
+
+$ref: "./Purchase.yaml"

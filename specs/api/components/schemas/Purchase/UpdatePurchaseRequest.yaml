@@ -1,0 +1,30 @@
+type: object
+
+description: Request body to update a purchase. invoiceNumber is immutable and rejected with 400 if present. customerId and productId are immutable and ignored by the whitelist.
+
+properties:
+
+  invoiceNumber:
+    type: string
+    description: Always rejected (400) — invoiceNumber is immutable.
+
+  purchaseDate:
+    type: string
+    format: date-time
+
+  quantity:
+    type: integer
+    minimum: 1
+
+  value:
+    type: string
+    pattern: "^\\d{1,10}(\\.\\d{1,2})?$"
+    description: Total purchase value in USD as a string.
+
+  status:
+    type: string
+    enum:
+      - COMPLETED
+      - CANCELLED
+      - REFUNDED
+    description: Changed freely without transitional rules (HG-7).

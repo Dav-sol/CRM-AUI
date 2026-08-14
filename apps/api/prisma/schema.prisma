@@ -144,6 +144,8 @@ model Purchase {
   createdAt      DateTime          @default(now()) @map("created_at")
   updatedAt      DateTime          @updatedAt @map("updated_at")
   deletedAt      DateTime?         @map("deleted_at")
+  createdBy      String?           @map("created_by")
+  updatedBy      String?           @map("updated_by")
 
   organization   Organization      @relation(fields: [organizationId], references: [id])
   customer       Customer          @relation(fields: [customerId], references: [id])
@@ -156,6 +158,8 @@ model Purchase {
   @@index([customerId])
   @@index([purchaseDate])
   @@index([invoiceNumber])
+  @@index([organizationId, status])
+  @@index([organizationId, purchaseDate])
   @@map("purchases")
 }
 

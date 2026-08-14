@@ -1,0 +1,86 @@
+type: object
+
+description: Purchase entity as persisted (v1).
+
+required:
+  - id
+  - uuid
+  - organizationId
+  - customerId
+  - productId
+  - invoiceNumber
+  - purchaseDate
+  - quantity
+  - value
+  - status
+  - createdAt
+  - updatedAt
+
+properties:
+
+  id:
+    type: string
+
+  uuid:
+    type: string
+
+  organizationId:
+    type: string
+
+  customerId:
+    type: string
+    description: Reference to the customer of the purchase (immutable).
+
+  productId:
+    type: string
+    description: Reference to the product of the purchase (immutable).
+
+  invoiceNumber:
+    type: string
+    maxLength: 50
+    description: Immutable after creation. Part of the uniqueness tuple (CP-005).
+
+  purchaseDate:
+    type: string
+    format: date-time
+
+  quantity:
+    type: integer
+    minimum: 1
+
+  value:
+    type: string
+    pattern: "^\\d{1,10}(\\.\\d{1,2})?$"
+    description: Total purchase value in USD as a string, two decimal places max (HG-7).
+
+  status:
+    type: string
+    enum:
+      - COMPLETED
+      - CANCELLED
+      - REFUNDED
+    description: Defaults to COMPLETED. Changed freely via PATCH in v1 (HG-7).
+
+  createdAt:
+    type: string
+    format: date-time
+
+  updatedAt:
+    type: string
+    format: date-time
+
+  deletedAt:
+    type: string
+    format: date-time
+    nullable: true
+    description: Reserved and inert in v1 (HG-4); there is no DELETE endpoint.
+
+  createdBy:
+    type: string
+    nullable: true
+    description: User id that created the record.
+
+  updatedBy:
+    type: string
+    nullable: true
+    description: User id of the last update.

@@ -1,0 +1,623 @@
+/purchases:
+  get:
+    tags:
+      - Purchases
+
+    summary: List purchases of the organization
+
+    description: |
+      Returns a paginated list of purchases ordered by -purchaseDate.
+      Organization users only see their own organization; PLATFORM_OWNER sees all.
+      Includes customer and product summaries for each purchase.
+
+    operationId: listPurchases
+
+    security:
+      - bearerAuth: []
+
+    parameters:
+
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+
+      - name: search
+        in: query
+        required: false
+        description: Case-insensitive match over invoiceNumber.
+        schema:
+          type: string
+
+      - name: customerId
+        in: query
+        required: false
+        schema:
+          type: string
+
+      - name: productId
+        in: query
+        required: false
+        schema:
+          type: string
+
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+            - COMPLETED
+            - CANCELLED
+            - REFUNDED
+
+      - name: dateFrom
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+
+      - name: dateTo
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+
+      - name: sort
+        in: query
+        required: false
+        description: Field sorted by; "-" prefix means descending. Defaults to -purchaseDate.
+        schema:
+          type: string
+          pattern: "^-?(purchaseDate|invoiceNumber|quantity|value|status|createdAt|updatedAt)$"
+
+    responses:
+
+      "200":
+        description: Paginated purchase list
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Purchase/PurchaseListResponse.yaml"
+
+      "400":
+        description: "Invalid query parameters or sort field (BAD_REQUEST)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: BAD_REQUEST
+                    message:
+                      type: string
+                      example: Invalid sort field
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+
+      "500":
+        description: Internal error
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: INTERNAL_ERROR
+                    message:
+                      type: string
+
+  post:
+    tags:
+      - Purchases
+
+    summary: Create a purchase
+
+    description: |
+      Creates a purchase for the organization of the authenticated user
+      (PLATFORM_OWNER must send organizationId, which is validated to exist).
+      OPERADOR is not allowed (403).
+      Duplicate tuples (organizationId, invoiceNumber, customerId, productId,
+      purchaseDate) return 409 CONFLICT (CP-005).
+
+    operationId: createPurchase
+
+    security:
+      - bearerAuth: []
+
+    requestBody:
+
+      required: true
+
+      content:
+
+        application/json:
+
+          schema:
+            $ref: "../components/schemas/Purchase/CreatePurchaseRequest.yaml"
+
+    responses:
+
+      "201":
+        description: Purchase created
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Purchase/PurchaseResponse.yaml"
+
+      "400":
+        description: |
+          DTO or domain validation failure (BAD_REQUEST / VALIDATION_ERROR):
+          malformed value, unknown organization, tenant in organizationId for
+          organization users, or customer/product not found in the organization.
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+
+      "403":
+        description: OPERADOR is read-only in v1
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+
+      "409":
+        description: Duplicate purchase tuple (CP-005)
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CONFLICT
+                    message:
+                      type: string
+                      example: A purchase with this invoiceNumber already exists
+
+      "500":
+        description: Internal error
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: INTERNAL_ERROR
+                    message:
+                      type: string
+
+/purchases/{id}:
+  parameters:
+
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+
+  get:
+    tags:
+      - Purchases
+
+    summary: Get a purchase by id
+
+    description: |
+      Returns a single purchase with its customer and product summaries.
+      Returns 404 PURCHASE_NOT_FOUND for unknown ids or purchases of another
+      organization.
+
+    operationId: getPurchase
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Purchase detail
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Purchase/PurchaseResponse.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+
+      "404":
+        description: Purchase not found or not accessible in this organization
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: PURCHASE_NOT_FOUND
+                    message:
+                      type: string
+                      example: Purchase not found
+
+      "500":
+        description: Internal error
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: INTERNAL_ERROR
+                    message:
+                      type: string
+
+  patch:
+    tags:
+      - Purchases
+
+    summary: Update a purchase
+
+    description: |
+      Updates mutable fields of a purchase (purchaseDate, quantity, value,
+      status). invoiceNumber is immutable and rejected with 400. customerId and
+      productId are immutable and ignored by the whitelist. OPERADOR is not
+      allowed (403).
+
+    operationId: updatePurchase
+
+    security:
+      - bearerAuth: []
+
+    requestBody:
+
+      required: true
+
+      content:
+
+        application/json:
+
+          schema:
+            $ref: "../components/schemas/Purchase/UpdatePurchaseRequest.yaml"
+
+    responses:
+
+      "200":
+        description: Purchase updated
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Purchase/PurchaseResponse.yaml"
+
+      "400":
+        description: "DTO validation failure (BAD_REQUEST): malformed value or immutable invoiceNumber."
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: BAD_REQUEST
+                    message:
+                      type: string
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+
+      "403":
+        description: OPERADOR is read-only in v1
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+
+      "404":
+        description: Purchase not found or not accessible in this organization
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: PURCHASE_NOT_FOUND
+                    message:
+                      type: string
+                      example: Purchase not found
+
+      "500":
+        description: Internal error
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: INTERNAL_ERROR
+                    message:
+                      type: string

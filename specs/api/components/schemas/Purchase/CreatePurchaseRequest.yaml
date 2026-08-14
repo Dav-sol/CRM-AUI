@@ -1,0 +1,51 @@
+type: object
+
+description: Request body to create a purchase.
+
+required:
+  - customerId
+  - productId
+  - invoiceNumber
+  - purchaseDate
+  - quantity
+  - value
+
+properties:
+
+  customerId:
+    type: string
+    description: Existing customer within the organization; otherwise 400 VALIDATION_ERROR.
+
+  productId:
+    type: string
+    description: Existing product within the organization (v1 validates existence only, HG-3); otherwise 400 VALIDATION_ERROR.
+
+  invoiceNumber:
+    type: string
+    maxLength: 50
+    description: Immutable after creation. Duplicate tuples return 409 CONFLICT (CP-005).
+
+  purchaseDate:
+    type: string
+    format: date-time
+
+  quantity:
+    type: integer
+    minimum: 1
+
+  value:
+    type: string
+    pattern: "^\\d{1,10}(\\.\\d{1,2})?$"
+    description: Total purchase value in USD as a string (HG-7).
+
+  status:
+    type: string
+    enum:
+      - COMPLETED
+      - CANCELLED
+      - REFUNDED
+    description: Defaults to COMPLETED.
+
+  organizationId:
+    type: string
+    description: Only accepted for PLATFORM_OWNER; required for them. Organization users must not send it (400 VALIDATION_ERROR).

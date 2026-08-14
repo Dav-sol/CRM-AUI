@@ -1,0 +1,91 @@
+type: object
+
+description: Purchase summary used in list responses with nested customer and product summaries.
+
+required:
+  - id
+  - uuid
+  - invoiceNumber
+  - purchaseDate
+  - quantity
+  - value
+  - status
+  - createdAt
+  - updatedAt
+  - customer
+  - product
+
+properties:
+
+  id:
+    type: string
+
+  uuid:
+    type: string
+
+  invoiceNumber:
+    type: string
+
+  purchaseDate:
+    type: string
+    format: date-time
+
+  quantity:
+    type: integer
+
+  value:
+    type: string
+    description: Total purchase value as a string.
+
+  status:
+    type: string
+    enum:
+      - COMPLETED
+      - CANCELLED
+      - REFUNDED
+
+  createdAt:
+    type: string
+    format: date-time
+
+  updatedAt:
+    type: string
+    format: date-time
+
+  customer:
+    type: object
+
+    required:
+      - id
+      - codcli
+      - name
+
+    properties:
+
+      id:
+        type: string
+
+      codcli:
+        type: string
+
+      name:
+        type: string
+
+  product:
+    type: object
+
+    required:
+      - id
+      - code
+      - name
+
+    properties:
+
+      id:
+        type: string
+
+      code:
+        type: string
+
+      name:
+        type: string
