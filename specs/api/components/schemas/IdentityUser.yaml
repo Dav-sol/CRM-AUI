@@ -1,0 +1,57 @@
+type: object
+
+description: Identity v1 user profile and JWT context.
+
+required:
+  - id
+  - uuid
+  - email
+  - firstName
+  - lastName
+  - accountType
+  - organizationId
+  - role
+  - status
+
+properties:
+
+  id:
+    type: string
+
+  uuid:
+    type: string
+
+  email:
+    type: string
+    format: email
+
+  firstName:
+    type: string
+
+  lastName:
+    type: string
+
+  accountType:
+    type: string
+    enum:
+      - PLATFORM
+      - ORGANIZATION
+
+  organizationId:
+    type: string
+    nullable: true
+
+  role:
+    type: string
+    enum:
+      - PLATFORM_OWNER
+      - ADMINISTRADOR
+      - GERENTE
+      - OPERADOR
+
+  status:
+    type: string
+    enum:
+      - INVITED
+      - ACTIVE
+      - SUSPENDED

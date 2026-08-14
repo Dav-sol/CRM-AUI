@@ -6,6 +6,10 @@ import { configuration, envValidationSchema } from './core/config';
 import { PrismaModule } from './core/database/prisma.module';
 import { HealthModule } from './modules/health/health.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { UsersModule } from './modules/users/users.module';
+import { PasswordResetModule } from './modules/password-reset/password-reset.module';
+import { InvitationsModule } from './modules/invitations/invitations.module';
 
 @Module({
   imports: [
@@ -20,6 +24,14 @@ import { OrganizationsModule } from './modules/organizations/organizations.modul
     HealthModule,
 
     OrganizationsModule,
+
+    UsersModule,
+
+    AuthModule,
+
+    PasswordResetModule,
+
+    InvitationsModule,
   ],
 })
 export class AppModule {}

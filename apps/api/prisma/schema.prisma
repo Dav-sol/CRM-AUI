@@ -32,6 +32,7 @@ model Organization {
   messages  Message[]
   imports   Import[]
   audits    Audit[]
+  invitations Invitation[]
 
   @@map("organizations")
 }
@@ -39,8 +40,9 @@ model Organization {
 model User {
   id             String       @id @default(cuid())
   uuid           String       @unique @default(uuid())
-  organizationId String       @map("organization_id")
-  roleId         String       @map("role_id")
+  organizationId String?      @map("organization_id")
+  roleId         String?      @map("role_id")
+  accountType    AccountType  @default(ORGANIZATION) @map("account_type")
   firstName      String       @map("first_name")
   lastName       String       @map("last_name")
   email          String       @unique
@@ -51,8 +53,11 @@ model User {
   updatedAt      DateTime     @updatedAt @map("updated_at")
   deletedAt      DateTime?    @map("deleted_at")
 
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  role           Role         @relation(fields: [roleId], references: [id])
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  role           Role?         @relation(fields: [roleId], references: [id])
+  sessions       UserSession[]
+  invitationsSent Invitation[] @relation("Inviter")
+  passwordResets PasswordResetToken[]
   conversations  Conversation[] @relation("ConversationAdvisor")
   imports        Import[]
   audits         Audit[]
@@ -295,19 +300,80 @@ model Import {
   @@map("imports")
 }
 
+model UserSession {
+  id               String    @id @default(cuid())
+  uuid             String    @unique @default(uuid())
+  userId           String    @map("user_id")
+  refreshTokenHash String    @map("refresh_token_hash")
+  userAgent        String?   @map("user_agent")
+  ip               String?
+  expiresAt        DateTime  @map("expires_at")
+  lastUsedAt       DateTime? @map("last_used_at")
+  revokedAt        DateTime? @map("revoked_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([refreshTokenHash])
+  @@index([expiresAt])
+  @@map("user_sessions")
+}
+
+model Invitation {
+  id             String           @id @default(cuid())
+  uuid           String           @unique @default(uuid())
+  organizationId String           @map("organization_id")
+  invitedById    String           @map("invited_by_id")
+  email          String
+  roleId         String           @map("role_id")
+  tokenHash      String           @map("token_hash")
+  status         InvitationStatus @default(PENDING)
+  expiresAt      DateTime         @map("expires_at")
+  acceptedAt     DateTime?        @map("accepted_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  invitedBy    User         @relation("Inviter", fields: [invitedById], references: [id])
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([tokenHash])
+  @@index([status])
+  @@map("invitations")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  uuid      String   @unique @default(uuid())
+  userId    String   @map("user_id")
+  tokenHash String   @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("password_reset_tokens")
+}
+
 model Audit {
-  id             String     @id @default(cuid())
-  uuid           String     @unique @default(uuid())
-  organizationId String     @map("organization_id")
-  userId         String?    @map("user_id")
+  id             String       @id @default(cuid())
+  uuid           String       @unique @default(uuid())
+  organizationId String?      @map("organization_id")
+  userId         String?      @map("user_id")
   module         String
   action         String
   description    String?
   metadata       Json?
-  createdAt      DateTime   @default(now()) @map("created_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
 
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  user           User?      @relation(fields: [userId], references: [id])
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  user           User?        @relation(fields: [userId], references: [id])
 
   @@index([organizationId])
   @@index([userId])
@@ -323,10 +389,22 @@ enum UserStatus {
   SUSPENDED
 }
 
+enum AccountType {
+  PLATFORM
+  ORGANIZATION
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
 enum RoleType {
   ADMINISTRADOR
   GERENTE
-  ASESOR
+  OPERADOR
 }
 
 enum OrganizationStatus {

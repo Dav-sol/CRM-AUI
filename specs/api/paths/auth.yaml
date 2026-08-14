@@ -7,6 +7,8 @@
 
     description: |
       Authenticates a user using email and password.
+      A refresh token is delivered only via HttpOnly cookie
+      (Set-Cookie: refresh_token=<opaque>; HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth).
 
     operationId: login
 
@@ -53,20 +55,433 @@
 
                   type: object
 
+                  required:
+                    - accessToken
+                    - expiresIn
+                    - user
+
                   properties:
 
                     accessToken:
                       type: string
 
-                    refreshToken:
+                    expiresIn:
+                      type: integer
+                      example: 900
+
+                    user:
+                      $ref: "../components/schemas/IdentityUser.yaml"
+
+      "401":
+        description: "Uniform INVALID_CREDENTIALS for unknown email, wrong password, INVITED/SUSPENDED/deleted accounts"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: INVALID_CREDENTIALS
+                    message:
+                      type: string
+                      example: Invalid credentials
+
+/auth/refresh:
+  post:
+    tags:
+      - Authentication
+
+    summary: Renew access token with refresh cookie
+
+    description: |
+      Renews the access token using the refresh token from the HttpOnly cookie.
+      A new refresh cookie is issued (rotation); reusing the previous cookie
+      revokes the session and returns 400 INVALID_OR_EXPIRED_TOKEN.
+
+    operationId: refresh
+
+    responses:
+
+      "200":
+        description: Access token renewed
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                data:
+
+                  type: object
+
+                  required:
+                    - accessToken
+                    - expiresIn
+
+                  properties:
+
+                    accessToken:
                       type: string
 
                     expiresIn:
                       type: integer
-                      example: 3600
-
-                    user:
-                      $ref: "../components/schemas/user.yaml"
+                      example: 900
 
       "401":
-        $ref: "../components/responses/error.yaml"
+        description: "User SUSPENDED or deletedAt set (INVALID_CREDENTIALS)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: INVALID_CREDENTIALS
+                    message:
+                      type: string
+                      example: Invalid credentials
+
+      "400":
+        description: "Missing/expired/revoked/reused refresh token (INVALID_OR_EXPIRED_TOKEN)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: INVALID_OR_EXPIRED_TOKEN
+                    message:
+                      type: string
+                      example: Invalid or expired token
+
+/auth/logout:
+  post:
+    tags:
+      - Authentication
+
+    summary: Revoke current session
+
+    description: |
+      Revokes the current session and clears the refresh cookie.
+
+    operationId: logout
+
+    responses:
+
+      "200":
+        description: Session revoked
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                data:
+                  type: object
+                  properties:
+                    success:
+                      type: boolean
+                      example: true
+
+      "401":
+        description: No/invalid session
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+/auth/me:
+  get:
+    tags:
+      - Authentication
+
+    summary: Current user profile and JWT context
+
+    description: |
+      Returns the authenticated user profile and JWT context.
+      Requires Authorization: Bearer <accessToken>.
+
+    operationId: me
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Authenticated user profile
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                data:
+
+                  type: object
+
+                  properties:
+
+                    user:
+                      $ref: "../components/schemas/IdentityUser.yaml"
+
+      "401":
+        description: Missing/invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+/auth/password-reset/request:
+  post:
+    tags:
+      - Authentication
+
+    summary: Request password reset
+
+    description: |
+      Requests a password reset. Anti-enumeration: the response is identical
+      for existing and unknown emails (generic 200, token only issued to ACTIVE users).
+
+    operationId: requestPasswordReset
+
+    requestBody:
+      required: true
+
+      content:
+        application/json:
+          schema:
+            type: object
+
+            required:
+              - email
+
+            properties:
+
+              email:
+                type: string
+                format: email
+                example: admin@automatizeit.com
+
+    responses:
+
+      "200":
+        description: Generic response (same for known and unknown emails)
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                data:
+                  type: object
+                  properties:
+                    message:
+                      type: string
+                      example: If an account exists with that email, a password reset link has been sent
+
+      "403":
+        description: "ACCOUNT_SUSPENDED or ACCOUNT_DELETED"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: ACCOUNT_SUSPENDED
+                    message:
+                      type: string
+                      example: Account is suspended; contact administrator to restore access.
+
+/auth/password-reset/confirm:
+  post:
+    tags:
+      - Authentication
+
+    summary: Complete password reset
+
+    description: |
+      Completes the reset with a valid single-use token.
+      The token is invalidated after use.
+
+    operationId: confirmPasswordReset
+
+    requestBody:
+      required: true
+
+      content:
+        application/json:
+          schema:
+            type: object
+
+            required:
+              - token
+              - password
+
+            properties:
+
+              token:
+                type: string
+                example: aB3x...token
+
+              password:
+                type: string
+                format: password
+                minLength: 8
+                example: MyNewSecurePassword456
+
+    responses:
+
+      "200":
+        description: Password updated
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                data:
+                  type: object
+                  properties:
+                    success:
+                      type: boolean
+                      example: true
+
+      "400":
+        description: "Expired/used/malformed token (INVALID_OR_EXPIRED_TOKEN)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: INVALID_OR_EXPIRED_TOKEN
+                    message:
+                      type: string
+                      example: Invalid or expired token

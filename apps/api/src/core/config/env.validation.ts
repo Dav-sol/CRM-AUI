@@ -11,7 +11,19 @@ export const envValidationSchema = Joi.object({
 
   JWT_SECRET: Joi.string().min(32).required(),
 
-  JWT_EXPIRES_IN: Joi.string().default('1d'),
+  JWT_REFRESH_SECRET: Joi.string().min(32).required(),
+
+  ACCESS_TOKEN_TTL: Joi.string().default('15m'),
+
+  REFRESH_TOKEN_TTL: Joi.string().default('7d'),
+
+  INVITATION_TOKEN_TTL: Joi.string().default('48h'),
+
+  PASSWORD_RESET_TOKEN_TTL: Joi.string().default('1h'),
+
+  REFRESH_COOKIE_NAME: Joi.string().default('refresh_token'),
+
+  COOKIE_SECURE: Joi.boolean().default(true),
 
   REDIS_URL: Joi.string().required(),
 

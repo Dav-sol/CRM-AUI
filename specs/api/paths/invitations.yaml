@@ -1,0 +1,259 @@
+/invitations:
+  post:
+    tags:
+      - Invitations
+
+    summary: Create user invitation
+
+    description: |
+      Creates a user invitation. Authorization from authenticated identity:
+      PLATFORM_OWNER may invite to any organization; ADMINISTRADOR only to
+      its own organization; GERENTE/OPERADOR cannot invite (403 FORBIDDEN).
+      The invitation token is single-use, hashed at rest, and delivered via
+      email (never returned in the response).
+
+    operationId: createInvitation
+
+    security:
+      - bearerAuth: []
+
+    requestBody:
+      required: true
+
+      content:
+        application/json:
+          schema:
+            type: object
+
+            required:
+              - email
+              - roleId
+              - organizationId
+
+            properties:
+
+              email:
+                type: string
+                format: email
+                example: new@org1.test
+
+              roleId:
+                type: string
+                example: role-operador-1
+
+              organizationId:
+                type: string
+                example: org-1
+
+    responses:
+
+      "201":
+        description: Invitation created
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                data:
+
+                  type: object
+
+                  required:
+                    - id
+                    - email
+                    - expiresAt
+
+                  properties:
+
+                    id:
+                      type: string
+
+                    email:
+                      type: string
+
+                    expiresAt:
+                      type: string
+                      format: date-time
+
+      "403":
+        description: "GERENTE/OPERADOR, or ADMINISTRADOR inviting outside own organization"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+                      example: Forbidden
+
+      "409":
+        description: "A pending invitation already exists for the email"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CONFLICT
+                    message:
+                      type: string
+                      example: A pending invitation already exists for this email
+
+      "400":
+        description: "Invalid role for organization (VALIDATION_ERROR)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+                      example: Invalid role for organization
+
+/invitations/accept:
+  post:
+    tags:
+      - Invitations
+
+    summary: Accept invitation and start session
+
+    description: |
+      Accepts an invitation with its single-use token, creating the User record
+      (INVITED -> ACTIVE) and issuing an access token plus refresh cookie.
+
+    operationId: acceptInvitation
+
+    requestBody:
+      required: true
+
+      content:
+        application/json:
+          schema:
+            type: object
+
+            required:
+              - token
+              - password
+
+            properties:
+
+              token:
+                type: string
+                example: aB3x...token
+
+              password:
+                type: string
+                format: password
+                minLength: 8
+                example: MyNewPassword123
+
+    responses:
+
+      "201":
+        description: Invitation accepted; session started
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                data:
+
+                  type: object
+
+                  required:
+                    - accessToken
+                    - expiresIn
+                    - user
+
+                  properties:
+
+                    accessToken:
+                      type: string
+
+                    expiresIn:
+                      type: integer
+                      example: 900
+
+                    user:
+                      $ref: "../components/schemas/IdentityUser.yaml"
+
+      "400":
+        description: "Expired/revoked/reused/malformed token (INVALID_OR_EXPIRED_TOKEN)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: INVALID_OR_EXPIRED_TOKEN
+                    message:
+                      type: string
+                      example: Invalid or expired token

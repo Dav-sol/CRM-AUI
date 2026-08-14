@@ -181,8 +181,10 @@ The specifications describe:
 - Asesor
 - Operador
 
-The mapping and the existence/semantics of OWNER versus Operador must
-be resolved explicitly before implementing final RBAC behavior.
+**RESOLVED on 2026-08-13 (explicit human approval — Identity v1 HUMAN GATE)**:
+- RoleType uses ADMINISTRADOR, GERENTE, OPERADOR + PLATFORM_OWNER; legacy `ASESOR` rows migrate to `OPERADOR` (relationships and Role IDs preserved, no silent deletion).
+- PLATFORM_OWNER is not tenant-bound: `accountType=PLATFORM`, `organizationId=NULL`; no reserved/fake PLATFORM organization.
+- See `specs/011-identity-v1/{plan.md,data-model.md,research.md}` for the full approved decision set.
 
 ### Multi-Tenancy
 

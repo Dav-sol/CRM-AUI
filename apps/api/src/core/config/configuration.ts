@@ -12,7 +12,16 @@ export default () => ({
 
   jwt: {
     secret: process.env.JWT_SECRET,
-    expiresIn: process.env.JWT_EXPIRES_IN ?? '1d',
+    refreshSecret: process.env.JWT_REFRESH_SECRET,
+    accessTokenTtl: process.env.ACCESS_TOKEN_TTL ?? '15m',
+    refreshTokenTtl: process.env.REFRESH_TOKEN_TTL ?? '7d',
+    invitationTokenTtl: process.env.INVITATION_TOKEN_TTL ?? '48h',
+    passwordResetTokenTtl: process.env.PASSWORD_RESET_TOKEN_TTL ?? '1h',
+    refreshCookieName: process.env.REFRESH_COOKIE_NAME ?? 'refresh_token',
+    cookieSecure:
+      process.env.COOKIE_SECURE === undefined
+        ? true
+        : process.env.COOKIE_SECURE === 'true',
   },
 
   redis: {

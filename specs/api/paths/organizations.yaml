@@ -1,0 +1,118 @@
+/organizations/{id}:
+  get:
+    tags:
+      - Organizations
+
+    summary: Get organization
+
+    description: |
+      Returns an organization. Tenant-scoped: organization users can only
+      access their own organization (403 otherwise); PLATFORM_OWNER bypasses
+      the tenant filter.
+
+    operationId: getOrganization
+
+    security:
+      - bearerAuth: []
+
+    parameters:
+
+      - name: id
+        in: path
+        required: true
+        description: Organization id
+        schema:
+          type: string
+
+    responses:
+
+      "200":
+        description: Organization found
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                data:
+
+                  type: object
+
+                  properties:
+
+                    organization:
+
+                      type: object
+
+                      properties:
+
+                        id:
+                          type: string
+
+                        name:
+                          type: string
+
+                        createdAt:
+                          type: string
+                          format: date-time
+
+                        updatedAt:
+                          type: string
+                          format: date-time
+
+      "403":
+        description: "Cross-tenant access (FORBIDDEN)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+                      example: Forbidden
+
+      "404":
+        description: Organization not found
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: NOT_FOUND
+                    message:
+                      type: string
+                      example: Organization not found
