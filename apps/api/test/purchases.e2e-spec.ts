@@ -470,6 +470,114 @@ describe('Purchases (e2e) — US1..US6', () => {
     expect(res.body).toMatchObject({ error: 'Bad Request' });
   });
 
+  it('accepts quantity at the Prisma Int maximum and rejects one above it (create and update)', async () => {
+    const token = await login(emails.admin1);
+
+    const created = await createPurchase(token, {
+      customerId: org1Customers[0].id,
+      productId: org1Products[0].id,
+      invoiceNumber: 'INV-QMAX-1',
+      purchaseDate: '2026-09-01T10:00:00Z',
+      quantity: 2147483647,
+      value: '1.00',
+    }).expect(201);
+    expect((created.body as { data: PurchaseRow }).data.quantity).toBe(
+      2147483647,
+    );
+
+    const overMax = await createPurchase(token, {
+      customerId: org1Customers[0].id,
+      productId: org1Products[0].id,
+      invoiceNumber: 'INV-QMAX-2',
+      purchaseDate: '2026-09-02T10:00:00Z',
+      quantity: 2147483648,
+      value: '1.00',
+    }).expect(400);
+    expect(overMax.body).toMatchObject({ error: 'Bad Request' });
+    expect((overMax.body as { message: string[] }).message).toContain(
+      'quantity must not be greater than 2147483647',
+    );
+
+    const id = (created.body as { data: PurchaseRow }).data.id;
+    const patched = await request(app.getHttpServer())
+      .patch(`/api/v1/purchases/${id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ quantity: 2147483647 })
+      .expect(200);
+    expect((patched.body as { data: PurchaseRow }).data.quantity).toBe(
+      2147483647,
+    );
+
+    const patchOverMax = await request(app.getHttpServer())
+      .patch(`/api/v1/purchases/${id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ quantity: 2147483648 })
+      .expect(400);
+    expect(patchOverMax.body).toMatchObject({ error: 'Bad Request' });
+    expect((patchOverMax.body as { message: string[] }).message).toContain(
+      'quantity must not be greater than 2147483647',
+    );
+  });
+
+  it('includes the whole requested day on a date-only dateTo and keeps dateFrom as a lower bound', async () => {
+    const token = await login(emails.admin1);
+
+    const boundary: Record<string, string> = {
+      'INV-BD-1': '2026-02-28T00:00:00Z',
+      'INV-BD-2': '2026-02-28T12:00:00Z',
+      'INV-BD-3': '2026-02-28T23:59:59.999Z',
+      'INV-BD-4': '2026-03-01T00:00:00Z',
+    };
+    for (const [invoiceNumber, purchaseDate] of Object.entries(boundary)) {
+      await createPurchase(token, {
+        customerId: org1Customers[0].id,
+        productId: org1Products[0].id,
+        invoiceNumber,
+        purchaseDate,
+        quantity: 1,
+        value: '1.00',
+      }).expect(201);
+    }
+
+    const to = await request(app.getHttpServer())
+      .get('/api/v1/purchases?dateTo=2026-02-28')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const toInvoices = (to.body as { data: PurchaseRow[] }).data.map(
+      (p) => p.invoiceNumber,
+    );
+    expect(toInvoices).toEqual(
+      expect.arrayContaining(['INV-BD-1', 'INV-BD-2', 'INV-BD-3']),
+    );
+    expect(toInvoices).not.toContain('INV-BD-4');
+    expect(toInvoices).not.toContain('INV-0003');
+
+    const from = await request(app.getHttpServer())
+      .get('/api/v1/purchases?dateFrom=2026-02-28')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const fromInvoices = (from.body as { data: PurchaseRow[] }).data.map(
+      (p) => p.invoiceNumber,
+    );
+    expect(fromInvoices).toEqual(
+      expect.arrayContaining(['INV-BD-1', 'INV-BD-2', 'INV-BD-3', 'INV-BD-4']),
+    );
+    expect(fromInvoices).not.toContain('INV-0002');
+
+    const datetime = await request(app.getHttpServer())
+      .get('/api/v1/purchases?dateTo=2026-02-28T12:00:00Z')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const datetimeInvoices = (
+      datetime.body as { data: PurchaseRow[] }
+    ).data.map((p) => p.invoiceNumber);
+    expect(datetimeInvoices).toEqual(
+      expect.arrayContaining(['INV-BD-1', 'INV-BD-2']),
+    );
+    expect(datetimeInvoices).not.toContain('INV-BD-3');
+    expect(datetimeInvoices).not.toContain('INV-BD-4');
+  });
+
   it('rejects organization users that send organizationId (AS-011)', async () => {
     const token = await login(emails.admin1);
 

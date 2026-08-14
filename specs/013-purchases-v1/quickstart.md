@@ -107,6 +107,23 @@ SELECT action, "userId", "organizationId", "module" FROM "Audit" WHERE "module" 
 ```
 **Expected**: rows for every create/update with correct actor/org; no sensitive metadata.
 
+### S13. Quantity boundary (Prisma Int max)
+```bash
+curl -s -X POST /api/v1/purchases -H "Authorization: Bearer $TOKEN" -d '{"customerId":"<c1>","productId":"<p1>","invoiceNumber":"INV-QMAX","purchaseDate":"2026-09-01T10:00:00Z","quantity":2147483647,"value":"1.00"}'  # 201
+curl -s -X POST /api/v1/purchases -H "Authorization: Bearer $TOKEN" -d '{"customerId":"<c1>","productId":"<p1>","invoiceNumber":"INV-QMAX2","purchaseDate":"2026-09-02T10:00:00Z","quantity":2147483648,"value":"1.00"}'  # 400
+curl -s -X PATCH /api/v1/purchases/<id> -H "Authorization: Bearer $TOKEN" -d '{"quantity":2147483648}'  # 400
+```
+**Expected**: `quantity=2147483647` (max int4) is accepted (201/200); `quantity=2147483648` returns `400` with `{"error":"Bad Request","message":["quantity must not be greater than 2147483647"],"statusCode":400}` — the value never reaches Prisma.
+
+### S14. dateTo/dateFrom day boundary (inclusive bounds)
+```bash
+# Seed purchases at 2026-02-28T00:00:00Z, 2026-02-28T12:00:00Z, 2026-02-28T23:59:59.999Z and 2026-03-01T00:00:00Z
+curl -s "/api/v1/purchases?dateTo=2026-02-28" -H "Authorization: Bearer $TOKEN"   # 2026-02-28 00:00:00, 12:00:00 and 23:59:59.999 — NOT 03-01
+curl -s "/api/v1/purchases?dateFrom=2026-02-28" -H "Authorization: Bearer $TOKEN" # 2026-02-28 00:00:00 through 03-01+ (lower bound)
+curl -s "/api/v1/purchases?dateTo=2026-02-28T12:00:00Z" -H "Authorization: Bearer $TOKEN"  # full datetime: exact instant preserved
+```
+**Expected**: a date-only `dateTo` includes the **whole requested day** (`<= 23:59:59.999`); a date-only `dateFrom` means `>= 00:00:00`; a full ISO datetime keeps its exact instant.
+
 ## Quality gates
 
 ```bash
@@ -122,6 +139,6 @@ npm run test:e2e      # e2e: test/jest-e2e.json
 
 ## Expected completion signals
 
-- All S1-S12 scenarios pass
+- All S1-S14 scenarios pass
 - Unit + integration coverage >80% for the purchases module
 - No DELETE endpoint; no changes outside Purchases scope (only `app.module.ts` registration)

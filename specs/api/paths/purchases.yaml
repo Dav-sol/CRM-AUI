@@ -66,6 +66,10 @@
       - name: dateFrom
         in: query
         required: false
+        description: |
+          Lower bound on purchaseDate. Date-only (`YYYY-MM-DD`) means the start
+          of that day (`>= 00:00:00` UTC); a full ISO datetime keeps its exact
+          instant.
         schema:
           type: string
           format: date-time
@@ -73,6 +77,10 @@
       - name: dateTo
         in: query
         required: false
+        description: |
+          Upper bound on purchaseDate. Date-only (`YYYY-MM-DD`) includes the
+          whole requested day (`<= 23:59:59.999` UTC); a full ISO datetime
+          keeps its exact instant.
         schema:
           type: string
           format: date-time
@@ -98,7 +106,11 @@
               $ref: "../components/schemas/Purchase/PurchaseListResponse.yaml"
 
       "400":
-        description: "Invalid query parameters or sort field (BAD_REQUEST)"
+        description: |
+          Two distinct shapes exist, depending on the failure source:
+
+          - **ValidationPipe (DTO)**: malformed query parameters (page/limit/status/dateFrom/dateTo/sort pattern). The global exception filter passes the ValidationPipe payload through as `{"statusCode": 400, "message": [string], "error": "Bad Request"}`.
+          - **Business logic**: a non-whitelisted `sort` field throws `BAD_REQUEST` in the service, following the standard error envelope.
 
         content:
 
@@ -106,22 +118,45 @@
 
             schema:
 
-              type: object
+              oneOf:
 
-              properties:
-
-                error:
-                  type: object
+                - type: object
+                  description: ValidationPipe DTO failure (payload passthrough).
                   required:
-                    - code
+                    - statusCode
                     - message
+                    - error
                   properties:
-                    code:
-                      type: string
-                      example: BAD_REQUEST
+                    statusCode:
+                      type: integer
+                      example: 400
                     message:
+                      type: array
+                      items:
+                        type: string
+                      example:
+                        - sort must match ^-?(purchaseDate|invoiceNumber|quantity|value|status|createdAt|updatedAt)$ regular expression
+                    error:
                       type: string
-                      example: Invalid sort field
+                      example: Bad Request
+
+                - type: object
+                  description: Service business failure (error envelope).
+                  required:
+                    - error
+                  properties:
+                    error:
+                      type: object
+                      required:
+                        - code
+                        - message
+                      properties:
+                        code:
+                          type: string
+                          example: BAD_REQUEST
+                        message:
+                          type: string
+                          example: Invalid sort field
 
       "401":
         description: Missing or invalid access token
@@ -216,9 +251,10 @@
 
       "400":
         description: |
-          DTO or domain validation failure (BAD_REQUEST / VALIDATION_ERROR):
-          malformed value, unknown organization, tenant in organizationId for
-          organization users, or customer/product not found in the organization.
+          Two distinct shapes exist, depending on the failure source:
+
+          - **ValidationPipe (DTO)**: malformed body (invoiceNumber, purchaseDate, quantity, value, status). The global exception filter passes the ValidationPipe payload through as `{"statusCode": 400, "message": [string], "error": "Bad Request"}`.
+          - **Business logic**: organizationId misuse by organization users or PLATFORM_OWNER, unknown organization, or customer/product not found in the organization — `VALIDATION_ERROR` envelope.
 
         content:
 
@@ -226,21 +262,45 @@
 
             schema:
 
-              type: object
+              oneOf:
 
-              properties:
-
-                error:
-                  type: object
+                - type: object
+                  description: ValidationPipe DTO failure (payload passthrough).
                   required:
-                    - code
+                    - statusCode
                     - message
+                    - error
                   properties:
-                    code:
-                      type: string
-                      example: VALIDATION_ERROR
+                    statusCode:
+                      type: integer
+                      example: 400
                     message:
+                      type: array
+                      items:
+                        type: string
+                      example:
+                        - value must match ^\d{1,10}(\.\d{1,2})?$ regular expression
+                    error:
                       type: string
+                      example: Bad Request
+
+                - type: object
+                  description: Service business failure (error envelope).
+                  required:
+                    - error
+                  properties:
+                    error:
+                      type: object
+                      required:
+                        - code
+                        - message
+                      properties:
+                        code:
+                          type: string
+                          example: VALIDATION_ERROR
+                        message:
+                          type: string
+                          example: Customer not found in this organization
 
       "401":
         description: Missing or invalid access token
@@ -497,7 +557,12 @@
               $ref: "../components/schemas/Purchase/PurchaseResponse.yaml"
 
       "400":
-        description: "DTO validation failure (BAD_REQUEST): malformed value or immutable invoiceNumber."
+        description: |
+          ValidationPipe (DTO) failure only — there is no business 400 on PATCH:
+          malformed value/quantity/purchaseDate/status or an immutable
+          invoiceNumber attempt. The global exception filter passes the
+          ValidationPipe payload through as
+          `{"statusCode": 400, "message": [string], "error": "Bad Request"}`.
 
         content:
 
@@ -506,20 +571,23 @@
             schema:
 
               type: object
-
+              required:
+                - statusCode
+                - message
+                - error
               properties:
-
+                statusCode:
+                  type: integer
+                  example: 400
+                message:
+                  type: array
+                  items:
+                    type: string
+                  example:
+                    - invoiceNumber is immutable and cannot be updated
                 error:
-                  type: object
-                  required:
-                    - code
-                    - message
-                  properties:
-                    code:
-                      type: string
-                      example: BAD_REQUEST
-                    message:
-                      type: string
+                  type: string
+                  example: Bad Request
 
       "401":
         description: Missing or invalid access token

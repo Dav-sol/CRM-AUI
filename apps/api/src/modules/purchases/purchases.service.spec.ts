@@ -185,8 +185,75 @@ describe('PurchasesService', () => {
           organizationId: 'org-1',
           deletedAt: null,
           purchaseDate: {
-            gte: new Date('2026-01-01'),
-            lte: new Date('2026-12-31'),
+            gte: new Date('2026-01-01T00:00:00.000Z'),
+            lte: new Date('2026-12-31T23:59:59.999Z'),
+          },
+        },
+        orderBy: [{ purchaseDate: 'desc' }],
+        skip: 0,
+        take: 20,
+        include: PURCHASE_INCLUDE,
+      });
+    });
+
+    it('treats a date-only dateTo as the end of the requested day', async () => {
+      prisma.purchase.count.mockResolvedValue(0);
+      prisma.purchase.findMany.mockResolvedValue([]);
+
+      await service.findAll(orgUser, { dateTo: '2026-02-28' });
+
+      expect(prisma.purchase.findMany).toHaveBeenCalledWith({
+        where: {
+          organizationId: 'org-1',
+          deletedAt: null,
+          purchaseDate: {
+            lte: new Date('2026-02-28T23:59:59.999Z'),
+          },
+        },
+        orderBy: [{ purchaseDate: 'desc' }],
+        skip: 0,
+        take: 20,
+        include: PURCHASE_INCLUDE,
+      });
+    });
+
+    it('treats a date-only dateFrom as the start of the requested day', async () => {
+      prisma.purchase.count.mockResolvedValue(0);
+      prisma.purchase.findMany.mockResolvedValue([]);
+
+      await service.findAll(orgUser, { dateFrom: '2026-02-28' });
+
+      expect(prisma.purchase.findMany).toHaveBeenCalledWith({
+        where: {
+          organizationId: 'org-1',
+          deletedAt: null,
+          purchaseDate: {
+            gte: new Date('2026-02-28T00:00:00.000Z'),
+          },
+        },
+        orderBy: [{ purchaseDate: 'desc' }],
+        skip: 0,
+        take: 20,
+        include: PURCHASE_INCLUDE,
+      });
+    });
+
+    it('preserves the exact instant of full datetimes in range filters', async () => {
+      prisma.purchase.count.mockResolvedValue(0);
+      prisma.purchase.findMany.mockResolvedValue([]);
+
+      await service.findAll(orgUser, {
+        dateFrom: '2026-02-28T12:30:00Z',
+        dateTo: '2026-02-28T18:45:30Z',
+      });
+
+      expect(prisma.purchase.findMany).toHaveBeenCalledWith({
+        where: {
+          organizationId: 'org-1',
+          deletedAt: null,
+          purchaseDate: {
+            gte: new Date('2026-02-28T12:30:00Z'),
+            lte: new Date('2026-02-28T18:45:30Z'),
           },
         },
         orderBy: [{ purchaseDate: 'desc' }],

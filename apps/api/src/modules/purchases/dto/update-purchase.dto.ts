@@ -4,6 +4,7 @@ import {
   IsInt,
   IsOptional,
   Matches,
+  Max,
   Min,
   Validate,
   ValidateIf,
@@ -13,6 +14,8 @@ import {
 import { PurchaseStatus } from '@prisma/client';
 
 const MONEY_PATTERN = /^\d{1,10}(\.\d{1,2})?$/;
+
+const MAX_INT = 2147483647;
 
 @ValidatorConstraint({ name: 'invoiceNumberImmutable', async: false })
 export class InvoiceNumberImmutableConstraint implements ValidatorConstraintInterface {
@@ -37,6 +40,7 @@ export class UpdatePurchaseDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(MAX_INT)
   quantity?: number;
 
   @IsOptional()

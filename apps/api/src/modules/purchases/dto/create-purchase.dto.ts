@@ -5,12 +5,15 @@ import {
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
 import { PurchaseStatus } from '@prisma/client';
 
 const MONEY_PATTERN = /^\d{1,10}(\.\d{1,2})?$/;
+
+const MAX_INT = 2147483647;
 
 export class CreatePurchaseDto {
   @IsString()
@@ -28,6 +31,7 @@ export class CreatePurchaseDto {
 
   @IsInt()
   @Min(1)
+  @Max(MAX_INT)
   quantity!: number;
 
   @Matches(MONEY_PATTERN)

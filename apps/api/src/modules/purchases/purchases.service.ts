@@ -48,6 +48,8 @@ const SORT_FIELDS = new Set([
   'updatedAt',
 ]);
 
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
 const MODULE = 'purchases';
 
 const CUSTOMER_PRODUCT_SELECT = {
@@ -300,13 +302,25 @@ export class PurchasesService {
     if (query.dateFrom || query.dateTo) {
       where.purchaseDate = {};
       if (query.dateFrom) {
-        where.purchaseDate.gte = new Date(query.dateFrom);
+        where.purchaseDate.gte = this.resolveDateBoundary(
+          query.dateFrom,
+          false,
+        );
       }
       if (query.dateTo) {
-        where.purchaseDate.lte = new Date(query.dateTo);
+        where.purchaseDate.lte = this.resolveDateBoundary(query.dateTo, true);
       }
     }
     return where;
+  }
+
+  private resolveDateBoundary(value: string, upper: boolean): Date {
+    if (DATE_ONLY_PATTERN.test(value)) {
+      return upper
+        ? new Date(`${value}T23:59:59.999Z`)
+        : new Date(`${value}T00:00:00.000Z`);
+    }
+    return new Date(value);
   }
 
   private buildSort(sort?: string): Prisma.PurchaseOrderByWithRelationInput[] {
