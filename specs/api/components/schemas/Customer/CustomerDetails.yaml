@@ -1,0 +1,5 @@
+type: object
+
+description: Full customer detail returned by GET /customers/{id} and write operations.
+
+$ref: "./Customer.yaml"

@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 
 export interface IdentityAuditInput {
+  module?: string;
   action: string;
   outcome: 'success' | 'failure';
   userId?: string | null;
@@ -52,7 +53,7 @@ export class AuditIdentityService {
     try {
       await this.prisma.audit.create({
         data: {
-          module: 'identity',
+          module: input.module ?? 'identity',
           action: `${input.action}.${input.outcome}`,
           userId: input.userId ?? null,
           organizationId: input.organizationId ?? null,

@@ -1,0 +1,90 @@
+type: object
+
+description: Customer entity as persisted (v1).
+
+required:
+  - id
+  - uuid
+  - organizationId
+  - codcli
+  - name
+  - status
+  - createdAt
+  - updatedAt
+
+properties:
+
+  id:
+    type: string
+
+  uuid:
+    type: string
+
+  organizationId:
+    type: string
+
+  codcli:
+    type: string
+    maxLength: 50
+    description: Client code, unique within the organization.
+
+  name:
+    type: string
+    maxLength: 200
+
+  phone:
+    type: string
+    maxLength: 30
+    nullable: true
+
+  email:
+    type: string
+    format: email
+    nullable: true
+
+  address:
+    type: string
+    maxLength: 200
+    nullable: true
+
+  city:
+    type: string
+    maxLength: 200
+    nullable: true
+
+  status:
+    type: string
+    enum:
+      - ACTIVE
+      - INACTIVE
+      - BLOCKED
+    description: BLOCKED is reserved and inert in v1.
+
+  createdAt:
+    type: string
+    format: date-time
+
+  updatedAt:
+    type: string
+    format: date-time
+
+  deletedAt:
+    type: string
+    format: date-time
+    nullable: true
+    description: Set on soft delete; deleted customers are never returned.
+
+  createdBy:
+    type: string
+    nullable: true
+    description: User id that created the record.
+
+  updatedBy:
+    type: string
+    nullable: true
+    description: User id of the last update.
+
+  deletedBy:
+    type: string
+    nullable: true
+    description: User id that performed the soft delete.

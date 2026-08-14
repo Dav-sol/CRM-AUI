@@ -1,0 +1,54 @@
+type: object
+
+description: Customer summary used in list responses.
+
+required:
+  - id
+  - uuid
+  - codcli
+  - name
+  - status
+  - createdAt
+  - updatedAt
+
+properties:
+
+  id:
+    type: string
+
+  uuid:
+    type: string
+
+  codcli:
+    type: string
+
+  name:
+    type: string
+
+  phone:
+    type: string
+    nullable: true
+
+  email:
+    type: string
+    format: email
+    nullable: true
+
+  city:
+    type: string
+    nullable: true
+
+  status:
+    type: string
+    enum:
+      - ACTIVE
+      - INACTIVE
+      - BLOCKED
+
+  createdAt:
+    type: string
+    format: date-time
+
+  updatedAt:
+    type: string
+    format: date-time

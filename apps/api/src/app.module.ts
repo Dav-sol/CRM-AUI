@@ -10,6 +10,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { PasswordResetModule } from './modules/password-reset/password-reset.module';
 import { InvitationsModule } from './modules/invitations/invitations.module';
+import { CustomersModule } from './modules/customers/customers.module';
 
 @Module({
   imports: [
@@ -32,6 +33,8 @@ import { InvitationsModule } from './modules/invitations/invitations.module';
     PasswordResetModule,
 
     InvitationsModule,
+
+    CustomersModule,
   ],
 })
 export class AppModule {}

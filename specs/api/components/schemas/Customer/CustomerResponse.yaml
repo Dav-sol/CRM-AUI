@@ -1,0 +1,11 @@
+type: object
+
+description: Envelope for a single customer operation.
+
+required:
+  - data
+
+properties:
+
+  data:
+    $ref: "./CustomerDetails.yaml"

@@ -1,0 +1,47 @@
+type: object
+
+description: Request body to create a customer.
+
+required:
+  - codcli
+  - name
+
+properties:
+
+  codcli:
+    type: string
+    maxLength: 50
+    description: Client code, unique within the organization. Immutable after creation.
+
+  name:
+    type: string
+    maxLength: 200
+
+  phone:
+    type: string
+    maxLength: 30
+    description: Free-form phone string (E.164 is not enforced in v1).
+
+  email:
+    type: string
+    format: email
+
+  address:
+    type: string
+    maxLength: 200
+
+  city:
+    type: string
+    maxLength: 200
+
+  status:
+    type: string
+    enum:
+      - ACTIVE
+      - INACTIVE
+      - BLOCKED
+    description: Defaults to ACTIVE. BLOCKED is reserved and inert in v1.
+
+  organizationId:
+    type: string
+    description: Only accepted for PLATFORM_OWNER; required for them. Organization users must not send it.

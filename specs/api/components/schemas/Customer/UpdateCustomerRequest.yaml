@@ -1,0 +1,36 @@
+type: object
+
+description: Request body to update a customer. codcli is immutable and rejected with 400 if present.
+
+properties:
+
+  codcli:
+    type: string
+    description: Always rejected (400) — codcli is immutable.
+
+  name:
+    type: string
+    maxLength: 200
+
+  phone:
+    type: string
+    maxLength: 30
+
+  email:
+    type: string
+    format: email
+
+  address:
+    type: string
+    maxLength: 200
+
+  city:
+    type: string
+    maxLength: 200
+
+  status:
+    type: string
+    enum:
+      - ACTIVE
+      - INACTIVE
+      - BLOCKED
