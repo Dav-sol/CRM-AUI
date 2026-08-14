@@ -1,0 +1,3 @@
+type: object
+
+description: Not used by Imports v1 (no update endpoint; cancel/retry are the mutation operations).

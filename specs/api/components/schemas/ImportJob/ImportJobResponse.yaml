@@ -1,0 +1,11 @@
+type: object
+
+description: Envelope for a single import job operation.
+
+required:
+  - data
+
+properties:
+
+  data:
+    $ref: "./ImportJob.yaml"

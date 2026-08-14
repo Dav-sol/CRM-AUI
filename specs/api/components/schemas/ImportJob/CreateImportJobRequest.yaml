@@ -1,0 +1,24 @@
+type: object
+
+description: |
+  Multipart/form-data fields of POST /imports. The file is a binary part
+  named `file`. PLATFORM_OWNER additionally sends `organizationId`; sending it
+  as an ORGANIZATION user returns 400 (HG-12).
+
+properties:
+
+  file:
+    type: string
+    format: binary
+    description: CSV or XLSX file, max 25 MB (FR-002).
+
+  type:
+    type: string
+    enum:
+      - CUSTOMERS
+      - PURCHASES
+      - PRODUCTS
+
+  organizationId:
+    type: string
+    description: Required for PLATFORM_OWNER only.

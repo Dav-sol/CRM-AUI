@@ -1,0 +1,774 @@
+/imports:
+  post:
+    tags:
+      - Imports
+
+    summary: Create an import job (multipart)
+
+    description: |
+      Enqueues an asynchronous import (CUSTOMERS, PRODUCTS or PURCHASES).
+      The file is validated synchronously (format, size); the import then
+      runs in background, mutating the job status.
+
+      PLATFORM_OWNER must send `organizationId`; ORGANIZATION users must not.
+      Optional `Idempotency-Key` header replays the existing job (200) when
+      the same key was used before for the same organization and user.
+
+      Validation order: auth → role → tenant → format → limits (25 MB, 50.000 rows)
+      → Idempotency-Key replay → file_hash duplicate → active-job concurrency.
+
+    operationId: createImportJob
+
+    security:
+      - bearerAuth: []
+
+    parameters:
+
+      - name: Idempotency-Key
+        in: header
+        required: false
+        description: |
+          If the same key was already used for an import of the same
+          organization and user, the existing job is returned (200) instead
+          of creating a new one (FR-005).
+        schema:
+          type: string
+
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            $ref: "../components/schemas/ImportJob/CreateImportJobRequest.yaml"
+
+    responses:
+
+      "201":
+        description: Import job created and queued
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/ImportJob/ImportJobResponse.yaml"
+
+      "200":
+        description: Idempotency-Key replay with the existing job (FR-005)
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/ImportJob/ImportJobResponse.yaml"
+
+      "400":
+        description: |
+          `VALIDATION_ERROR`: missing/invalid multipart fields, invalid `type`,
+          `organizationId` sent by an ORGANIZATION user or missing/unknown for
+          PLATFORM_OWNER.
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+                      example: organizationId is required for PLATFORM_OWNER
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+      "403":
+        description: OPERADOR role cannot create imports (HG-11)
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+                      example: Forbidden resource
+
+      "409":
+        description: |
+          `IMPORT_ACTIVE`: another job of the same type is still active
+          (HG-16). `DUPLICATE_FILE`: the same file was already imported for
+          this organization (IM-005, FR-004).
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: DUPLICATE_FILE
+                    message:
+                      type: string
+                      example: This file has already been imported
+
+      "413":
+        description: File exceeds the maximum size of 25 MB (FR-002)
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: PAYLOAD_TOO_LARGE
+                    message:
+                      type: string
+                      example: file exceeds the maximum size of 26214400 bytes
+
+      "415":
+        description: Only XLSX and CSV files are supported (FR-002)
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNSUPPORTED_MEDIA_TYPE
+                    message:
+                      type: string
+                      example: only XLSX and CSV files are supported
+
+  get:
+    tags:
+      - Imports
+
+    summary: List import jobs
+
+    description: |
+      Returns a paginated list of import jobs ordered by -createdAt.
+      Organization users only see their own organization; PLATFORM_OWNER sees all.
+
+    operationId: listImportJobs
+
+    security:
+      - bearerAuth: []
+
+    parameters:
+
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+
+      - name: type
+        in: query
+        required: false
+        description: Exact match over the import type.
+        schema:
+          type: string
+          enum:
+            - CUSTOMERS
+            - PURCHASES
+            - PRODUCTS
+
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+            - PENDING
+            - VALIDATING
+            - PROCESSING
+            - COMPLETED
+            - FAILED
+            - PARTIAL
+            - CANCELLED
+
+      - name: search
+        in: query
+        required: false
+        description: Case-insensitive match over the file name.
+        schema:
+          type: string
+
+      - name: createdFrom
+        in: query
+        required: false
+        description: |
+          Lower bound on createdAt. Date-only (`YYYY-MM-DD`) means the start
+          of that day (`>= 00:00:00` UTC); a full ISO datetime keeps its exact
+          instant.
+        schema:
+          type: string
+          format: date-time
+
+      - name: createdTo
+        in: query
+        required: false
+        description: |
+          Upper bound on createdAt. Date-only (`YYYY-MM-DD`) includes the
+          whole requested day (`<= 23:59:59.999` UTC); a full ISO datetime
+          keeps its exact instant.
+        schema:
+          type: string
+          format: date-time
+
+      - name: sort
+        in: query
+        required: false
+        description: Field sorted by; "-" prefix means descending. Defaults to -createdAt.
+        schema:
+          type: string
+          pattern: "^-?(createdAt|updatedAt|status)$"
+
+    responses:
+
+      "200":
+        description: Paginated import job list
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/ImportJob/ImportJobListResponse.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+/imports/{uuid}:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Import job uuid
+
+  get:
+    tags:
+      - Imports
+
+    summary: Get an import job by uuid
+
+    description: |
+      Returns the job only if it belongs to the caller organization
+      (PLATFORM_OWNER may read any). Unknown or cross-tenant jobs return
+      404 IMPORT_NOT_FOUND (HG-12, FR-016).
+
+    operationId: getImportJob
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Import job detail
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/ImportJob/ImportJobResponse.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+      "404":
+        description: "Unknown or cross-tenant job (IMPORT_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: IMPORT_NOT_FOUND
+                    message:
+                      type: string
+                      example: Import job not found
+
+/imports/{uuid}/cancel:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Import job uuid
+
+  post:
+    tags:
+      - Imports
+
+    summary: Cancel an active import job
+
+    description: |
+      Only PENDING, VALIDATING and PROCESSING jobs can be cancelled; final
+      states return 400 VALIDATION_ERROR. The job becomes CANCELLED.
+
+    operationId: cancelImportJob
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Job cancelled
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              required:
+                - data
+
+              properties:
+
+                data:
+                  type: object
+                  required:
+                    - uuid
+                    - status
+                    - success
+                  properties:
+                    uuid:
+                      type: string
+                    status:
+                      type: string
+                      example: CANCELLED
+                    success:
+                      type: boolean
+                      example: true
+
+      "400":
+        description: Job is already in a final state (VALIDATION_ERROR)
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+                      example: Only active imports can be cancelled
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+      "403":
+        description: OPERADOR role cannot cancel imports (HG-11)
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+                      example: Forbidden resource
+
+      "404":
+        description: "Unknown or cross-tenant job (IMPORT_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: IMPORT_NOT_FOUND
+                    message:
+                      type: string
+                      example: Import job not found
+
+/imports/{uuid}/retry:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Import job uuid
+
+  post:
+    tags:
+      - Imports
+
+    summary: Retry a failed import job
+
+    description: |
+      Only FAILED and PARTIAL jobs can be retried; other states return 400
+      VALIDATION_ERROR. Only the previously failed rows are reprocessed
+      (HG-15); the job returns to PROCESSING.
+
+    operationId: retryImportJob
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Job scheduled for retry
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              required:
+                - data
+
+              properties:
+
+                data:
+                  type: object
+                  required:
+                    - uuid
+                    - status
+                    - success
+                  properties:
+                    uuid:
+                      type: string
+                    status:
+                      type: string
+                      example: PROCESSING
+                    success:
+                      type: boolean
+                      example: true
+
+      "400":
+        description: Job is not in a retryable state (VALIDATION_ERROR)
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+                      example: Only failed or partial imports can be retried
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+      "403":
+        description: OPERADOR role cannot retry imports (HG-11)
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+                      example: Forbidden resource
+
+      "404":
+        description: "Unknown or cross-tenant job (IMPORT_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: IMPORT_NOT_FOUND
+                    message:
+                      type: string
+                      example: Import job not found

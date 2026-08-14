@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 
 import { configuration, envValidationSchema } from './core/config';
 
@@ -13,6 +14,7 @@ import { InvitationsModule } from './modules/invitations/invitations.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { PurchasesModule } from './modules/purchases/purchases.module';
 import { ProductsModule } from './modules/products/products.module';
+import { ImportsModule } from './modules/imports/imports.module';
 
 @Module({
   imports: [
@@ -21,6 +23,8 @@ import { ProductsModule } from './modules/products/products.module';
       load: [configuration],
       validationSchema: envValidationSchema,
     }),
+
+    EventEmitterModule.forRoot(),
 
     PrismaModule,
 
@@ -41,6 +45,8 @@ import { ProductsModule } from './modules/products/products.module';
     PurchasesModule,
 
     ProductsModule,
+
+    ImportsModule,
   ],
 })
 export class AppModule {}

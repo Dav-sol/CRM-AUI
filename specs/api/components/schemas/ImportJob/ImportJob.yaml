@@ -1,0 +1,107 @@
+type: object
+
+description: |
+  Import job. `filePath` and the full internal `errors` payload are never
+  exposed (NR-006, FR-024); only `errorsSummary` is returned.
+
+required:
+  - uuid
+  - type
+  - status
+  - fileName
+  - totalRecords
+  - processedRecords
+  - errorRecords
+  - errorsSummary
+  - startedAt
+  - completedAt
+  - createdAt
+  - updatedAt
+
+properties:
+
+  uuid:
+    type: string
+
+  type:
+    type: string
+    enum:
+      - CUSTOMERS
+      - PURCHASES
+      - PRODUCTS
+
+  status:
+    type: string
+    enum:
+      - PENDING
+      - VALIDATING
+      - PROCESSING
+      - COMPLETED
+      - FAILED
+      - PARTIAL
+      - CANCELLED
+
+  fileName:
+    type: string
+    description: Original basename, sanitized (NR-006).
+
+  totalRecords:
+    type: integer
+    minimum: 0
+
+  processedRecords:
+    type: integer
+    minimum: 0
+
+  errorRecords:
+    type: integer
+    minimum: 0
+
+  errorsSummary:
+    type: object
+    required:
+      - total
+      - samples
+    properties:
+      total:
+        type: integer
+        minimum: 0
+      samples:
+        type: array
+        description: Capped at 10 samples.
+        items:
+          type: object
+          required:
+            - row
+            - field
+            - message
+          properties:
+            row:
+              type: integer
+              description: File row number (1-based).
+            field:
+              type: string
+            message:
+              type: string
+            raw:
+              type: string
+              description: Sanitized original value, capped at 200 chars.
+              nullable: true
+
+  startedAt:
+    type: string
+    format: date-time
+    nullable: true
+
+  completedAt:
+    type: string
+    format: date-time
+    nullable: true
+
+  createdAt:
+    type: string
+    format: date-time
+
+  updatedAt:
+    type: string
+    format: date-time

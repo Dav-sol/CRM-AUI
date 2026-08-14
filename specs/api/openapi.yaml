@@ -40,6 +40,14 @@ paths:
     $ref: "./paths/products.yaml#/~1products"
   /products/{id}:
     $ref: "./paths/products.yaml#/~1products~1{id}"
+  /imports:
+    $ref: "./paths/imports.yaml#/~1imports"
+  /imports/{uuid}:
+    $ref: "./paths/imports.yaml#/~1imports~1{uuid}"
+  /imports/{uuid}/cancel:
+    $ref: "./paths/imports.yaml#/~1imports~1{uuid}~1cancel"
+  /imports/{uuid}/retry:
+    $ref: "./paths/imports.yaml#/~1imports~1{uuid}~1retry"
 
 components:
 
