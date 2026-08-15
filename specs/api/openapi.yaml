@@ -48,6 +48,16 @@ paths:
     $ref: "./paths/imports.yaml#/~1imports~1{uuid}~1cancel"
   /imports/{uuid}/retry:
     $ref: "./paths/imports.yaml#/~1imports~1{uuid}~1retry"
+  /commercial-cycles:
+    $ref: "./paths/automations.yaml#/~1commercial-cycles"
+  /commercial-cycles/{uuid}:
+    $ref: "./paths/automations.yaml#/~1commercial-cycles~1{uuid}"
+  /automations:
+    $ref: "./paths/automations.yaml#/~1automations"
+  /automations/{uuid}:
+    $ref: "./paths/automations.yaml#/~1automations~1{uuid}"
+  /automations/{uuid}/cancel:
+    $ref: "./paths/automations.yaml#/~1automations~1{uuid}~1cancel"
 
 components:
 

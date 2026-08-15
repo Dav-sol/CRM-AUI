@@ -1,0 +1,6 @@
+type: object
+
+description: Lightweight automation representation for list endpoints.
+
+allOf:
+  - $ref: "./Automation.yaml"

@@ -1,0 +1,65 @@
+type: object
+
+description: Full automation representation with purchase and customer context.
+
+allOf:
+  - $ref: "./Automation.yaml"
+
+required:
+  - organizationId
+  - campaignId
+  - purchase
+  - customer
+
+properties:
+
+  organizationId:
+    type: string
+
+  campaignId:
+    type: string
+    nullable: true
+    description: Not linked to a campaign in v1; reserved for future modules.
+
+  purchase:
+    type: object
+
+    required:
+      - uuid
+      - invoiceNumber
+      - purchaseDate
+      - productName
+
+    properties:
+
+      uuid:
+        type: string
+
+      invoiceNumber:
+        type: string
+
+      purchaseDate:
+        type: string
+        format: date-time
+
+      productName:
+        type: string
+
+  customer:
+    type: object
+
+    required:
+      - uuid
+      - name
+
+    properties:
+
+      uuid:
+        type: string
+
+      name:
+        type: string
+
+      phone:
+        type: string
+        nullable: true

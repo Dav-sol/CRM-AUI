@@ -1,0 +1,11 @@
+type: object
+
+description: Envelope for a single automation resource.
+
+required:
+  - data
+
+properties:
+
+  data:
+    $ref: "./AutomationDetails.yaml"

@@ -1,6 +1,6 @@
 type: object
 
-description: Envelope for the paginated automation list.
+description: Envelope for the paginated commercial cycle list.
 
 required:
   - data
@@ -11,7 +11,7 @@ properties:
   data:
     type: array
     items:
-      $ref: "./AutomationSummary.yaml"
+      $ref: "./CommercialCycleSummary.yaml"
 
   meta:
     type: object
@@ -35,7 +35,7 @@ properties:
 
       total:
         type: integer
-        description: Total matching automations.
+        description: Total matching commercial cycles.
 
       pages:
         type: integer

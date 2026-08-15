@@ -1,0 +1,577 @@
+/commercial-cycles:
+  get:
+    tags:
+      - Automations
+
+    summary: List commercial cycles
+
+    description: |
+      Returns a paginated list of commercial cycles ordered by -createdAt.
+      Organization users only see their own organization; PLATFORM_OWNER sees all.
+      A commercial cycle is created automatically for every imported purchase
+      (AU-001); there is no manual creation endpoint (FR-014).
+
+    operationId: listCommercialCycles
+
+    security:
+      - bearerAuth: []
+
+    parameters:
+
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+
+      - name: status
+        in: query
+        required: false
+        description: Exact match over the cycle status.
+        schema:
+          type: string
+          enum:
+            - ACTIVE
+            - CANCELLED
+            - COMPLETED
+
+      - name: customerId
+        in: query
+        required: false
+        description: uuid of the customer that owns the triggering purchase.
+        schema:
+          type: string
+
+      - name: purchaseId
+        in: query
+        required: false
+        description: uuid of the triggering purchase.
+        schema:
+          type: string
+
+      - name: createdFrom
+        in: query
+        required: false
+        description: |
+          Lower bound on createdAt. Date-only (`YYYY-MM-DD`) means the start
+          of that day (`>= 00:00:00` UTC); a full ISO datetime keeps its exact
+          instant.
+        schema:
+          type: string
+          format: date-time
+
+      - name: createdTo
+        in: query
+        required: false
+        description: |
+          Upper bound on createdAt. Date-only (`YYYY-MM-DD`) includes the
+          whole requested day (`<= 23:59:59.999` UTC); a full ISO datetime
+          keeps its exact instant.
+        schema:
+          type: string
+          format: date-time
+
+      - name: sort
+        in: query
+        required: false
+        description: Field sorted by; "-" prefix means descending. Defaults to -createdAt.
+        schema:
+          type: string
+          pattern: "^-?(createdAt|startDate|updatedAt)$"
+
+    responses:
+
+      "200":
+        description: Paginated commercial cycle list
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/CommercialCycle/CommercialCycleListResponse.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+/commercial-cycles/{uuid}:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Commercial cycle uuid
+
+  get:
+    tags:
+      - Automations
+
+    summary: Get a commercial cycle by uuid
+
+    description: |
+      Returns the cycle with its automations only if it belongs to the caller
+      organization (PLATFORM_OWNER may read any). Unknown or cross-tenant
+      cycles return 404 COMMERCIAL_CYCLE_NOT_FOUND.
+
+    operationId: getCommercialCycle
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Commercial cycle detail
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/CommercialCycle/CommercialCycleResponse.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+      "404":
+        description: "Unknown or cross-tenant cycle (COMMERCIAL_CYCLE_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: COMMERCIAL_CYCLE_NOT_FOUND
+                    message:
+                      type: string
+                      example: Commercial cycle not found
+
+/automations:
+  get:
+    tags:
+      - Automations
+
+    summary: List automations
+
+    description: |
+      Returns a paginated list of automations ordered by -scheduledDate.
+      Organization users only see their own organization; PLATFORM_OWNER sees all.
+
+    operationId: listAutomations
+
+    security:
+      - bearerAuth: []
+
+    parameters:
+
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+
+      - name: status
+        in: query
+        required: false
+        description: Exact match over the automation status.
+        schema:
+          type: string
+          enum:
+            - PENDING
+            - SCHEDULED
+            - PROCESSING
+            - EXECUTED
+            - CANCELLED
+            - FAILED
+
+      - name: commercialCycleId
+        in: query
+        required: false
+        description: uuid of the owning commercial cycle.
+        schema:
+          type: string
+
+      - name: customerId
+        in: query
+        required: false
+        description: uuid of the customer that owns the triggering purchase.
+        schema:
+          type: string
+
+      - name: scheduledFrom
+        in: query
+        required: false
+        description: |
+          Lower bound on scheduledDate. Date-only (`YYYY-MM-DD`) means the start
+          of that day; a full ISO datetime keeps its exact instant.
+        schema:
+          type: string
+          format: date-time
+
+      - name: scheduledTo
+        in: query
+        required: false
+        description: |
+          Upper bound on scheduledDate. Date-only (`YYYY-MM-DD`) includes the
+          whole requested day.
+        schema:
+          type: string
+          format: date-time
+
+      - name: sort
+        in: query
+        required: false
+        description: Field sorted by; "-" prefix means descending. Defaults to -scheduledDate.
+        schema:
+          type: string
+          pattern: "^-?(scheduledDate|createdAt|updatedAt|status)$"
+
+    responses:
+
+      "200":
+        description: Paginated automation list
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Automation/AutomationListResponse.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+/automations/{uuid}:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Automation uuid
+
+  get:
+    tags:
+      - Automations
+
+    summary: Get an automation by uuid
+
+    description: |
+      Returns the automation with purchase and customer context only if it
+      belongs to the caller organization (PLATFORM_OWNER may read any).
+      Unknown or cross-tenant automations return 404 AUTOMATION_NOT_FOUND.
+
+    operationId: getAutomation
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Automation detail
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Automation/AutomationResponse.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+      "404":
+        description: "Unknown or cross-tenant automation (AUTOMATION_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: AUTOMATION_NOT_FOUND
+                    message:
+                      type: string
+                      example: Automation not found
+
+/automations/{uuid}/cancel:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Automation uuid
+
+  post:
+    tags:
+      - Automations
+
+    summary: Cancel a pending or scheduled automation
+
+    description: |
+      Only PENDING and SCHEDULED automations can be cancelled (AU-004);
+      final states return 400 VALIDATION_ERROR. The automation becomes
+      CANCELLED. Requires PLATFORM_OWNER, ADMINISTRADOR or GERENTE.
+
+    operationId: cancelAutomation
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Automation cancelled
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Automation/CancelAutomationResponse.yaml"
+
+      "400":
+        description: Automation is already in a final state (VALIDATION_ERROR)
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+                      example: Only pending or scheduled automations can be cancelled
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+      "403":
+        description: OPERADOR role cannot cancel automations
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+                      example: Forbidden resource
+
+      "404":
+        description: "Unknown or cross-tenant automation (AUTOMATION_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: AUTOMATION_NOT_FOUND
+                    message:
+                      type: string
+                      example: Automation not found

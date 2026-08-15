@@ -174,6 +174,9 @@ model CommercialCycle {
   status         CommercialCycleStatus @default(ACTIVE)
   startDate      DateTime          @map("start_date")
   endDate        DateTime?         @map("end_date")
+  createdBy      String?           @map("created_by")
+  updatedBy      String?           @map("updated_by")
+  deletedBy      String?           @map("deleted_by")
   createdAt      DateTime          @default(now()) @map("created_at")
   updatedAt      DateTime          @updatedAt @map("updated_at")
   deletedAt      DateTime?         @map("deleted_at")
@@ -215,6 +218,9 @@ model Automation {
   executedDate   DateTime?          @map("executed_date")
   status         AutomationStatus   @default(PENDING)
   priority       Int                @default(0)
+  createdBy      String?            @map("created_by")
+  updatedBy      String?            @map("updated_by")
+  deletedBy      String?            @map("deleted_by")
   createdAt      DateTime           @default(now()) @map("created_at")
   updatedAt      DateTime           @updatedAt @map("updated_at")
   deletedAt      DateTime?          @map("deleted_at")
@@ -229,6 +235,7 @@ model Automation {
   @@index([purchaseId])
   @@index([scheduledDate])
   @@index([status])
+  @@index([organizationId, status])
   @@map("automations")
 }
 

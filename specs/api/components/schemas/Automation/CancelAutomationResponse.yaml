@@ -1,0 +1,29 @@
+type: object
+
+description: Envelope for automation operations that return a success shape.
+
+required:
+  - data
+
+properties:
+
+  data:
+    type: object
+
+    required:
+      - uuid
+      - status
+      - success
+
+    properties:
+
+      uuid:
+        type: string
+
+      status:
+        type: string
+        example: CANCELLED
+
+      success:
+        type: boolean
+        example: true

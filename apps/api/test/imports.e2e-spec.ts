@@ -108,6 +108,16 @@ describe('Imports (e2e) — US1..US12', () => {
       where: { organization: { slug: { in: ['imp-org-1', 'imp-org-2'] } } },
     });
     await prisma.audit.deleteMany({ where: { module: 'imports' } });
+    await prisma.automation.deleteMany({
+      where: { organization: { slug: { in: ['imp-org-1', 'imp-org-2'] } } },
+    });
+    await prisma.commercialCycle.deleteMany({
+      where: {
+        purchase: {
+          organization: { slug: { in: ['imp-org-1', 'imp-org-2'] } },
+        },
+      },
+    });
     await prisma.purchase.deleteMany({
       where: { organization: { slug: { in: ['imp-org-1', 'imp-org-2'] } } },
     });
@@ -211,6 +221,12 @@ describe('Imports (e2e) — US1..US12', () => {
       where: { organizationId: { in: [org1Id, org2Id] } },
     });
     await prisma.audit.deleteMany({ where: { module: 'imports' } });
+    await prisma.automation.deleteMany({
+      where: { organizationId: { in: [org1Id, org2Id] } },
+    });
+    await prisma.commercialCycle.deleteMany({
+      where: { purchase: { organizationId: { in: [org1Id, org2Id] } } },
+    });
     await prisma.purchase.deleteMany({
       where: { organizationId: { in: [org1Id, org2Id] } },
     });

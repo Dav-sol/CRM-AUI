@@ -1,0 +1,42 @@
+type: object
+
+description: Lightweight commercial cycle representation.
+
+required:
+  - uuid
+  - status
+  - startDate
+  - endDate
+  - purchaseId
+  - createdAt
+
+properties:
+
+  uuid:
+    type: string
+
+  status:
+    type: string
+    enum:
+      - ACTIVE
+      - CANCELLED
+      - COMPLETED
+
+  startDate:
+    type: string
+    format: date-time
+    description: Same as the triggering purchase date (AU-005).
+
+  endDate:
+    type: string
+    format: date-time
+    nullable: true
+    description: Set when the cycle is cancelled (AU-003).
+
+  purchaseId:
+    type: string
+    description: uuid of the triggering purchase.
+
+  createdAt:
+    type: string
+    format: date-time

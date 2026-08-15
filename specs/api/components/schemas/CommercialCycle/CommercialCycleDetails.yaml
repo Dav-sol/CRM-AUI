@@ -1,0 +1,16 @@
+type: object
+
+description: Full commercial cycle representation with its automations.
+
+allOf:
+  - $ref: "./CommercialCycleSummary.yaml"
+
+required:
+  - automations
+
+properties:
+
+  automations:
+    type: array
+    items:
+      $ref: "../Automation/AutomationSummary.yaml"

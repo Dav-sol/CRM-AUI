@@ -1,0 +1,56 @@
+type: object
+
+description: Base automation representation.
+
+required:
+  - uuid
+  - status
+  - scheduledDate
+  - executedDate
+  - priority
+  - purchaseId
+  - commercialCycleId
+  - createdAt
+
+properties:
+
+  uuid:
+    type: string
+
+  status:
+    type: string
+    enum:
+      - PENDING
+      - SCHEDULED
+      - PROCESSING
+      - EXECUTED
+      - CANCELLED
+      - FAILED
+    description: |
+      Lifecycle of an automation. EXECUTED is a final state (no execution
+      engine in v1). PAUSED is reserved for future deferred flows.
+
+  scheduledDate:
+    type: string
+    format: date-time
+
+  executedDate:
+    type: string
+    format: date-time
+    nullable: true
+
+  priority:
+    type: integer
+    description: Reserved for AU-010 (priority scheduling); always 0 in v1.
+
+  purchaseId:
+    type: string
+    description: uuid of the triggering purchase.
+
+  commercialCycleId:
+    type: string
+    description: uuid of the owning commercial cycle.
+
+  createdAt:
+    type: string
+    format: date-time
