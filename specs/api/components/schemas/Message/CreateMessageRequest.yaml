@@ -1,0 +1,26 @@
+type: object
+
+description: Payload for sending a manual WhatsApp message (WR-05, AS-004).
+
+required:
+  - customerId
+  - content
+
+properties:
+
+  customerId:
+    type: string
+    description: uuid of the recipient customer (must belong to the caller's organization).
+
+  content:
+    type: string
+    minLength: 1
+    maxLength: 4096
+    description: WhatsApp text body.
+
+  channel:
+    type: string
+    enum:
+      - WHATSAPP_CLIENTS
+    default: WHATSAPP_CLIENTS
+    description: v1 only supports WHATSAPP_CLIENTS.

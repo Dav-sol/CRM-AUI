@@ -1,0 +1,6 @@
+type: object
+
+description: Lightweight message representation for list endpoints.
+
+allOf:
+  - $ref: "./Message.yaml"

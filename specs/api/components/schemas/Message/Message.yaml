@@ -1,0 +1,85 @@
+type: object
+
+description: Base message representation for the WhatsApp channel.
+
+required:
+  - uuid
+  - conversationId
+  - automationId
+  - type
+  - content
+  - direction
+  - status
+  - sentAt
+  - deliveredAt
+  - readAt
+  - createdAt
+
+properties:
+
+  uuid:
+    type: string
+
+  conversationId:
+    type: string
+    description: uuid of the owning conversation.
+
+  automationId:
+    type: string
+    nullable: true
+    description: |
+      uuid of the automation that produced the message, or null for manual
+      and inbound messages.
+
+  type:
+    type: string
+    enum:
+      - AUTOMATIC
+      - MANUAL
+      - INCOMING
+    description: |
+      Message origin. v1 produces AUTOMATIC (execution engine), MANUAL
+      (REST manual send) and INCOMING (webhook) only; OUTGOING (agent
+      replies) belongs to the inbox kit (018).
+
+  content:
+    type: string
+    description: WhatsApp text body.
+
+  direction:
+    type: string
+    enum:
+      - INBOUND
+      - OUTBOUND
+
+  status:
+    type: string
+    enum:
+      - QUEUED
+      - SENT
+      - DELIVERED
+      - READ
+      - FAILED
+    description: |
+      Delivery lifecycle. OUTBOUND messages persist QUEUED and transition
+      to SENT/FAILED after the provider call (FR-004); DELIVERED/READ are
+      applied from webhook status callbacks (FR-006/FR-007).
+
+  sentAt:
+    type: string
+    format: date-time
+    nullable: true
+
+  deliveredAt:
+    type: string
+    format: date-time
+    nullable: true
+
+  readAt:
+    type: string
+    format: date-time
+    nullable: true
+
+  createdAt:
+    type: string
+    format: date-time

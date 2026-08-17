@@ -32,4 +32,13 @@ export default () => ({
     url: process.env.EVOLUTION_API_URL,
     apiKey: process.env.EVOLUTION_API_KEY,
   },
+
+  whatsapp: {
+    apiToken: process.env.WHATSAPP_API_TOKEN,
+    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
+    apiUrl: process.env.WHATSAPP_API_URL ?? 'https://graph.facebook.com/v21.0',
+    webhookVerifyToken: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
+    webhookSecret: process.env.WHATSAPP_WEBHOOK_SECRET,
+    defaultOrganizationId: process.env.WHATSAPP_DEFAULT_ORGANIZATION_ID,
+  },
 });

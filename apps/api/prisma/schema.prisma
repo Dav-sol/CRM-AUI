@@ -243,7 +243,7 @@ model Conversation {
   id             String             @id @default(cuid())
   uuid           String             @unique @default(uuid())
   organizationId String             @map("organization_id")
-  customerId     String             @map("customer_id")
+  customerId     String?            @map("customer_id")
   advisorId      String?            @map("advisor_id")
   channel        ChannelType
   status         ConversationStatus @default(OPEN)
@@ -252,7 +252,7 @@ model Conversation {
   deletedAt      DateTime?          @map("deleted_at")
 
   organization   Organization       @relation(fields: [organizationId], references: [id])
-  customer       Customer           @relation(fields: [customerId], references: [id])
+  customer       Customer?          @relation(fields: [customerId], references: [id])
   advisor        User?              @relation("ConversationAdvisor", fields: [advisorId], references: [id])
   messages       Message[]
 
@@ -260,35 +260,40 @@ model Conversation {
   @@index([customerId])
   @@index([advisorId])
   @@index([status])
+  @@index([organizationId, status])
   @@map("conversations")
 }
 
 model Message {
-  id             String           @id @default(cuid())
-  uuid           String           @unique @default(uuid())
-  organizationId String           @map("organization_id")
-  conversationId String           @map("conversation_id")
-  automationId   String?          @map("automation_id")
-  type           MessageType
-  content        String
-  direction      MessageDirection
-  status         MessageStatus    @default(QUEUED)
-  sentAt         DateTime?        @map("sent_at")
-  deliveredAt    DateTime?        @map("delivered_at")
-  readAt         DateTime?        @map("read_at")
-  createdAt      DateTime         @default(now()) @map("created_at")
-  updatedAt      DateTime         @updatedAt @map("updated_at")
-  deletedAt      DateTime?        @map("deleted_at")
+  id                     String         @id @default(cuid())
+  uuid                   String         @unique @default(uuid())
+  organizationId         String         @map("organization_id")
+  conversationId         String         @map("conversation_id")
+  automationId           String?        @map("automation_id")
+  type                   MessageType
+  content                String
+  direction              MessageDirection
+  status                 MessageStatus   @default(QUEUED)
+  providerMessageId      String?         @map("provider_message_id")
+  providerConversationId String?         @map("provider_conversation_id")
+  sentAt                 DateTime?       @map("sent_at")
+  deliveredAt            DateTime?       @map("delivered_at")
+  readAt                 DateTime?       @map("read_at")
+  createdAt              DateTime        @default(now()) @map("created_at")
+  updatedAt              DateTime        @updatedAt @map("updated_at")
+  deletedAt              DateTime?       @map("deleted_at")
 
-  organization   Organization     @relation(fields: [organizationId], references: [id])
-  conversation   Conversation     @relation(fields: [conversationId], references: [id])
-  automation     Automation?      @relation(fields: [automationId], references: [id])
+  organization           Organization    @relation(fields: [organizationId], references: [id])
+  conversation           Conversation    @relation(fields: [conversationId], references: [id])
+  automation             Automation?     @relation(fields: [automationId], references: [id])
 
   @@index([organizationId])
   @@index([conversationId])
   @@index([automationId])
   @@index([status])
   @@index([createdAt])
+  @@unique([organizationId, providerMessageId])
+  @@index([organizationId, status])
   @@map("messages")
 }
 

@@ -83,6 +83,9 @@ describe('Automations (e2e) — AU-001/AU-003 + US1..US8', () => {
     await prisma.message.deleteMany({
       where: { organization: { slug: { in: ['auto-org-1', 'auto-org-2'] } } },
     });
+    await prisma.conversation.deleteMany({
+      where: { organization: { slug: { in: ['auto-org-1', 'auto-org-2'] } } },
+    });
     await prisma.automation.deleteMany({
       where: { organization: { slug: { in: ['auto-org-1', 'auto-org-2'] } } },
     });
@@ -180,6 +183,9 @@ describe('Automations (e2e) — AU-001/AU-003 + US1..US8', () => {
   afterAll(async () => {
     await prisma.audit.deleteMany({ where: { module: 'automations' } });
     await prisma.message.deleteMany({
+      where: { organizationId: { in: [org1Id, org2Id] } },
+    });
+    await prisma.conversation.deleteMany({
       where: { organizationId: { in: [org1Id, org2Id] } },
     });
     await prisma.automation.deleteMany({

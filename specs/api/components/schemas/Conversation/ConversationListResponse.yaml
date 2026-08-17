@@ -1,0 +1,41 @@
+type: object
+
+description: Envelope for the paginated conversation list.
+
+required:
+  - data
+  - meta
+
+properties:
+
+  data:
+    type: array
+    items:
+      $ref: "./ConversationSummary.yaml"
+
+  meta:
+    type: object
+
+    required:
+      - page
+      - limit
+      - total
+      - pages
+
+    properties:
+
+      page:
+        type: integer
+        minimum: 1
+
+      limit:
+        type: integer
+        minimum: 1
+        maximum: 100
+
+      total:
+        type: integer
+        description: Total matching conversations.
+
+      pages:
+        type: integer

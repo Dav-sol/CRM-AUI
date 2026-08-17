@@ -1,0 +1,64 @@
+type: object
+
+description: Base conversation representation for the WhatsApp channel.
+
+required:
+  - uuid
+  - channel
+  - status
+  - customerId
+  - advisorId
+  - lastMessageAt
+  - messageCount
+  - createdAt
+
+properties:
+
+  uuid:
+    type: string
+
+  channel:
+    type: string
+    enum:
+      - WHATSAPP_CLIENTS
+      - WHATSAPP_SOCIAL
+    description: |
+      Channel type. v1 exposes WHATSAPP_CLIENTS only; WHATSAPP_SOCIAL is
+      reserved for future kits.
+
+  status:
+    type: string
+    enum:
+      - OPEN
+      - CLOSED
+      - ARCHIVED
+    description: |
+      Conversation lifecycle. v1 creates OPEN conversations only (R-010);
+      CLOSED/ARCHIVED transitions belong to the inbox kit (018).
+
+  customerId:
+    type: string
+    nullable: true
+    description: |
+      uuid of the linked customer, or null when the inbound number could not
+      be matched (HG-8). Conversations opened by outbound sends always link
+      the customer (R-010).
+
+  advisorId:
+    type: string
+    nullable: true
+    description: Reserved for inbox assignment (kit 018); null in v1.
+
+  lastMessageAt:
+    type: string
+    format: date-time
+    nullable: true
+    description: createdAt of the most recent message, or null when empty.
+
+  messageCount:
+    type: integer
+    description: Number of non-deleted messages in the conversation.
+
+  createdAt:
+    type: string
+    format: date-time

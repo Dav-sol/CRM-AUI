@@ -1,0 +1,30 @@
+type: object
+
+description: Full message representation with customer context.
+
+allOf:
+  - $ref: "./Message.yaml"
+
+required:
+  - customer
+
+properties:
+
+  customer:
+    type: object
+
+    required:
+      - uuid
+      - name
+
+    properties:
+
+      uuid:
+        type: string
+
+      name:
+        type: string
+
+      phone:
+        type: string
+        nullable: true

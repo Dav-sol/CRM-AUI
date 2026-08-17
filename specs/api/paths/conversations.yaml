@@ -1,0 +1,226 @@
+/conversations:
+  get:
+    tags:
+      - Conversations
+
+    summary: List WhatsApp conversations
+
+    description: |
+      Returns a paginated list of conversations ordered by -createdAt.
+      Organization users only see their own organization; PLATFORM_OWNER sees all.
+      Conversations are created automatically (R-010); there is no manual
+      creation endpoint (FR-008).
+
+    operationId: listConversations
+
+    security:
+      - bearerAuth: []
+
+    parameters:
+
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+
+      - name: status
+        in: query
+        required: false
+        description: Exact match over the conversation status.
+        schema:
+          type: string
+          enum:
+            - OPEN
+            - CLOSED
+            - ARCHIVED
+
+      - name: channel
+        in: query
+        required: false
+        description: Exact match over the channel type.
+        schema:
+          type: string
+          enum:
+            - WHATSAPP_CLIENTS
+            - WHATSAPP_SOCIAL
+
+      - name: customerId
+        in: query
+        required: false
+        description: uuid of the linked customer.
+        schema:
+          type: string
+
+      - name: advisorId
+        in: query
+        required: false
+        description: uuid of the assigned advisor (reserved for kit 018; null in v1).
+        schema:
+          type: string
+
+      - name: createdFrom
+        in: query
+        required: false
+        description: |
+          Lower bound on createdAt. Date-only (`YYYY-MM-DD`) means the start
+          of that day; a full ISO datetime keeps its exact instant.
+        schema:
+          type: string
+          format: date-time
+
+      - name: createdTo
+        in: query
+        required: false
+        description: |
+          Upper bound on createdAt. Date-only (`YYYY-MM-DD`) includes the
+          whole requested day.
+        schema:
+          type: string
+          format: date-time
+
+      - name: sort
+        in: query
+        required: false
+        description: Field sorted by; "-" prefix means descending. Defaults to -createdAt.
+        schema:
+          type: string
+          pattern: "^-?(createdAt|updatedAt|status)$"
+
+    responses:
+
+      "200":
+        description: Paginated conversation list
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Conversation/ConversationListResponse.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+/conversations/{uuid}:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Conversation uuid
+
+  get:
+    tags:
+      - Conversations
+
+    summary: Get a conversation by uuid
+
+    description: |
+      Returns the conversation with its message history only if it belongs
+      to the caller organization (PLATFORM_OWNER may read any). Unknown or
+      cross-tenant conversations return 404 CONVERSATION_NOT_FOUND.
+
+    operationId: getConversation
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Conversation detail
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Conversation/ConversationResponse.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+      "404":
+        description: "Unknown or cross-tenant conversation (CONVERSATION_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CONVERSATION_NOT_FOUND
+                    message:
+                      type: string
+                      example: Conversation not found

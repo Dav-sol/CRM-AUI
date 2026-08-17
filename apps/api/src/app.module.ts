@@ -16,6 +16,7 @@ import { PurchasesModule } from './modules/purchases/purchases.module';
 import { ProductsModule } from './modules/products/products.module';
 import { ImportsModule } from './modules/imports/imports.module';
 import { AutomationsModule } from './modules/automations/automations.module';
+import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -50,6 +51,8 @@ import { AutomationsModule } from './modules/automations/automations.module';
     ImportsModule,
 
     AutomationsModule,
+
+    WhatsappModule,
   ],
 })
 export class AppModule {}

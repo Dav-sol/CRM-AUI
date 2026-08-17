@@ -1,0 +1,11 @@
+type: object
+
+description: Envelope for a single conversation resource.
+
+required:
+  - data
+
+properties:
+
+  data:
+    $ref: "./ConversationDetails.yaml"

@@ -1,0 +1,17 @@
+type: object
+
+description: Full conversation representation with its message history.
+
+allOf:
+  - $ref: "./Conversation.yaml"
+
+required:
+  - messages
+
+properties:
+
+  messages:
+    type: array
+    description: Message history in chronological order (FR-008, NR-003).
+    items:
+      $ref: "../Message/MessageSummary.yaml"

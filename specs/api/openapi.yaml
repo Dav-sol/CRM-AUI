@@ -58,6 +58,14 @@ paths:
     $ref: "./paths/automations.yaml#/~1automations~1{uuid}"
   /automations/{uuid}/cancel:
     $ref: "./paths/automations.yaml#/~1automations~1{uuid}~1cancel"
+  /conversations:
+    $ref: "./paths/conversations.yaml#/~1conversations"
+  /conversations/{uuid}:
+    $ref: "./paths/conversations.yaml#/~1conversations~1{uuid}"
+  /messages:
+    $ref: "./paths/messages.yaml#/~1messages"
+  /messages/{uuid}:
+    $ref: "./paths/messages.yaml#/~1messages~1{uuid}"
 
 components:
 

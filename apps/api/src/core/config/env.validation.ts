@@ -27,6 +27,15 @@ export const envValidationSchema = Joi.object({
 
   REDIS_URL: Joi.string().required(),
 
+  WHATSAPP_API_TOKEN: Joi.string().min(1).required(),
+  WHATSAPP_PHONE_NUMBER_ID: Joi.string().min(1).required(),
+  WHATSAPP_API_URL: Joi.string()
+    .uri()
+    .default('https://graph.facebook.com/v21.0'),
+  WHATSAPP_WEBHOOK_VERIFY_TOKEN: Joi.string().min(1).required(),
+  WHATSAPP_WEBHOOK_SECRET: Joi.string().min(1).required(),
+  WHATSAPP_DEFAULT_ORGANIZATION_ID: Joi.string().min(1).required(),
+
   APP_NAME: Joi.string().default('automatize-it-api'),
 
   APP_VERSION: Joi.string().default('1.0.0'),
