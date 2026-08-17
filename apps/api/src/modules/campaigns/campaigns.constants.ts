@@ -1,0 +1,2 @@
+export const MAX_AUTOMATIONS_PER_CAMPAIGN = 5000;
+export const CAMPAIGN_BATCH_SIZE = 500;

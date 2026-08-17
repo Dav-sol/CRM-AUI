@@ -207,6 +207,9 @@ model Campaign {
   updatedAt      DateTime       @updatedAt @map("updated_at")
   deletedAt      DateTime?      @map("deleted_at")
 
+  startAt   DateTime?  @map("start_at")  // send date; "Programada" = ACTIVE con startAt futura (HG-5)
+  segment   Json?    @map("segment")     // { city?, productId?, purchaseFrom?, purchaseTo?, customerStatus? } (HG-7, R-002)
+
   organization Organization @relation(fields: [organizationId], references: [id])
   automations  Automation[]
 
