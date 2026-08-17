@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   IsDateString,
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -45,6 +46,15 @@ export class QueryConversationsDto {
   @IsString()
   @MaxLength(64)
   advisorId?: string;
+
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  assigned?: 'true' | 'false';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1024)
+  tagIds?: string;
 
   @IsOptional()
   @IsDateString()

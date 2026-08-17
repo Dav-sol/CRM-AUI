@@ -1,6 +1,17 @@
 type: object
 
-description: Lightweight conversation representation for list endpoints.
+description: Lightweight conversation representation for list endpoints (extended by the inbox kit with tags).
 
 allOf:
   - $ref: "./Conversation.yaml"
+
+required:
+  - tags
+
+properties:
+
+  tags:
+    type: array
+    description: Active tag assignments (FR-006), preloaded without N+1.
+    items:
+      $ref: "../ConversationTag/ConversationTagRef.yaml"

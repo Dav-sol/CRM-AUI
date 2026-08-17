@@ -1,12 +1,13 @@
 type: object
 
-description: Full conversation representation with its message history.
+description: Full conversation representation with message history and the append-only notes log.
 
 allOf:
-  - $ref: "./Conversation.yaml"
+  - $ref: "./ConversationSummary.yaml"
 
 required:
   - messages
+  - notes
 
 properties:
 
@@ -15,3 +16,9 @@ properties:
     description: Message history in chronological order (FR-008, NR-003).
     items:
       $ref: "../Message/MessageSummary.yaml"
+
+  notes:
+    type: array
+    description: Append-only advisor notes in chronological order (FR-007, HG-2).
+    items:
+      $ref: "../ConversationNote/ConversationNoteSummary.yaml"

@@ -62,6 +62,30 @@ paths:
     $ref: "./paths/conversations.yaml#/~1conversations"
   /conversations/{uuid}:
     $ref: "./paths/conversations.yaml#/~1conversations~1{uuid}"
+  /conversations/{uuid}/messages:
+    $ref: "./paths/conversations.yaml#/~1conversations~1{uuid}~1messages"
+  /conversations/{uuid}/assign:
+    $ref: "./paths/conversations.yaml#/~1conversations~1{uuid}~1assign"
+  /conversations/{uuid}/transfer:
+    $ref: "./paths/conversations.yaml#/~1conversations~1{uuid}~1transfer"
+  /conversations/{uuid}/close:
+    $ref: "./paths/conversations.yaml#/~1conversations~1{uuid}~1close"
+  /conversations/{uuid}/archive:
+    $ref: "./paths/conversations.yaml#/~1conversations~1{uuid}~1archive"
+  /conversations/{uuid}/reopen:
+    $ref: "./paths/conversations.yaml#/~1conversations~1{uuid}~1reopen"
+  /conversations/{uuid}/notes:
+    $ref: "./paths/conversations.yaml#/~1conversations~1{uuid}~1notes"
+  /conversations/{uuid}/tags/{tagUuid}:
+    $ref: "./paths/conversations.yaml#/~1conversations~1{uuid}~1tags~1{tagUuid}"
+  /conversation-tags:
+    $ref: "./paths/conversation-tags.yaml#/~1conversation-tags"
+  /conversation-tags/{uuid}:
+    $ref: "./paths/conversation-tags.yaml#/~1conversation-tags~1{uuid}"
+  /quick-replies:
+    $ref: "./paths/quick-replies.yaml#/~1quick-replies"
+  /quick-replies/{uuid}:
+    $ref: "./paths/quick-replies.yaml#/~1quick-replies~1{uuid}"
   /messages:
     $ref: "./paths/messages.yaml#/~1messages"
   /messages/{uuid}:

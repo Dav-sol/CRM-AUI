@@ -1,0 +1,21 @@
+type: object
+
+description: Envelope for soft-delete operations (catalog entities, CO-003).
+
+required:
+  - data
+
+properties:
+
+  data:
+    type: object
+    required:
+      - uuid
+      - deleted
+    properties:
+      uuid:
+        type: string
+      deleted:
+        type: boolean
+        enum:
+          - true

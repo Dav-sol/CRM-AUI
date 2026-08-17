@@ -1,0 +1,38 @@
+type: object
+
+description: Append-only conversation note written by an advisor (FR-007, HG-2).
+
+required:
+  - uuid
+  - author
+  - content
+  - createdAt
+
+properties:
+
+  uuid:
+    type: string
+
+  author:
+    type: object
+    description: Note author (the authenticated advisor).
+    required:
+      - uuid
+      - firstName
+      - lastName
+    properties:
+      uuid:
+        type: string
+      firstName:
+        type: string
+      lastName:
+        type: string
+
+  content:
+    type: string
+    minLength: 1
+    maxLength: 4000
+
+  createdAt:
+    type: string
+    format: date-time

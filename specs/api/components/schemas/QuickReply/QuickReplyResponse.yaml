@@ -1,0 +1,11 @@
+type: object
+
+description: Envelope for a single quick reply resource.
+
+required:
+  - data
+
+properties:
+
+  data:
+    $ref: "./QuickReplyDetails.yaml"

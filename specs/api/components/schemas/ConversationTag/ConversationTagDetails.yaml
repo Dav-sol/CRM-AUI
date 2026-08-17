@@ -1,0 +1,6 @@
+type: object
+
+description: Full conversation tag representation (catalog detail).
+
+allOf:
+  - $ref: "./ConversationTag.yaml"

@@ -10,6 +10,9 @@
       Organization users only see their own organization; PLATFORM_OWNER sees all.
       Conversations are created automatically (R-010); there is no manual
       creation endpoint (FR-008).
+      Extended by the inbox kit (018): rows include the assigned `advisor`
+      and active `tags` (preloaded, no N+1), and accept the `assigned` and
+      `tagIds` filters.
 
     operationId: listConversations
 
@@ -46,6 +49,28 @@
             - CLOSED
             - ARCHIVED
 
+      - name: assigned
+        in: query
+        required: false
+        description: |
+          Filter by assignment: `true` only conversations with an advisor,
+          `false` only unassigned ones (inbox kit 018, FR-004).
+        schema:
+          type: string
+          enum:
+            - "true"
+            - "false"
+
+      - name: tagIds
+        in: query
+        required: false
+        description: |
+          Comma-separated tag uuids; returns conversations holding any of
+          the given tags (any-of, inbox kit 018, FR-006).
+        schema:
+          type: string
+          example: "7d31b0f0-a4a2-4c4a-9f1a-111111111111,7d31b0f0-a4a2-4c4a-9f1a-222222222222"
+
       - name: channel
         in: query
         required: false
@@ -66,7 +91,7 @@
       - name: advisorId
         in: query
         required: false
-        description: uuid of the assigned advisor (reserved for kit 018; null in v1).
+        description: uuid of the assigned advisor (inbox kit 018, FR-004).
         schema:
           type: string
 
@@ -152,9 +177,11 @@
     summary: Get a conversation by uuid
 
     description: |
-      Returns the conversation with its message history only if it belongs
-      to the caller organization (PLATFORM_OWNER may read any). Unknown or
-      cross-tenant conversations return 404 CONVERSATION_NOT_FOUND.
+      Returns the conversation with its message history and its append-only
+      notes log only if it belongs to the caller organization (PLATFORM_OWNER
+      may read any). Unknown or cross-tenant conversations return
+      404 CONVERSATION_NOT_FOUND. Extended by the inbox kit (018): the detail
+      adds `notes` and the summary fields gain `advisor` and `tags`.
 
     operationId: getConversation
 
@@ -224,3 +251,857 @@
                     message:
                       type: string
                       example: Conversation not found
+
+/conversations/{uuid}/messages:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Conversation uuid
+
+  post:
+    tags:
+      - Conversations
+
+    summary: Asesor reply to a conversation
+
+    description: |
+      Creates an OUTBOUND `type=OUTGOING` message (the type reserved by kit
+      017, HG-6). Persists QUEUED, calls the provider after commit and
+      transitions to SENT/FAILED, emitting MessageQueued/MessageSent/
+      MessageFailed (017 precedent). Reopening: replying to a CLOSED
+      conversation transitions it to OPEN atomically with the message
+      creation (NR-004); replying to an ARCHIVED conversation returns
+      400 VALIDATION_ERROR (explicit reopen first, HG-5). Idempotency-Key
+      header is honored (API_GUIDELINES §19).
+
+    operationId: replyConversation
+
+    security:
+      - bearerAuth: []
+
+    parameters:
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/Conversation/ReplyConversationRequest.yaml"
+
+    responses:
+
+      "201":
+        description: The created OUTGOING message
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Message/MessageResponse.yaml"
+
+      "400":
+        description: "Validation error (e.g. replying to an ARCHIVED conversation, or an idempotency conflict)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+
+      "404":
+        description: "Unknown or cross-tenant conversation (CONVERSATION_NOT_FOUND) or tenant-unmatched quick reply (QUICK_REPLY_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CONVERSATION_NOT_FOUND
+                    message:
+                      type: string
+
+      "502":
+        description: "Provider outage (PROVIDER_ERROR); the message is persisted as FAILED"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: PROVIDER_ERROR
+                    message:
+                      type: string
+
+/conversations/{uuid}/assign:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Conversation uuid
+
+  post:
+    tags:
+      - Conversations
+
+    summary: Assign an advisor to a conversation
+
+    description: |
+      Sets the conversation advisor. Any authenticated role may assign
+      (HG-4). The advisor must be a user of the conversation's organization;
+      assigning the same advisor is a no-op (no event). Emits
+      ConversationAssigned and audits conversation.assign.
+
+    operationId: assignConversation
+
+    security:
+      - bearerAuth: []
+
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/Conversation/AssignConversationRequest.yaml"
+
+    responses:
+
+      "200":
+        description: Assignment result
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Conversation/ConversationAssignmentResponse.yaml"
+
+      "400":
+        description: "Validation error (advisor not in the conversation's organization, or disabled)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+
+      "404":
+        description: "Unknown or cross-tenant conversation (CONVERSATION_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CONVERSATION_NOT_FOUND
+                    message:
+                      type: string
+
+/conversations/{uuid}/transfer:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Conversation uuid
+
+  post:
+    tags:
+      - Conversations
+
+    summary: Transfer a conversation to another advisor
+
+    description: |
+      Reassigns the conversation to a different advisor. Any authenticated
+      role may transfer (HG-4). If the target advisor equals the current
+      one, the call is a no-op (200). Emits ConversationTransferred and
+      audits conversation.transfer.
+
+    operationId: transferConversation
+
+    security:
+      - bearerAuth: []
+
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/Conversation/AssignConversationRequest.yaml"
+
+    responses:
+
+      "200":
+        description: Transfer result
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Conversation/ConversationAssignmentResponse.yaml"
+
+      "400":
+        description: "Validation error (advisor not in the conversation's organization, or disabled)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+
+      "404":
+        description: "Unknown or cross-tenant conversation (CONVERSATION_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CONVERSATION_NOT_FOUND
+                    message:
+                      type: string
+
+/conversations/{uuid}/close:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Conversation uuid
+
+  post:
+    tags:
+      - Conversations
+
+    summary: Close a conversation
+
+    description: |
+      Transitions OPEN → CLOSED with a single-row guarded update (NR-005).
+      Any authenticated role may close (HG-5). Closing a non-OPEN
+      conversation returns 400 VALIDATION_ERROR. Emits ConversationClosed
+      and audits conversation.close.
+
+    operationId: closeConversation
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Close result
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Conversation/ConversationStatusResponse.yaml"
+
+      "400":
+        description: "Validation error (conversation is not OPEN)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+
+      "404":
+        description: "Unknown or cross-tenant conversation (CONVERSATION_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CONVERSATION_NOT_FOUND
+                    message:
+                      type: string
+
+/conversations/{uuid}/archive:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Conversation uuid
+
+  post:
+    tags:
+      - Conversations
+
+    summary: Archive a conversation
+
+    description: |
+      Transitions OPEN → ARCHIVED or CLOSED → ARCHIVED. Any authenticated
+      role may archive (HG-5). Archiving an ARCHIVED conversation returns
+      400 VALIDATION_ERROR. Emits ConversationArchived and audits
+      conversation.archive.
+
+    operationId: archiveConversation
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Archive result
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Conversation/ConversationStatusResponse.yaml"
+
+      "400":
+        description: "Validation error (conversation is already ARCHIVED)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+
+      "404":
+        description: "Unknown or cross-tenant conversation (CONVERSATION_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CONVERSATION_NOT_FOUND
+                    message:
+                      type: string
+
+/conversations/{uuid}/reopen:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Conversation uuid
+
+  post:
+    tags:
+      - Conversations
+
+    summary: Reopen a conversation
+
+    description: |
+      Transitions CLOSED → OPEN or ARCHIVED → OPEN. Any authenticated role
+      may reopen (HG-5). Reopening an OPEN conversation returns
+      400 VALIDATION_ERROR. Emits no event in v1 (ConversationOpened is
+      reserved for inbound first-messages, Q3); audits conversation.reopen.
+
+    operationId: reopenConversation
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Reopen result
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Conversation/ConversationStatusResponse.yaml"
+
+      "400":
+        description: "Validation error (conversation is already OPEN)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+
+      "404":
+        description: "Unknown or cross-tenant conversation (CONVERSATION_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CONVERSATION_NOT_FOUND
+                    message:
+                      type: string
+
+/conversations/{uuid}/notes:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Conversation uuid
+
+  get:
+    tags:
+      - Conversations
+
+    summary: List conversation notes
+
+    description: |
+      Returns the append-only notes log ordered by createdAt ascending
+      (HG-2). Cross-tenant or unknown conversations return
+      404 CONVERSATION_NOT_FOUND.
+
+    operationId: listConversationNotes
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Notes log
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/ConversationNote/ConversationNoteListResponse.yaml"
+
+      "404":
+        description: "Unknown or cross-tenant conversation (CONVERSATION_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CONVERSATION_NOT_FOUND
+                    message:
+                      type: string
+
+  post:
+    tags:
+      - Conversations
+
+    summary: Add a note to a conversation
+
+    description: |
+      Appends an advisor note (FR-007). Notes are append-only: there are no
+      update or delete endpoints in v1 (HG-2). Cross-tenant or unknown
+      conversations return 404 CONVERSATION_NOT_FOUND.
+
+    operationId: createConversationNote
+
+    security:
+      - bearerAuth: []
+
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/ConversationNote/CreateConversationNoteRequest.yaml"
+
+    responses:
+
+      "201":
+        description: The created note
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/ConversationNote/ConversationNoteResponse.yaml"
+
+      "400":
+        description: "Validation error"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+
+      "404":
+        description: "Unknown or cross-tenant conversation (CONVERSATION_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CONVERSATION_NOT_FOUND
+                    message:
+                      type: string
+
+/conversations/{uuid}/tags/{tagUuid}:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Conversation uuid
+
+    - name: tagUuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Tag uuid
+
+  post:
+    tags:
+      - Conversations
+
+    summary: Assign a tag to a conversation
+
+    description: |
+      Creates a ConversationTagAssignment (any authenticated role, HG-1).
+      Both the conversation and the tag must belong to the caller's
+      organization. Already-assigned tags are a no-op (200, never error).
+      Audits conversation.tag.assign.
+
+    operationId: assignConversationTag
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Assignment result with the active tags
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Conversation/ConversationTagsResponse.yaml"
+
+      "404":
+        description: "Unknown or cross-tenant conversation (CONVERSATION_NOT_FOUND) or tag (TAG_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: TAG_NOT_FOUND
+                    message:
+                      type: string
+
+  delete:
+    tags:
+      - Conversations
+
+    summary: Remove a tag from a conversation
+
+    description: |
+      Soft-deletes the active assignment (any authenticated role, HG-1), or
+      is a no-op when not assigned. Audits conversation.tag.remove.
+
+    operationId: removeConversationTag
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Result with the remaining active tags
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Conversation/ConversationTagsResponse.yaml"
+
+      "404":
+        description: "Unknown or cross-tenant conversation (CONVERSATION_NOT_FOUND) or tag (TAG_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: TAG_NOT_FOUND
+                    message:
+                      type: string

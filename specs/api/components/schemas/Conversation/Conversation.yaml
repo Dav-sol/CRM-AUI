@@ -47,7 +47,23 @@ properties:
   advisorId:
     type: string
     nullable: true
-    description: Reserved for inbox assignment (kit 018); null in v1.
+    description: Internal advisor user id; the public advisor reference is `advisor.uuid`.
+
+  advisor:
+    type: object
+    nullable: true
+    description: Assigned advisor (inbox kit 018, FR-004). Null when unassigned.
+    required:
+      - uuid
+      - firstName
+      - lastName
+    properties:
+      uuid:
+        type: string
+      firstName:
+        type: string
+      lastName:
+        type: string
 
   lastMessageAt:
     type: string

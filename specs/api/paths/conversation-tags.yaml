@@ -1,0 +1,420 @@
+/conversation-tags:
+  get:
+    tags:
+      - Conversation Tags
+
+    summary: List the conversation tag catalog
+
+    description: |
+      Returns the organization-scoped tag catalog (FR-006). Sort whitelist:
+      -createdAt (default), name, conversationCount. Optional `name` filters
+      by prefix (case-insensitive).
+
+    operationId: listConversationTags
+
+    security:
+      - bearerAuth: []
+
+    parameters:
+
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+
+      - name: name
+        in: query
+        required: false
+        description: Prefix filter over the tag name (case-insensitive).
+        schema:
+          type: string
+
+      - name: sort
+        in: query
+        required: false
+        description: Field sorted by; "-" prefix means descending. Defaults to -createdAt.
+        schema:
+          type: string
+          pattern: "^-?(createdAt|name|conversationCount)$"
+
+    responses:
+
+      "200":
+        description: Paginated tag catalog
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/ConversationTag/ConversationTagListResponse.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+  post:
+    tags:
+      - Conversation Tags
+
+    summary: Create a conversation tag
+
+    description: |
+      Creates a tag in the caller's organization (ADMINISTRADOR, GERENTE —
+      HG-1). Tag names are unique per organization; duplicates return
+      409 TAG_NAME_EXISTS.
+
+    operationId: createConversationTag
+
+    security:
+      - bearerAuth: []
+
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/ConversationTag/CreateConversationTagRequest.yaml"
+
+    responses:
+
+      "201":
+        description: The created tag
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/ConversationTag/ConversationTagResponse.yaml"
+
+      "400":
+        description: "Validation error"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+
+      "403":
+        description: "Role forbidden (OPERADOR cannot manage the catalog)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+
+      "409":
+        description: "Duplicate tag name (TAG_NAME_EXISTS)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: TAG_NAME_EXISTS
+                    message:
+                      type: string
+
+/conversation-tags/{uuid}:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Tag uuid
+
+  patch:
+    tags:
+      - Conversation Tags
+
+    summary: Update a conversation tag
+
+    description: |
+      Updates name and/or color (ADMINISTRADOR, GERENTE — HG-1). At least
+      one field is required. Cross-tenant or unknown tags return
+      404 TAG_NOT_FOUND; duplicate names return 409 TAG_NAME_EXISTS.
+
+    operationId: updateConversationTag
+
+    security:
+      - bearerAuth: []
+
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/ConversationTag/UpdateConversationTagRequest.yaml"
+
+    responses:
+
+      "200":
+        description: The updated tag
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/ConversationTag/ConversationTagResponse.yaml"
+
+      "400":
+        description: "Validation error"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+
+      "403":
+        description: "Role forbidden (OPERADOR cannot manage the catalog)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+
+      "404":
+        description: "Unknown or cross-tenant tag (TAG_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: TAG_NOT_FOUND
+                    message:
+                      type: string
+
+      "409":
+        description: "Duplicate tag name (TAG_NAME_EXISTS)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: TAG_NAME_EXISTS
+                    message:
+                      type: string
+
+  delete:
+    tags:
+      - Conversation Tags
+
+    summary: Soft-delete a conversation tag
+
+    description: |
+      Soft-deletes the tag and its active assignments (ADMINISTRADOR,
+      GERENTE — CO-003, FR-011). Already-deleted tags are a no-op (200).
+      Cross-tenant or unknown tags return 404 TAG_NOT_FOUND.
+
+    operationId: deleteConversationTag
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Delete result
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Conversation/SoftDeleteResponse.yaml"
+
+      "403":
+        description: "Role forbidden (OPERADOR cannot manage the catalog)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+
+      "404":
+        description: "Unknown or cross-tenant tag (TAG_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: TAG_NOT_FOUND
+                    message:
+                      type: string

@@ -60,12 +60,33 @@ interface IdempotencyEntry {
   expiresAt: number;
 }
 
+export interface AdvisorRef {
+  uuid: string;
+  firstName: string;
+  lastName: string;
+}
+
+export interface ConversationTagRef {
+  uuid: string;
+  name: string;
+  color: string | null;
+}
+
+export interface ConversationNoteSummary {
+  uuid: string;
+  author: AdvisorRef;
+  content: string;
+  createdAt: string;
+}
+
 export interface ConversationSummary {
   uuid: string;
   channel: ChannelType;
   status: ConversationStatus;
   customerId: string | null;
   advisorId: string | null;
+  advisor: AdvisorRef | null;
+  tags: ConversationTagRef[];
   lastMessageAt: string | null;
   messageCount: number;
   createdAt: string;
@@ -73,6 +94,7 @@ export interface ConversationSummary {
 
 export interface ConversationDetail extends ConversationSummary {
   messages: MessageSummary[];
+  notes: ConversationNoteSummary[];
 }
 
 export interface MessageSummary {
@@ -100,15 +122,34 @@ export interface ListResult<T> {
 
 type PrismaClient = Prisma.TransactionClient;
 
-const CONVERSATION_INCLUDE = {
+const CONVERSATION_LIST_INCLUDE = {
   messages: {
     where: { deletedAt: null },
     orderBy: { createdAt: 'asc' as const },
   },
+  advisor: { select: { uuid: true, firstName: true, lastName: true } },
+  tagAssignments: {
+    where: { deletedAt: null },
+    select: { tag: { select: { uuid: true, name: true, color: true } } },
+  },
 } as const;
 
-type ConversationWithMessages = Prisma.ConversationGetPayload<{
-  include: typeof CONVERSATION_INCLUDE;
+const CONVERSATION_DETAIL_INCLUDE = {
+  ...CONVERSATION_LIST_INCLUDE,
+  notes: {
+    where: { deletedAt: null },
+    orderBy: { createdAt: 'asc' as const },
+    select: {
+      uuid: true,
+      content: true,
+      createdAt: true,
+      author: { select: { uuid: true, firstName: true, lastName: true } },
+    },
+  },
+} as const;
+
+type ConversationWithDetail = Prisma.ConversationGetPayload<{
+  include: typeof CONVERSATION_DETAIL_INCLUDE;
 }>;
 
 @Injectable()
@@ -479,6 +520,139 @@ export class WhatsappService {
   }
 
   // ---------------------------------------------------------------------------
+  // Asesor reply (kit 018, Flujo 07 step 3)
+  // ---------------------------------------------------------------------------
+
+  async sendReply(
+    user: AuthUser,
+    conversationUuid: string,
+    content: string,
+    idempotencyKey?: string,
+  ): Promise<MessageDetail | null> {
+    if (idempotencyKey) {
+      const existingId = this.resolveIdempotency(user, idempotencyKey);
+      if (existingId) {
+        const existing = await this.getMessage(user, existingId);
+        if (existing) {
+          return existing;
+        }
+      }
+    }
+
+    const conversation = await this.findScopedConversationForReply(
+      user,
+      conversationUuid,
+    );
+    if (!conversation) {
+      return null;
+    }
+
+    if (conversation.status === ConversationStatus.ARCHIVED) {
+      throw new BadRequestException({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Archived conversations cannot receive replies',
+        },
+      });
+    }
+
+    // HG-5: reply reopens a CLOSED conversation to OPEN (atomic with message).
+    const { message } = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.message.create({
+        data: {
+          organizationId: conversation.organizationId,
+          conversationId: conversation.id,
+          type: MessageType.OUTGOING,
+          content,
+          direction: MessageDirection.OUTBOUND,
+          status: MessageStatus.QUEUED,
+        },
+      });
+      if (conversation.status === ConversationStatus.CLOSED) {
+        await tx.conversation.updateMany({
+          where: { id: conversation.id, status: ConversationStatus.CLOSED },
+          data: { status: ConversationStatus.OPEN },
+        });
+      }
+      return { message: created };
+    });
+
+    this.emit('MessageQueued', user.id, conversation.organizationId, {
+      messageId: message.uuid,
+      conversationId: conversationUuid,
+      direction: MessageDirection.OUTBOUND,
+      status: MessageStatus.QUEUED,
+      content,
+    } satisfies MessageEventPayload);
+
+    if (idempotencyKey) {
+      this.storeIdempotency(user, idempotencyKey, message.uuid);
+    }
+
+    const phone = conversation.customer?.phone ?? null;
+    if (!phone) {
+      await this.failMessage(
+        message,
+        conversation.organizationId,
+        'customer_no_phone',
+      );
+      await this.auditService.record({
+        module: MODULE,
+        action: 'message.send',
+        outcome: 'failure',
+        userId: user.id,
+        organizationId: conversation.organizationId,
+        description: `reply failed conversation=${conversationUuid}`,
+        metadata: { reason: 'customer_no_phone' },
+      });
+      throw new BadRequestException({
+        error: {
+          code: 'CUSTOMER_NO_PHONE',
+          message: 'Customer has no phone number',
+        },
+      });
+    }
+
+    try {
+      const sendResult = await this.provider.sendMessage(phone, content);
+      await this.markSent(message, conversation.organizationId, sendResult);
+      await this.auditService.record({
+        module: MODULE,
+        action: 'message.send',
+        outcome: 'success',
+        userId: user.id,
+        organizationId: conversation.organizationId,
+        description: `reply sent conversation=${conversationUuid}`,
+        metadata: { messageId: message.uuid },
+      });
+    } catch (error) {
+      const reason =
+        error instanceof ProviderSendError
+          ? 'provider_error'
+          : 'internal_error';
+      await this.failMessage(message, conversation.organizationId, reason);
+      await this.auditService.record({
+        module: MODULE,
+        action: 'message.send',
+        outcome: 'failure',
+        userId: user.id,
+        organizationId: conversation.organizationId,
+        description: `reply failed conversation=${conversationUuid}`,
+        metadata: { reason },
+      });
+      throw new BadGatewayException({
+        error: {
+          code: 'PROVIDER_ERROR',
+          message: 'WhatsApp provider could not deliver the message',
+        },
+      });
+    }
+
+    const messageDetail = await this.getMessage(user, message.uuid);
+    return messageDetail!;
+  }
+
+  // ---------------------------------------------------------------------------
   // Inbound webhook (Flujo 06, US3) + status callbacks (FR-006)
   // ---------------------------------------------------------------------------
 
@@ -689,7 +863,7 @@ export class WhatsappService {
       this.prisma.conversation.count({ where }),
       this.prisma.conversation.findMany({
         where,
-        include: { messages: { where: { deletedAt: null } } },
+        include: CONVERSATION_LIST_INCLUDE,
         orderBy: this.buildSort(
           query.sort,
           CONVERSATION_SORT_FIELDS,
@@ -885,7 +1059,7 @@ export class WhatsappService {
   private async findScopedConversation(
     user: AuthUser,
     uuid: string,
-  ): Promise<ConversationWithMessages | null> {
+  ): Promise<ConversationWithDetail | null> {
     if (user.accountType === 'ORGANIZATION') {
       return this.prisma.conversation.findFirst({
         where: {
@@ -893,12 +1067,42 @@ export class WhatsappService {
           organizationId: user.organizationId ?? undefined,
           deletedAt: null,
         },
-        include: CONVERSATION_INCLUDE,
+        include: CONVERSATION_DETAIL_INCLUDE,
       });
     }
     return this.prisma.conversation.findFirst({
       where: { uuid, deletedAt: null },
-      include: CONVERSATION_INCLUDE,
+      include: CONVERSATION_DETAIL_INCLUDE,
+    });
+  }
+
+  private async findScopedConversationForReply(
+    user: AuthUser,
+    uuid: string,
+  ): Promise<{
+    id: string;
+    uuid: string;
+    organizationId: string;
+    status: ConversationStatus;
+    customer: { phone: string | null } | null;
+  } | null> {
+    const where: Prisma.ConversationWhereInput =
+      user.accountType === 'ORGANIZATION'
+        ? {
+            uuid,
+            organizationId: user.organizationId ?? undefined,
+            deletedAt: null,
+          }
+        : { uuid, deletedAt: null };
+    return this.prisma.conversation.findFirst({
+      where,
+      select: {
+        id: true,
+        uuid: true,
+        organizationId: true,
+        status: true,
+        customer: { select: { phone: true } },
+      },
     });
   }
 
@@ -944,6 +1148,23 @@ export class WhatsappService {
     }
     if (query.advisorId) {
       where.advisor = { uuid: query.advisorId };
+    }
+    if (query.assigned === 'true') {
+      where.advisor = { isNot: null };
+    }
+    if (query.assigned === 'false') {
+      where.advisor = { is: null };
+    }
+    if (query.tagIds) {
+      const tagUuids = query.tagIds
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
+      if (tagUuids.length > 0) {
+        where.tagAssignments = {
+          some: { deletedAt: null, tag: { uuid: { in: tagUuids } } },
+        };
+      }
     }
     if (query.createdFrom || query.createdTo) {
       where.createdAt = {};
@@ -1202,7 +1423,7 @@ function normalizePhone(phone: string): string {
 
 function toConversationSummary(
   conversation: Prisma.ConversationGetPayload<{
-    include: { messages: { where: { deletedAt: null } } };
+    include: typeof CONVERSATION_LIST_INCLUDE;
   }>,
 ): ConversationSummary {
   const messages = conversation.messages ?? [];
@@ -1213,6 +1434,12 @@ function toConversationSummary(
     status: conversation.status,
     customerId: conversation.customerId,
     advisorId: conversation.advisorId,
+    advisor: conversation.advisor ?? null,
+    tags: (conversation.tagAssignments ?? []).map((assignment) => ({
+      uuid: assignment.tag.uuid,
+      name: assignment.tag.name,
+      color: assignment.tag.color,
+    })),
     lastMessageAt: lastMessage ? lastMessage.createdAt.toISOString() : null,
     messageCount: messages.length,
     createdAt: conversation.createdAt.toISOString(),
@@ -1220,11 +1447,30 @@ function toConversationSummary(
 }
 
 function toConversationDetail(
-  conversation: ConversationWithMessages,
+  conversation: ConversationWithDetail,
 ): ConversationDetail {
   return {
     ...toConversationSummary(conversation),
     messages: (conversation.messages ?? []).map(toMessageSummary),
+    notes: (conversation.notes ?? []).map(toNoteSummary),
+  };
+}
+
+function toNoteSummary(note: {
+  uuid: string;
+  content: string;
+  createdAt: Date;
+  author: { uuid: string; firstName: string; lastName: string };
+}): ConversationNoteSummary {
+  return {
+    uuid: note.uuid,
+    author: {
+      uuid: note.author.uuid,
+      firstName: note.author.firstName,
+      lastName: note.author.lastName,
+    },
+    content: note.content,
+    createdAt: note.createdAt.toISOString(),
   };
 }
 

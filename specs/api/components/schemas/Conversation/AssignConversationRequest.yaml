@@ -1,0 +1,12 @@
+type: object
+
+description: Payload for assigning or transferring an advisor to a conversation (HG-4).
+
+required:
+  - advisorId
+
+properties:
+
+  advisorId:
+    type: string
+    description: uuid of the advisor user (must belong to the conversation's organization).

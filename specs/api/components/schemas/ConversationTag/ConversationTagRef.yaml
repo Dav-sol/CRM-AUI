@@ -1,0 +1,20 @@
+type: object
+
+description: Tag reference embedded in conversation summaries (active assignments, FR-006).
+
+required:
+  - uuid
+  - name
+  - color
+
+properties:
+
+  uuid:
+    type: string
+
+  name:
+    type: string
+
+  color:
+    type: string
+    nullable: true

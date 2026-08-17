@@ -1,0 +1,14 @@
+type: object
+
+description: Payload for adding an append-only note to a conversation.
+
+required:
+  - content
+
+properties:
+
+  content:
+    type: string
+    minLength: 1
+    maxLength: 4000
+    description: Note content (PII — never logged).

@@ -1,0 +1,369 @@
+/quick-replies:
+  get:
+    tags:
+      - Quick Replies
+
+    summary: List the quick reply catalog
+
+    description: |
+      Returns the organization-scoped quick reply catalog (FR-008). Sort
+      whitelist: -createdAt (default), title. Optional `title` filters by
+      prefix (case-insensitive).
+
+    operationId: listQuickReplies
+
+    security:
+      - bearerAuth: []
+
+    parameters:
+
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+
+      - name: title
+        in: query
+        required: false
+        description: Prefix filter over the quick reply title (case-insensitive).
+        schema:
+          type: string
+
+      - name: sort
+        in: query
+        required: false
+        description: Field sorted by; "-" prefix means descending. Defaults to -createdAt.
+        schema:
+          type: string
+          pattern: "^-?(createdAt|title)$"
+
+    responses:
+
+      "200":
+        description: Paginated quick reply catalog
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/QuickReply/QuickReplyListResponse.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+  post:
+    tags:
+      - Quick Replies
+
+    summary: Create a quick reply
+
+    description: |
+      Creates a quick reply template in the caller's organization
+      (ADMINISTRADOR, GERENTE — HG-3).
+
+    operationId: createQuickReply
+
+    security:
+      - bearerAuth: []
+
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/QuickReply/CreateQuickReplyRequest.yaml"
+
+    responses:
+
+      "201":
+        description: The created quick reply
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/QuickReply/QuickReplyResponse.yaml"
+
+      "400":
+        description: "Validation error"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+
+      "403":
+        description: "Role forbidden (OPERADOR cannot manage the catalog)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+
+/quick-replies/{uuid}:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Quick reply uuid
+
+  patch:
+    tags:
+      - Quick Replies
+
+    summary: Update a quick reply
+
+    description: |
+      Updates title and/or body (ADMINISTRADOR, GERENTE — HG-3). At least
+      one field is required. Cross-tenant or unknown quick replies return
+      404 QUICK_REPLY_NOT_FOUND.
+
+    operationId: updateQuickReply
+
+    security:
+      - bearerAuth: []
+
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/QuickReply/UpdateQuickReplyRequest.yaml"
+
+    responses:
+
+      "200":
+        description: The updated quick reply
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/QuickReply/QuickReplyResponse.yaml"
+
+      "400":
+        description: "Validation error"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+
+      "403":
+        description: "Role forbidden (OPERADOR cannot manage the catalog)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+
+      "404":
+        description: "Unknown or cross-tenant quick reply (QUICK_REPLY_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: QUICK_REPLY_NOT_FOUND
+                    message:
+                      type: string
+
+  delete:
+    tags:
+      - Quick Replies
+
+    summary: Soft-delete a quick reply
+
+    description: |
+      Soft-deletes the quick reply (ADMINISTRADOR, GERENTE — CO-003).
+      Already-deleted quick replies are a no-op (200). Cross-tenant or
+      unknown quick replies return 404 QUICK_REPLY_NOT_FOUND.
+
+    operationId: deleteQuickReply
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Delete result
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Conversation/SoftDeleteResponse.yaml"
+
+      "403":
+        description: "Role forbidden (OPERADOR cannot manage the catalog)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+
+      "404":
+        description: "Unknown or cross-tenant quick reply (QUICK_REPLY_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: QUICK_REPLY_NOT_FOUND
+                    message:
+                      type: string

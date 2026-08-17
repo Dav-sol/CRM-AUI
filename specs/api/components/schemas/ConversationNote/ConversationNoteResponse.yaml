@@ -1,0 +1,11 @@
+type: object
+
+description: Envelope for a single conversation note resource.
+
+required:
+  - data
+
+properties:
+
+  data:
+    $ref: "./ConversationNoteSummary.yaml"

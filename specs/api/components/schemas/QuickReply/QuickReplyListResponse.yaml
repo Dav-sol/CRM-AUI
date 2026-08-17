@@ -1,0 +1,41 @@
+type: object
+
+description: Envelope for the paginated quick reply catalog.
+
+required:
+  - data
+  - meta
+
+properties:
+
+  data:
+    type: array
+    items:
+      $ref: "./QuickReply.yaml"
+
+  meta:
+    type: object
+
+    required:
+      - page
+      - limit
+      - total
+      - pages
+
+    properties:
+
+      page:
+        type: integer
+        minimum: 1
+
+      limit:
+        type: integer
+        minimum: 1
+        maximum: 100
+
+      total:
+        type: integer
+        description: Total matching quick replies.
+
+      pages:
+        type: integer

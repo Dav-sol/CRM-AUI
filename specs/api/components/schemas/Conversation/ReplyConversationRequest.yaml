@@ -1,0 +1,18 @@
+type: object
+
+description: Payload for an asesor reply to a conversation (HG-6).
+
+required:
+  - content
+
+properties:
+
+  content:
+    type: string
+    minLength: 1
+    maxLength: 4096
+    description: WhatsApp text body (PII — never logged).
+
+  quickReplyId:
+    type: string
+    description: Optional quick reply uuid used as the reply template (audit reference, FR-008).

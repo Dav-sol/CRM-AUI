@@ -1,0 +1,13 @@
+type: object
+
+description: Envelope for the chronological conversation notes log.
+
+required:
+  - data
+
+properties:
+
+  data:
+    type: array
+    items:
+      $ref: "./ConversationNoteSummary.yaml"

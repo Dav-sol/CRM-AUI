@@ -1,0 +1,31 @@
+type: object
+
+description: Envelope for assign/transfer results (FR-004, HG-4).
+
+required:
+  - data
+
+properties:
+
+  data:
+    type: object
+    required:
+      - uuid
+      - advisor
+    properties:
+      uuid:
+        type: string
+      advisor:
+        type: object
+        nullable: true
+        required:
+          - uuid
+          - firstName
+          - lastName
+        properties:
+          uuid:
+            type: string
+          firstName:
+            type: string
+          lastName:
+            type: string

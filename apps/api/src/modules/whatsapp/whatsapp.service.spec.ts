@@ -701,6 +701,186 @@ describe('WhatsappService', () => {
     });
   });
 
+  describe('sendReply (kit 018, HG-5/HG-6)', () => {
+    const replyConversation = {
+      id: 'co-1',
+      uuid: 'cou-1',
+      organizationId: 'org-1',
+      status: 'OPEN',
+      customer: { phone: '573000000000' },
+    };
+
+    const replyTx = () => ({
+      message: {
+        create: jest
+          .fn()
+          .mockResolvedValue({ id: 'msg-1', uuid: 'msg-uuid-1' }),
+      },
+      conversation: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    });
+
+    const replyMessageDetail = {
+      uuid: 'msg-uuid-1',
+      conversationId: 'cou-1',
+      automationId: null,
+      type: 'OUTGOING',
+      content: 'Hola',
+      direction: 'OUTBOUND',
+      status: 'SENT',
+      sentAt: new Date(now),
+      deliveredAt: null,
+      readAt: null,
+      createdAt: new Date(now),
+      conversation: { customer: null },
+    };
+
+    it('creates an OUTGOING OUTBOUND reply and calls the provider', async () => {
+      prisma.conversation.findFirst.mockResolvedValue(replyConversation);
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => fn(replyTx()),
+      );
+      provider.sendMessage.mockResolvedValue({
+        providerMessageId: 'wamid-1',
+        providerConversationId: '573000000000',
+        status: 'SENT',
+      });
+      prisma.message.update.mockResolvedValue({});
+      prisma.message.findFirst.mockResolvedValue(replyMessageDetail);
+
+      const result = await service.sendReply(orgUser, 'cou-1', 'Hola', 'key-1');
+
+      expect(provider.sendMessage).toHaveBeenCalledWith('573000000000', 'Hola');
+      expect(emittedNames()).toContain('MessageQueued');
+      expect(result).toEqual(expect.objectContaining({ status: 'SENT' }));
+    });
+
+    it('reopens a CLOSED conversation to OPEN atomically with the reply (HG-5)', async () => {
+      prisma.conversation.findFirst.mockResolvedValue({
+        ...replyConversation,
+        status: 'CLOSED',
+      });
+      const tx = replyTx();
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => fn(tx),
+      );
+      provider.sendMessage.mockResolvedValue({
+        providerMessageId: 'wamid-1',
+        providerConversationId: '573000000000',
+        status: 'SENT',
+      });
+      prisma.message.update.mockResolvedValue({});
+      prisma.message.findFirst.mockResolvedValue(replyMessageDetail);
+
+      await service.sendReply(orgUser, 'cou-1', 'Hola');
+
+      expect(tx.conversation.updateMany).toHaveBeenCalledWith({
+        where: { id: 'co-1', status: 'CLOSED' },
+        data: { status: 'OPEN' },
+      });
+    });
+
+    it('does not reopen an OPEN conversation', async () => {
+      prisma.conversation.findFirst.mockResolvedValue(replyConversation);
+      const tx = replyTx();
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => fn(tx),
+      );
+      provider.sendMessage.mockResolvedValue({
+        providerMessageId: 'wamid-1',
+        providerConversationId: '573000000000',
+        status: 'SENT',
+      });
+      prisma.message.update.mockResolvedValue({});
+      prisma.message.findFirst.mockResolvedValue(replyMessageDetail);
+
+      await service.sendReply(orgUser, 'cou-1', 'Hola');
+
+      expect(tx.conversation.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects a reply to an ARCHIVED conversation (400 VALIDATION_ERROR)', async () => {
+      prisma.conversation.findFirst.mockResolvedValue({
+        ...replyConversation,
+        status: 'ARCHIVED',
+      });
+
+      await expect(
+        service.sendReply(orgUser, 'cou-1', 'Hola'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('returns null for a cross-tenant conversation', async () => {
+      prisma.conversation.findFirst.mockResolvedValue(null);
+
+      const result = await service.sendReply(orgUser, 'cou-1', 'Hola');
+
+      expect(result).toBeNull();
+    });
+
+    it('throws CUSTOMER_NO_PHONE and fails the message when the customer has no phone', async () => {
+      prisma.conversation.findFirst.mockResolvedValue({
+        ...replyConversation,
+        customer: { phone: null },
+      });
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => fn(replyTx()),
+      );
+      prisma.message.update.mockResolvedValue({});
+
+      await expect(
+        service.sendReply(orgUser, 'cou-1', 'Hola'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(emittedNames()).toContain('MessageFailed');
+    });
+
+    it('throws PROVIDER_ERROR and fails the message on provider failure', async () => {
+      prisma.conversation.findFirst.mockResolvedValue(replyConversation);
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => fn(replyTx()),
+      );
+      provider.sendMessage.mockRejectedValue(new Error('provider down'));
+      prisma.message.update.mockResolvedValue({});
+
+      await expect(
+        service.sendReply(orgUser, 'cou-1', 'Hola'),
+      ).rejects.toBeInstanceOf(BadGatewayException);
+      expect(emittedNames()).toContain('MessageFailed');
+    });
+
+    it('returns the existing message when the Idempotency-Key repeats', async () => {
+      prisma.conversation.findFirst.mockResolvedValue(replyConversation);
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => fn(replyTx()),
+      );
+      provider.sendMessage.mockResolvedValue({
+        providerMessageId: 'wamid-1',
+        providerConversationId: '573000000000',
+        status: 'SENT',
+      });
+      prisma.message.update.mockResolvedValue({});
+      prisma.message.findFirst.mockResolvedValue(replyMessageDetail);
+
+      const first = await service.sendReply(
+        orgUser,
+        'cou-1',
+        'Hola',
+        'dup-key',
+      );
+      const second = await service.sendReply(
+        orgUser,
+        'cou-1',
+        'Hola',
+        'dup-key',
+      );
+
+      expect(first?.uuid).toBe('msg-uuid-1');
+      expect(second?.uuid).toBe('msg-uuid-1');
+      expect(provider.sendMessage).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('handleInboundMessage (US3, HG-8)', () => {
     it('identifies the customer by phone and opens a conversation on first message', async () => {
       prisma.message.findFirst.mockResolvedValue(null);
@@ -1368,6 +1548,43 @@ describe('WhatsappService', () => {
               lte: new Date('2026-08-02T23:59:59.999Z'),
             },
           }) as unknown,
+        }),
+      );
+    });
+
+    it('applies the inbox filters assigned and tagIds (kit 018)', async () => {
+      prisma.conversation.count.mockResolvedValue(0);
+      prisma.conversation.findMany.mockResolvedValue([]);
+
+      await service.listConversations(orgUser, {
+        assigned: 'true',
+        tagIds: 'tagu-1,tagu-2',
+      });
+
+      expect(prisma.conversation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            advisor: { isNot: null },
+            tagAssignments: {
+              some: {
+                deletedAt: null,
+                tag: { uuid: { in: ['tagu-1', 'tagu-2'] } },
+              },
+            },
+          }) as unknown,
+        }),
+      );
+    });
+
+    it('filters unassigned conversations (assigned=false)', async () => {
+      prisma.conversation.count.mockResolvedValue(0);
+      prisma.conversation.findMany.mockResolvedValue([]);
+
+      await service.listConversations(orgUser, { assigned: 'false' });
+
+      expect(prisma.conversation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ advisor: { is: null } }) as unknown,
         }),
       );
     });

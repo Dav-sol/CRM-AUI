@@ -1,0 +1,34 @@
+type: object
+
+description: Base quick reply representation (agent response templates, FR-008).
+
+required:
+  - uuid
+  - title
+  - body
+  - createdAt
+  - updatedAt
+
+properties:
+
+  uuid:
+    type: string
+
+  title:
+    type: string
+    minLength: 1
+    maxLength: 100
+
+  body:
+    type: string
+    minLength: 1
+    maxLength: 4096
+    description: Message body used as a reply template.
+
+  createdAt:
+    type: string
+    format: date-time
+
+  updatedAt:
+    type: string
+    format: date-time

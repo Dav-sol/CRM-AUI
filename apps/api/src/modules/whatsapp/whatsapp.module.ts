@@ -18,5 +18,6 @@ import { MetaWhatsAppProvider, WHATSAPP_PROVIDER } from './whatsapp.provider';
     { provide: WHATSAPP_PROVIDER, useExisting: MetaWhatsAppProvider },
     WhatsappScheduler,
   ],
+  exports: [WhatsappService],
 })
 export class WhatsappModule {}

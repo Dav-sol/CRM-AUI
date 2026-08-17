@@ -1,0 +1,38 @@
+type: object
+
+description: Base conversation tag representation (catalog entity).
+
+required:
+  - uuid
+  - name
+  - color
+  - conversationCount
+  - createdAt
+  - updatedAt
+
+properties:
+
+  uuid:
+    type: string
+
+  name:
+    type: string
+    maxLength: 50
+
+  color:
+    type: string
+    nullable: true
+    description: Hex color, e.g. "#0EA5E9".
+
+  conversationCount:
+    type: integer
+    minimum: 0
+    description: Number of active assignments (soft-deleted excluded).
+
+  createdAt:
+    type: string
+    format: date-time
+
+  updatedAt:
+    type: string
+    format: date-time

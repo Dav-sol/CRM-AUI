@@ -1,0 +1,21 @@
+type: object
+
+description: Envelope for tag assignment/removal results (FR-006).
+
+required:
+  - data
+
+properties:
+
+  data:
+    type: object
+    required:
+      - uuid
+      - tags
+    properties:
+      uuid:
+        type: string
+      tags:
+        type: array
+        items:
+          $ref: "../ConversationTag/ConversationTagRef.yaml"

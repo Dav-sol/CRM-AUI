@@ -1,0 +1,17 @@
+type: object
+
+description: Payload for updating a quick reply (ADMINISTRADOR, GERENTE). At least one field is required.
+
+properties:
+
+  title:
+    type: string
+    minLength: 1
+    maxLength: 100
+    description: Short label shown in the agent inbox.
+
+  body:
+    type: string
+    minLength: 1
+    maxLength: 4096
+    description: Message body used as a reply template.

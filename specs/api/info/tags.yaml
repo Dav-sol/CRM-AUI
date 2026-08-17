@@ -28,8 +28,14 @@
 - name: Conversations
   description: WhatsApp conversations
 
+- name: Conversation Tags
+  description: Conversation tag catalog and assignments (inbox kit 018)
+
 - name: Messages
   description: WhatsApp messages
+
+- name: Quick Replies
+  description: Quick reply templates for agent responses (inbox kit 018)
 
 - name: Dashboard
   description: Dashboard metrics

@@ -1,0 +1,6 @@
+type: object
+
+description: Full quick reply representation (catalog detail).
+
+allOf:
+  - $ref: "./QuickReply.yaml"

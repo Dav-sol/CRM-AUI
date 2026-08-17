@@ -37,10 +37,10 @@ properties:
       - AUTOMATIC
       - MANUAL
       - INCOMING
+      - OUTGOING
     description: |
-      Message origin. v1 produces AUTOMATIC (execution engine), MANUAL
-      (REST manual send) and INCOMING (webhook) only; OUTGOING (agent
-      replies) belongs to the inbox kit (018).
+      Message origin. AUTOMATIC (execution engine), MANUAL (REST manual
+      send), INCOMING (webhook) and OUTGOING (agent replies, inbox kit 018).
 
   content:
     type: string

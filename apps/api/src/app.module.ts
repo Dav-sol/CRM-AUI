@@ -17,6 +17,7 @@ import { ProductsModule } from './modules/products/products.module';
 import { ImportsModule } from './modules/imports/imports.module';
 import { AutomationsModule } from './modules/automations/automations.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
+import { ConversationsModule } from './modules/conversations/conversations.module';
 
 @Module({
   imports: [
@@ -53,6 +54,8 @@ import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
     AutomationsModule,
 
     WhatsappModule,
+
+    ConversationsModule,
   ],
 })
 export class AppModule {}

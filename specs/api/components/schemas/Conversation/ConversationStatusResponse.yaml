@@ -1,0 +1,23 @@
+type: object
+
+description: Envelope for lifecycle transitions (close/archive/reopen, FR-005).
+
+required:
+  - data
+
+properties:
+
+  data:
+    type: object
+    required:
+      - uuid
+      - status
+    properties:
+      uuid:
+        type: string
+      status:
+        type: string
+        enum:
+          - OPEN
+          - CLOSED
+          - ARCHIVED
