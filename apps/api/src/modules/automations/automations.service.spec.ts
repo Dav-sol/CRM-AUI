@@ -210,9 +210,25 @@ describe('AutomationsService', () => {
         async (fn: (tx: unknown) => Promise<unknown>) => {
           const tx = {
             automation: {
+              findMany: jest.fn().mockResolvedValue([
+                {
+                  uuid: 'au-old-1',
+                  purchaseId: 'pu-2',
+                  commercialCycleId: 'cc-old',
+                  scheduledDate: baseDate,
+                  status: 'SCHEDULED',
+                },
+                {
+                  uuid: 'au-old-2',
+                  purchaseId: 'pu-2',
+                  commercialCycleId: 'cc-old',
+                  scheduledDate: baseDate,
+                  status: 'PENDING',
+                },
+              ]),
               updateMany: jest.fn().mockImplementation(() => {
                 cancelledOld = true;
-                return Promise.resolve({ count: 3 });
+                return Promise.resolve({ count: 2 });
               }),
               create: jest.fn().mockResolvedValue({
                 id: 'a-2',
@@ -268,6 +284,22 @@ describe('AutomationsService', () => {
         'CommercialCycleCancelled',
         expect.objectContaining({
           payload: expect.objectContaining({ cycleId: 'ccu-old' }) as object,
+        }),
+      );
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'AutomationCancelled',
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            automationId: 'au-old-1',
+          }) as object,
+        }),
+      );
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'AutomationCancelled',
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            automationId: 'au-old-2',
+          }) as object,
         }),
       );
     });

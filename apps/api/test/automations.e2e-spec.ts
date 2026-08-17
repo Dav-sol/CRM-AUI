@@ -367,6 +367,14 @@ describe('Automations (e2e) — AU-001/AU-003 + US1..US8', () => {
       new Date('2026-08-10T12:00:00Z'),
     );
 
+    const cancelledAutomationIds: string[] = [];
+    events.on(
+      'AutomationCancelled',
+      (e: { payload: { automationId: string } }) => {
+        cancelledAutomationIds.push(e.payload.automationId);
+      },
+    );
+
     emitPurchaseImported(first.purchase.id);
     await waitForCycle(first.purchase.id);
     emitPurchaseImported(second.purchase.id);
@@ -386,6 +394,12 @@ describe('Automations (e2e) — AU-001/AU-003 + US1..US8', () => {
       true,
     );
     expect(secondCycle?.status).toBe('ACTIVE');
+    for (let i = 0; i < 50 && cancelledAutomationIds.length === 0; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    expect(cancelledAutomationIds.sort()).toEqual(
+      firstCycle?.automations.map((a) => a.uuid).sort(),
+    );
   });
 
   it('lists cycles with filters and returns cycle detail with automations (AS-004, AS-005)', async () => {

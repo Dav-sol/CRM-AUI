@@ -23,7 +23,7 @@ interface AutomationDetail extends AutomationSummary {
   organizationId: string;
   campaignId: string | null;
   purchase: { uuid: string; invoiceNumber: string; purchaseDate: string; productName: string };
-  customer: { uuid: string; fullName: string; phone: string | null };
+  customer: { uuid: string; name: string; phone: string | null };
 }
 
 interface CommercialCycleSummary {
@@ -52,7 +52,7 @@ Internal fields (`organizationId` internals, full relations) are NOT exposed bey
 ## GET /commercial-cycles — list cycles
 
 - Roles: all authenticated (Q11)
-- Query: `page` (default 1), `limit` (default 20, max 100), `status` (ACTIVE|FINISHED|CANCELLED), `customerId` (customer uuid), `purchaseId` (purchase uuid), `createdFrom` (date-only, inclusive whole day), `createdTo` (inclusive), `sort` (whitelist: `-createdAt` default, `createdAt`, `-startDate`)
+- Query: `page` (default 1), `limit` (default 20, max 100), `status` (ACTIVE|FINISHED|CANCELLED), `customerId` (customer uuid), `purchaseId` (purchase uuid), `createdFrom` (date-only, inclusive whole day), `createdTo` (inclusive), `sort` (whitelist: `-createdAt` default, `createdAt`, `startDate`, `updatedAt`, with optional `-` prefix)
 - Tenant-scoped via the purchase's organization (R-005)
 
 200 OK:
@@ -79,7 +79,7 @@ Errors: `401`, `403`, `404 COMMERCIAL_CYCLE_NOT_FOUND`.
 ## GET /automations — list automations
 
 - Roles: all authenticated
-- Query: `page`, `limit` (max 100), `status`, `commercialCycleId` (cycle uuid), `customerId` (customer uuid), `scheduledFrom` (date-only, inclusive whole day), `scheduledTo` (inclusive), `sort` (whitelist: `-scheduledDate` default, `scheduledDate`, `-createdAt`, `createdAt`, `-status`)
+- Query: `page`, `limit` (max 100), `status`, `commercialCycleId` (cycle uuid), `customerId` (customer uuid), `scheduledFrom` (date-only, inclusive whole day), `scheduledTo` (inclusive), `sort` (whitelist: `-scheduledDate` default, `scheduledDate`, `createdAt`, `updatedAt`, `status`, with optional `-` prefix)
 
 200 OK:
 

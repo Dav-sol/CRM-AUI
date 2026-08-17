@@ -19,8 +19,8 @@ properties:
     type: string
     enum:
       - ACTIVE
+      - FINISHED
       - CANCELLED
-      - COMPLETED
 
   startDate:
     type: string

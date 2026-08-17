@@ -97,6 +97,7 @@ The Automatizaciones module (Módulo 05, `specs/02-modules.md:136-162`) programs
 - **C-02** (AU-006/007 conversation dependency): AU-006 requires conversation state (Abierta/Cerrada) and advisor notification; Conversations module does not exist. → **HG-3**: deferred; PAUSED state and status-predicate extension points prepared.
 - **C-03** (AU-009/010 dependencies): business hours (Configuración) and campaign priority (Campañas) modules do not exist. → **HG-3/HG-4**: deferred; `priority` field retained on the model.
 - **C-04** (state naming): AU-002 lists five states (Pendiente/Programada/Ejecutada/Cancelada/Error); the Prisma enum adds `PAUSED` (schema.prisma:475-482). → **HG-3**: AU-002 states map to the enum; PAUSED reserved (no conflict, additive).
+- **C-05** (AU-003 per-automation cancellation events): FR-012/Q9 list `AutomationCancelled` "on cancellation"; the AU-003 batch flow (`updateMany`) must also emit one `AutomationCancelled` per cancelled automation, not only `CommercialCycleCancelled`. → **HG-6**: the consumer fetches the PENDING/SCHEDULED automations to cancel within the transaction and emits `AutomationCancelled` (userId null, system-triggered) for each after commit; idempotency preserved (P2002 no-op unchanged).
 
 ## 9. Dependency Justification (AGENTS.md)
 

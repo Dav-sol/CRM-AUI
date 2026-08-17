@@ -31,6 +31,11 @@
 - [x] T148: Lint/typecheck/format; `nest build`; unit 248/248 + e2e 108/108 + combined 356/356; coverage all files 94.32%, automations module 96.29% stmts.
 - [ ] T149: Update spec checklist (checklists/requirements.md → done/notes); review diff (no unrelated files, no secrets); Conventional Commit `feat(automations): implement automations v1` (no push unless requested).
 
+## Phase 6 — Post-commit review (2026-08-15)
+
+- [x] T150: Full module review — spec vs implementation, tenancy, events, DTOs, migration, tests. Fixed: OpenAPI enums (FINISHED/ERROR/PAUSED, were COMPLETED/PROCESSING/FAILED); contract `customer.fullName` → `customer.name`; contract sort whitelists aligned. All gates re-verified (unit 248/248, e2e 108/108, lint, tsc, build, api:validate).
+- [x] T151: AU-003 emits `AutomationCancelled` per cancelled automation (HG-6, C-05): consumer fetches cancellable automations in the transaction and emits after commit; unit + e2e assertions added. Verified green.
+
 ## Out of scope (explicit)
 
 Execution/message sending (HG-1), scheduler/BullMQ (HG-2), AU-006/007/009 (HG-3), AU-010 (HG-4), campaigns, dashboard consumers, manual create endpoints (FR-014), SDK generation (R-012).

@@ -36,12 +36,14 @@ Traceability: every requirement from the base specs and the approved HUMAN GATES
 - [x] Combined suite green (356/356)
 - [x] Coverage: all files 94.32% stmts; automations module 96.29% stmts (>80%)
 - [x] OpenAPI wired and `api:validate` green
-- [ ] No unrelated files modified (review in T149)
-- [ ] No secrets introduced (review in T149)
-- [ ] Git diff inspected (T149)
+- [x] No unrelated files modified (review in T149)
+- [x] No secrets introduced (review in T149)
+- [x] Git diff inspected (T149)
+- [x] Review pass (2026-08-15): OpenAPI enums fixed to real schema values (FINISHED/ERROR/PAUSED); contract `customer.name` aligned; AU-003 emits `AutomationCancelled` per cancelled automation (HG-6)
 
 ## Notes
 
 - Implemented 2026-08-15 (kit 016). Exception: `imports.e2e-spec.ts` cleanup extended to delete `automation`/`commercial_cycle` rows before `purchase` because the new consumer creates them for every imported purchase (FK dependency) — required for the suite to stay green.
 - File names in OpenAPI: `AutomationDetails.yaml` (not `AutomationDetail`), `CancelAutomationResponse.yaml`; CommercialCycle uses Summary/Details/ListResponse/Response only (no base `CommercialCycle.yaml` since it adds nothing over Summary).
 - Migration name differs from T139 draft (`add_automations_v1_fields` without the `20260815` timestamp): final name `20260815184029_add_automations_v1_fields`.
+- HG-6 (C-05): AU-003 batch cancellation emits one `AutomationCancelled` per cancelled automation (in addition to `CommercialCycleCancelled`); the consumer fetches the cancellable automations inside the transaction and emits after commit. No consumers of the event in v1; emitted for traceability and future WhatsApp/Messages module.

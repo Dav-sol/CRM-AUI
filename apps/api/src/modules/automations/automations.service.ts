@@ -138,6 +138,14 @@ type CycleDetailRow = Prisma.CommercialCycleGetPayload<{
   include: typeof CYCLE_INCLUDE_DETAIL;
 }>;
 
+type CancelledAutomationRow = {
+  uuid: string;
+  purchaseId: string;
+  commercialCycleId: string | null;
+  scheduledDate: Date;
+  status: AutomationStatus;
+};
+
 function toCycleSummary(cycle: CycleSummaryRow): CommercialCycleSummary {
   return {
     uuid: cycle.uuid,
@@ -260,9 +268,24 @@ export class AutomationsService {
     });
 
     try {
-      const { cycle, automations, cancelledCycleId } =
+      const { cycle, automations, cancelledAutomations, cancelledCycleId } =
         await this.prisma.$transaction(async (tx) => {
+          let cancelledAutomations: CancelledAutomationRow[] = [];
           if (activeCycle) {
+            cancelledAutomations = await tx.automation.findMany({
+              where: {
+                commercialCycleId: activeCycle.id,
+                status: { in: CANCELLABLE_STATUSES },
+                deletedAt: null,
+              },
+              select: {
+                uuid: true,
+                purchaseId: true,
+                commercialCycleId: true,
+                scheduledDate: true,
+                status: true,
+              },
+            });
             await tx.automation.updateMany({
               where: {
                 commercialCycleId: activeCycle.id,
@@ -313,6 +336,7 @@ export class AutomationsService {
           return {
             cycle: created,
             automations: automationRows,
+            cancelledAutomations,
             cancelledCycleId: activeCycle?.id ?? null,
           };
         });
@@ -373,6 +397,17 @@ export class AutomationsService {
           status: automation.status,
           scheduledDate: automation.scheduledDate.toISOString(),
         } satisfies AutomationEventPayload);
+      }
+      for (const automation of cancelledAutomations) {
+        this.emit('AutomationCancelled', null, purchase.organizationId, {
+          automationId: automation.uuid,
+          purchaseId: automation.purchaseId,
+          commercialCycleId:
+            automation.commercialCycleId ?? cancelledCycleId ?? '',
+          status: automation.status,
+          scheduledDate: automation.scheduledDate.toISOString(),
+          cancelledAt: new Date().toISOString(),
+        } satisfies AutomationCancelledPayload);
       }
       if (cancelledCycleId) {
         const cancelledCycle = await this.prisma.commercialCycle.findUnique({

@@ -22,13 +22,14 @@ properties:
     enum:
       - PENDING
       - SCHEDULED
-      - PROCESSING
       - EXECUTED
       - CANCELLED
-      - FAILED
+      - ERROR
+      - PAUSED
     description: |
       Lifecycle of an automation. EXECUTED is a final state (no execution
-      engine in v1). PAUSED is reserved for future deferred flows.
+      engine in v1). ERROR is used when the automation could not be
+      executed; PAUSED is reserved for future deferred flows.
 
   scheduledDate:
     type: string
