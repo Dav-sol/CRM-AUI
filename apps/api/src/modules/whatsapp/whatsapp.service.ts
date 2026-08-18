@@ -177,6 +177,7 @@ export class WhatsappService {
         status: 'SCHEDULED',
         scheduledDate: { lte: new Date() },
         deletedAt: null,
+        OR: [{ campaignId: null }, { campaign: { status: 'ACTIVE' } }],
         purchase: {
           deletedAt: null,
           customer: { deletedAt: null, status: 'ACTIVE' },
@@ -190,6 +191,7 @@ export class WhatsappService {
           },
         },
         organization: { select: { name: true } },
+        campaign: { select: { template: true } },
       },
       orderBy: { scheduledDate: 'asc' },
       take: SCHEDULER_BATCH_SIZE,
@@ -217,6 +219,7 @@ export class WhatsappService {
       product: { name: string } | null;
     };
     organization: { name: string } | null;
+    campaign?: { template: string } | null;
   }): Promise<void> {
     const customer = automation.purchase.customer;
     const content = this.buildAutomaticContent(automation);
@@ -377,11 +380,11 @@ export class WhatsappService {
       product: { name: string } | null;
     };
     organization: { name: string } | null;
+    campaign?: { template: string } | null;
   }): string {
-    return AUTOMATIC_TEMPLATE.replace(
-      '{customerName}',
-      automation.purchase.customer.name,
-    )
+    const template = automation.campaign?.template ?? AUTOMATIC_TEMPLATE;
+    return template
+      .replace('{customerName}', automation.purchase.customer.name)
       .replace('{productName}', automation.purchase.product?.name ?? '')
       .replace('{organizationName}', automation.organization?.name ?? '');
   }

@@ -1,0 +1,20 @@
+type: object
+
+description: Lightweight campaign representation for list endpoints.
+
+allOf:
+  - $ref: "./Campaign.yaml"
+
+required:
+  - automationCount
+  - executedCount
+
+properties:
+
+  automationCount:
+    type: integer
+    description: Total automations generated for the campaign.
+
+  executedCount:
+    type: integer
+    description: Total EXECUTED automations.

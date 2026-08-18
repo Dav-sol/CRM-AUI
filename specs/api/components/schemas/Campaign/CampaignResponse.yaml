@@ -1,0 +1,11 @@
+type: object
+
+description: Envelope for a single campaign resource.
+
+required:
+  - data
+
+properties:
+
+  data:
+    $ref: "./CampaignDetails.yaml"

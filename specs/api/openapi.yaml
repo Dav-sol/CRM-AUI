@@ -82,6 +82,20 @@ paths:
     $ref: "./paths/conversation-tags.yaml#/~1conversation-tags"
   /conversation-tags/{uuid}:
     $ref: "./paths/conversation-tags.yaml#/~1conversation-tags~1{uuid}"
+  /campaigns:
+    $ref: "./paths/campaigns.yaml#/~1campaigns"
+  /campaigns/{uuid}:
+    $ref: "./paths/campaigns.yaml#/~1campaigns~1{uuid}"
+  /campaigns/{uuid}/activate:
+    $ref: "./paths/campaigns.yaml#/~1campaigns~1{uuid}~1activate"
+  /campaigns/{uuid}/pause:
+    $ref: "./paths/campaigns.yaml#/~1campaigns~1{uuid}~1pause"
+  /campaigns/{uuid}/resume:
+    $ref: "./paths/campaigns.yaml#/~1campaigns~1{uuid}~1resume"
+  /campaigns/{uuid}/cancel:
+    $ref: "./paths/campaigns.yaml#/~1campaigns~1{uuid}~1cancel"
+  /campaigns/{uuid}/preview-segment:
+    $ref: "./paths/campaigns.yaml#/~1campaigns~1{uuid}~1preview-segment"
   /quick-replies:
     $ref: "./paths/quick-replies.yaml#/~1quick-replies"
   /quick-replies/{uuid}:

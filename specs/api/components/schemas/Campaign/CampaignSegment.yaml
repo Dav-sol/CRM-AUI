@@ -1,0 +1,35 @@
+type: object
+
+description: Customer segment filter for campaign automations. All criteria combine with AND; at least one criterion is required when the segment is provided.
+
+properties:
+
+  city:
+    type: string
+    maxLength: 200
+    description: Partial match, case-insensitive, over the customer city.
+
+  productId:
+    type: string
+    description: uuid of the purchased product.
+
+  purchaseFrom:
+    type: string
+    format: date
+    description: |
+      Lower bound on purchaseDate. Date-only (`YYYY-MM-DD`) includes the
+      whole requested day.
+
+  purchaseTo:
+    type: string
+    format: date
+    description: |
+      Upper bound on purchaseDate. Date-only (`YYYY-MM-DD`) includes the
+      whole requested day.
+
+  customerStatus:
+    type: string
+    enum:
+      - ACTIVE
+      - INACTIVE
+      - BLOCKED

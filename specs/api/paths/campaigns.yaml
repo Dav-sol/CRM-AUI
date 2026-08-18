@@ -1,0 +1,1211 @@
+/campaigns:
+  post:
+    tags:
+      - Campaigns
+
+    summary: Create a campaign
+
+    description: |
+      Creates a campaign in DRAFT state (FR-001). All authenticated
+      organization roles may create campaigns (HG-3). The segment, when
+      present, must include at least one criterion.
+
+    operationId: createCampaign
+
+    security:
+      - bearerAuth: []
+
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/Campaign/CreateCampaignRequest.yaml"
+
+    responses:
+
+      "201":
+        description: Campaign created in DRAFT state
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              required:
+                - data
+
+              properties:
+
+                data:
+
+                  type: object
+
+                  required:
+                    - uuid
+                    - name
+                    - status
+                    - organizationId
+                    - createdAt
+
+                  properties:
+
+                    uuid:
+                      type: string
+
+                    name:
+                      type: string
+
+                    status:
+                      type: string
+                      enum:
+                        - DRAFT
+
+                    organizationId:
+                      type: string
+
+                    createdAt:
+                      type: string
+                      format: date-time
+
+      "400":
+        description: Missing required fields or segment without criteria (VALIDATION_ERROR)
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+                      example: segment must include at least one criterion
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+      "403":
+        description: Organization scope required (FORBIDDEN)
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+                      example: Organization scope required
+
+  get:
+    tags:
+      - Campaigns
+
+    summary: List campaigns
+
+    description: |
+      Returns a paginated list of campaigns ordered by -createdAt,
+      scoped to the caller organization (FR-002).
+
+    operationId: listCampaigns
+
+    security:
+      - bearerAuth: []
+
+    parameters:
+
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+
+      - name: status
+        in: query
+        required: false
+        description: Exact match over the campaign status.
+        schema:
+          type: string
+          enum:
+            - DRAFT
+            - ACTIVE
+            - PAUSED
+            - FINISHED
+            - CANCELLED
+
+      - name: type
+        in: query
+        required: false
+        description: Exact match over the campaign type.
+        schema:
+          type: string
+          enum:
+            - AUTOMATIC
+            - MANUAL
+            - REPURCHASE
+            - SPECIAL
+
+      - name: search
+        in: query
+        required: false
+        description: Case-insensitive partial match over the campaign name.
+        schema:
+          type: string
+
+      - name: sort
+        in: query
+        required: false
+        description: Field sorted by; "-" prefix means descending. Defaults to -createdAt.
+        schema:
+          type: string
+          pattern: "^-?(createdAt|updatedAt|name|status|type|startAt)$"
+
+    responses:
+
+      "200":
+        description: Paginated campaign list
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Campaign/CampaignListResponse.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+      "403":
+        description: Organization scope required (FORBIDDEN)
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+                      example: Organization scope required
+
+/campaigns/{uuid}:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Campaign uuid
+
+  get:
+    tags:
+      - Campaigns
+
+    summary: Get a campaign by uuid
+
+    description: |
+      Returns the full campaign configuration and execution counts only
+      if it belongs to the caller organization (FR-003). Unknown or
+      cross-tenant campaigns return 404 CAMPAIGN_NOT_FOUND.
+
+    operationId: getCampaign
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Campaign detail
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Campaign/CampaignResponse.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+      "404":
+        description: "Unknown or cross-tenant campaign (CAMPAIGN_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CAMPAIGN_NOT_FOUND
+                    message:
+                      type: string
+                      example: Campaign not found
+
+  patch:
+    tags:
+      - Campaigns
+
+    summary: Update a campaign (DRAFT only)
+
+    description: |
+      Partially updates the campaign. Only allowed while the campaign is
+      DRAFT (FR-004); any other state returns 400 VALIDATION_ERROR. At
+      least one field must be provided; the segment, when present, must
+      include at least one criterion.
+
+    operationId: updateCampaign
+
+    security:
+      - bearerAuth: []
+
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/Campaign/UpdateCampaignRequest.yaml"
+
+    responses:
+
+      "200":
+        description: Campaign updated
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              required:
+                - data
+
+              properties:
+
+                data:
+
+                  type: object
+
+                  required:
+                    - uuid
+                    - name
+                    - status
+
+                  properties:
+
+                    uuid:
+                      type: string
+
+                    name:
+                      type: string
+
+                    status:
+                      type: string
+                      enum:
+                        - DRAFT
+
+      "400":
+        description: "Campaign not DRAFT, empty body or segment without criteria (VALIDATION_ERROR)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+                      example: Campaign can only be updated while DRAFT
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+      "404":
+        description: "Unknown or cross-tenant campaign (CAMPAIGN_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CAMPAIGN_NOT_FOUND
+                    message:
+                      type: string
+                      example: Campaign not found
+
+/campaigns/{uuid}/activate:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Campaign uuid
+
+  post:
+    tags:
+      - Campaigns
+
+    summary: Activate a campaign
+
+    description: |
+      Transitions DRAFT → ACTIVE and generates one SCHEDULED automation
+      per qualifying customer (deduplicated, most recent purchase first),
+      batched inside a single transaction (FR-006). Segments resolving to
+      more than MAX_AUTOMATIONS_PER_CAMPAIGN (5.000) return 400
+      SEGMENT_TOO_LARGE and leave the campaign in DRAFT.
+
+    operationId: activateCampaign
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Campaign activated with generated automations
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              required:
+                - data
+
+              properties:
+
+                data:
+
+                  type: object
+
+                  required:
+                    - uuid
+                    - status
+                    - automationCount
+                    - startedAt
+
+                  properties:
+
+                    uuid:
+                      type: string
+
+                    status:
+                      type: string
+                      enum:
+                        - ACTIVE
+
+                    automationCount:
+                      type: integer
+
+                    startedAt:
+                      type: string
+                      format: date-time
+
+      "400":
+        description: |
+          Campaign is not in DRAFT state (VALIDATION_ERROR) or segment
+          exceeds the automation limit (SEGMENT_TOO_LARGE)
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: SEGMENT_TOO_LARGE
+                    message:
+                      type: string
+                      example: Segment exceeds the limit of 5000 automations
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+      "404":
+        description: "Unknown or cross-tenant campaign (CAMPAIGN_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CAMPAIGN_NOT_FOUND
+                    message:
+                      type: string
+                      example: Campaign not found
+
+/campaigns/{uuid}/pause:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Campaign uuid
+
+  post:
+    tags:
+      - Campaigns
+
+    summary: Pause an active campaign
+
+    description: |
+      Transitions ACTIVE → PAUSED (FR-007). The scheduler stops picking
+      up the campaign automations while paused. Any other state returns
+      400 VALIDATION_ERROR.
+
+    operationId: pauseCampaign
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Campaign paused
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              required:
+                - data
+
+              properties:
+
+                data:
+
+                  type: object
+
+                  required:
+                    - uuid
+                    - status
+
+                  properties:
+
+                    uuid:
+                      type: string
+
+                    status:
+                      type: string
+                      enum:
+                        - PAUSED
+
+      "400":
+        description: Campaign is not in ACTIVE state (VALIDATION_ERROR)
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+                      example: Campaign is not in ACTIVE state
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+      "404":
+        description: "Unknown or cross-tenant campaign (CAMPAIGN_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CAMPAIGN_NOT_FOUND
+                    message:
+                      type: string
+                      example: Campaign not found
+
+/campaigns/{uuid}/resume:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Campaign uuid
+
+  post:
+    tags:
+      - Campaigns
+
+    summary: Resume a paused campaign
+
+    description: |
+      Transitions PAUSED → ACTIVE (FR-008). The scheduler resumes picking
+      up the campaign automations. Any other state returns 400
+      VALIDATION_ERROR.
+
+    operationId: resumeCampaign
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Campaign resumed
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              required:
+                - data
+
+              properties:
+
+                data:
+
+                  type: object
+
+                  required:
+                    - uuid
+                    - status
+
+                  properties:
+
+                    uuid:
+                      type: string
+
+                    status:
+                      type: string
+                      enum:
+                        - ACTIVE
+
+      "400":
+        description: Campaign is not in PAUSED state (VALIDATION_ERROR)
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+                      example: Campaign is not in PAUSED state
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+      "404":
+        description: "Unknown or cross-tenant campaign (CAMPAIGN_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CAMPAIGN_NOT_FOUND
+                    message:
+                      type: string
+                      example: Campaign not found
+
+/campaigns/{uuid}/cancel:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Campaign uuid
+
+  post:
+    tags:
+      - Campaigns
+
+    summary: Cancel a campaign
+
+    description: |
+      Transitions DRAFT/ACTIVE/PAUSED → CANCELLED (terminal) and cancels
+      all pending SCHEDULED automations of the campaign inside a single
+      transaction (FR-009). Terminal states return 400 VALIDATION_ERROR.
+
+    operationId: cancelCampaign
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Campaign cancelled
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              required:
+                - data
+
+              properties:
+
+                data:
+
+                  type: object
+
+                  required:
+                    - uuid
+                    - status
+
+                  properties:
+
+                    uuid:
+                      type: string
+
+                    status:
+                      type: string
+                      enum:
+                        - CANCELLED
+
+      "400":
+        description: Campaign is already in a terminal state (VALIDATION_ERROR)
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+                      example: Campaign is already in a terminal state
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+      "404":
+        description: "Unknown or cross-tenant campaign (CAMPAIGN_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CAMPAIGN_NOT_FOUND
+                    message:
+                      type: string
+                      example: Campaign not found
+
+/campaigns/{uuid}/preview-segment:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Campaign uuid
+
+  post:
+    tags:
+      - Campaigns
+
+    summary: Preview a campaign segment
+
+    description: |
+      Dry-run of the segment resolution (FR-005). When the body is
+      omitted, the campaign stored segment is resolved; otherwise the
+      supplied segment (which must include at least one criterion) is
+      used. No automations are created and no PII is returned.
+
+    operationId: previewCampaignSegment
+
+    security:
+      - bearerAuth: []
+
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/Campaign/CampaignSegment.yaml"
+
+    responses:
+
+      "200":
+        description: Qualifying customers count
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Campaign/SegmentPreviewResponse.yaml"
+
+      "400":
+        description: Segment without criteria (VALIDATION_ERROR)
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+                      example: segment must include at least one criterion
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+      "404":
+        description: "Unknown or cross-tenant campaign (CAMPAIGN_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CAMPAIGN_NOT_FOUND
+                    message:
+                      type: string
+                      example: Campaign not found

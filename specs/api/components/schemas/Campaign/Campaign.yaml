@@ -1,0 +1,65 @@
+type: object
+
+description: Base campaign representation.
+
+required:
+  - uuid
+  - name
+  - type
+  - status
+  - startAt
+  - segment
+  - createdAt
+
+properties:
+
+  uuid:
+    type: string
+
+  name:
+    type: string
+    description: Campaign name, 1..120 chars.
+
+  description:
+    type: string
+    nullable: true
+    description: Free-text description, max 1000 chars.
+
+  type:
+    type: string
+    enum:
+      - AUTOMATIC
+      - MANUAL
+      - REPURCHASE
+      - SPECIAL
+    description: Informational in v1; does not drive behavior.
+
+  status:
+    type: string
+    enum:
+      - DRAFT
+      - ACTIVE
+      - PAUSED
+      - FINISHED
+      - CANCELLED
+    description: |
+      Lifecycle. DRAFT → ACTIVE (activate), ACTIVE ↔ PAUSED,
+      ACTIVE/PAUSED/DRAFT → CANCELLED, ACTIVE → FINISHED (automatic when
+      no SCHEDULED automations remain). FINISHED and CANCELLED are
+      terminal.
+
+  startAt:
+    type: string
+    format: date-time
+    nullable: true
+    description: Scheduled start; automations are scheduled for max(startAt, now).
+
+  segment:
+    type: object
+    allOf:
+      - $ref: "./CampaignSegment.yaml"
+    nullable: true
+
+  createdAt:
+    type: string
+    format: date-time

@@ -1,0 +1,45 @@
+type: object
+
+description: Payload to create a campaign. The campaign is always persisted as DRAFT.
+
+required:
+  - name
+  - type
+  - template
+
+properties:
+
+  name:
+    type: string
+    minLength: 1
+    maxLength: 120
+
+  description:
+    type: string
+    maxLength: 1000
+
+  type:
+    type: string
+    enum:
+      - AUTOMATIC
+      - MANUAL
+      - REPURCHASE
+      - SPECIAL
+
+  template:
+    type: string
+    minLength: 1
+    maxLength: 4096
+    description: |
+      Message template, free text with {customerName}/{productName}/
+      {organizationName} placeholders.
+
+  segment:
+    allOf:
+      - $ref: "./CampaignSegment.yaml"
+    description: At least one criterion required when present.
+
+  startAt:
+    type: string
+    format: date-time
+    description: Optional scheduled start (automations are scheduled for max(startAt, now)).

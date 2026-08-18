@@ -1,23 +1,23 @@
 import {
-  IsOptional,
-  IsInt,
   IsEnum,
+  IsInt,
+  IsOptional,
   IsString,
-  IsDateString,
-  Min,
+  Matches,
   Max,
   MaxLength,
+  Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { CampaignStatus } from '@prisma/client';
-import { CampaignType } from '@prisma/client';
+import { CampaignStatus, CampaignType } from '@prisma/client';
+
+const SORT_FIELDS = 'createdAt|updatedAt|name|status|type|startAt';
 
 export class QueryCampaignsDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
   page?: number;
 
   @IsOptional()
@@ -26,6 +26,10 @@ export class QueryCampaignsDto {
   @Min(1)
   @Max(100)
   limit?: number;
+
+  @IsOptional()
+  @Matches(new RegExp(`^-?(${SORT_FIELDS})$`))
+  sort?: string; // -createdAt default; whitelist per contracts/campaigns-api.md
 
   @IsOptional()
   @IsEnum(CampaignStatus)
@@ -39,12 +43,4 @@ export class QueryCampaignsDto {
   @IsString()
   @MaxLength(120)
   search?: string; // name contains, case-insensitive
-
-  @IsOptional()
-  @IsDateString()
-  startAtFrom?: string; // whole-day inclusive (NR-010)
-
-  @IsOptional()
-  @IsDateString()
-  startAtTo?: string; // whole-day inclusive
 }

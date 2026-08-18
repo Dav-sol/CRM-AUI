@@ -1,10 +1,10 @@
 import { randomUUID } from 'crypto';
+import { CampaignType } from '@prisma/client';
 
 export interface CampaignCreatedPayload {
   campaignId: string;
-  organizationId: string;
   name: string;
-  type?: string;
+  type: CampaignType;
   status: 'DRAFT';
   createdAt: string;
 }
@@ -49,12 +49,11 @@ export interface CampaignEventEnvelope<T> {
   payload: T;
 }
 
-// OrganizationId shorthand via HG-3 team convention
-/* @ts-expect-error: shorthand property organizationId */
 export function buildCampaignCreatedEvent(
   campaignId: string,
   organizationId: string,
   name: string,
+  type: CampaignType,
   createdBy: string | null,
   createdAt?: string,
 ): CampaignEventEnvelope<CampaignCreatedPayload> {
@@ -67,17 +66,17 @@ export function buildCampaignCreatedEvent(
     state: 'CREATED',
     payload: {
       campaignId,
-      organizationId,
       name,
+      type,
       status: 'DRAFT',
       createdAt: createdAt ?? new Date().toISOString(),
     },
   };
 }
 
-/* ts-expect-error: shorthand property organizationId */
 export function buildCampaignUpdatedEvent(
   campaignId: string,
+  organizationId: string,
   updatedBy: string,
   changedAt: string,
   fields?: (keyof CampaignCreatedPayload)[],
@@ -98,9 +97,9 @@ export function buildCampaignUpdatedEvent(
   };
 }
 
-/* ts-expect-error: shorthand property organizationId */
 export function buildCampaignActivatedEvent(
   campaignId: string,
+  organizationId: string,
   activatedBy: string,
   startedAt: string,
   automationCount: number,
@@ -122,9 +121,9 @@ export function buildCampaignActivatedEvent(
   };
 }
 
-/* ts-expect-error: shorthand property organizationId */
 export function buildCampaignFinishedEvent(
   campaignId: string,
+  organizationId: string,
   finishedAt: string,
   automationExecutedCount?: number,
 ): CampaignEventEnvelope<CampaignFinishedPayload> {
@@ -143,9 +142,9 @@ export function buildCampaignFinishedEvent(
   };
 }
 
-/* ts-expect-error: shorthand property organizationId */
 export function buildCampaignCancelledEvent(
   campaignId: string,
+  organizationId: string,
   cancelledBy: string,
   changedAt: string,
 ): CampaignEventEnvelope<CampaignCancelledPayload> {

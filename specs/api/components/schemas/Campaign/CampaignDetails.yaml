@@ -1,0 +1,22 @@
+type: object
+
+description: Full campaign representation including template and counts.
+
+allOf:
+  - $ref: "./CampaignSummary.yaml"
+
+required:
+  - template
+  - updatedAt
+
+properties:
+
+  template:
+    type: string
+    description: |
+      Message template, 1..4096 chars, free text with
+      {customerName}/{productName}/{organizationName} placeholders.
+
+  updatedAt:
+    type: string
+    format: date-time

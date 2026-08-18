@@ -1,22 +1,27 @@
+import { Type } from 'class-transformer';
 import {
+  IsDateString,
+  IsEnum,
   IsOptional,
   IsString,
-  IsEnum,
-  IsDateString,
-  MinLength,
   MaxLength,
+  MinLength,
+  Validate,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
-import { CampaignStatus } from '@prisma/client';
-import { CampaignSegmentDto } from './campaign-segment.dto';
+import { CampaignType } from '@prisma/client';
+import {
+  CampaignSegmentDto,
+  SegmentHasCriterionConstraint,
+} from './campaign-segment.dto';
 
 export class UpdateCampaignDto {
   @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(120)
-  name!: string;
+  name?: string;
 
   @IsOptional()
   @IsString()
@@ -24,19 +29,20 @@ export class UpdateCampaignDto {
   description?: string;
 
   @IsOptional()
-  @IsEnum(CampaignStatus)
-  type!: CampaignStatus;
+  @IsEnum(CampaignType)
+  type?: CampaignType;
 
   @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(4096)
-  template!: string;
+  template?: string;
 
+  @ValidateIf((_o, value) => value !== undefined)
+  @Validate(SegmentHasCriterionConstraint)
   @ValidateNested()
   @Type(() => CampaignSegmentDto)
-  @IsOptional()
-  segment?: CampaignSegmentDto; // if present, ≥1 of its fields required (INFERENCIA)
+  segment?: CampaignSegmentDto; // ≥1 criterion required when present (HG-7)
 
   @IsOptional()
   @IsDateString()
