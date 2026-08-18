@@ -19,6 +19,7 @@ import { AutomationsModule } from './modules/automations/automations.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { ConversationsModule } from './modules/conversations/conversations.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -59,6 +60,8 @@ import { CampaignsModule } from './modules/campaigns/campaigns.module';
     ConversationsModule,
 
     CampaignsModule,
+
+    DashboardModule,
   ],
 })
 export class AppModule {}

@@ -1,0 +1,48 @@
+type: object
+
+description: Single entry of the activity feed (read of the org audit trail).
+
+required:
+  - uuid
+  - module
+  - action
+  - description
+  - metadata
+  - userId
+  - userName
+  - createdAt
+
+properties:
+
+  uuid:
+    type: string
+
+  module:
+    type: string
+    description: Source module that wrote the audit row (e.g. campaigns, identity).
+
+  action:
+    type: string
+    description: Audit action code (e.g. campaign.activate).
+
+  description:
+    type: string
+    nullable: true
+
+  metadata:
+    type: object
+    nullable: true
+    description: Extra context as written by the source module (ids/counts only).
+
+  userId:
+    type: string
+    nullable: true
+
+  userName:
+    type: string
+    nullable: true
+    description: 'Display name "<firstName> <lastName>" of the acting user.'
+
+  createdAt:
+    type: string
+    format: date-time

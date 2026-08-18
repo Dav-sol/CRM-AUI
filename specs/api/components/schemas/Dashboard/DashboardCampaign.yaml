@@ -1,0 +1,46 @@
+type: object
+
+description: Lightweight campaign row for the dashboard campaigns panel.
+
+required:
+  - uuid
+  - name
+  - type
+  - status
+  - startAt
+  - createdAt
+
+properties:
+
+  uuid:
+    type: string
+
+  name:
+    type: string
+
+  type:
+    type: string
+    enum:
+      - AUTOMATIC
+      - MANUAL
+      - REPURCHASE
+      - SPECIAL
+
+  status:
+    type: string
+    enum:
+      - DRAFT
+      - ACTIVE
+      - PAUSED
+      - FINISHED
+      - CANCELLED
+
+  startAt:
+    type: string
+    format: date-time
+    nullable: true
+    description: Scheduled start; upcoming campaigns have a future startAt.
+
+  createdAt:
+    type: string
+    format: date-time

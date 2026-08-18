@@ -104,6 +104,12 @@ paths:
     $ref: "./paths/messages.yaml#/~1messages"
   /messages/{uuid}:
     $ref: "./paths/messages.yaml#/~1messages~1{uuid}"
+  /dashboard/summary:
+    $ref: "./paths/dashboard.yaml#/~1dashboard~1summary"
+  /dashboard/campaigns:
+    $ref: "./paths/dashboard.yaml#/~1dashboard~1campaigns"
+  /dashboard/activity:
+    $ref: "./paths/dashboard.yaml#/~1dashboard~1activity"
 
 components:
 

@@ -1,0 +1,25 @@
+type: object
+
+description: Envelope for the dashboard campaigns panel (GET /dashboard/campaigns).
+
+required:
+  - data
+
+properties:
+
+  data:
+    type: object
+    required:
+      - recent
+      - upcoming
+    properties:
+      recent:
+        type: array
+        description: Last 10 campaigns ordered by createdAt desc.
+        items:
+          $ref: "./DashboardCampaign.yaml"
+      upcoming:
+        type: array
+        description: ACTIVE campaigns with future startAt ordered ascending (take 10).
+        items:
+          $ref: "./DashboardCampaign.yaml"

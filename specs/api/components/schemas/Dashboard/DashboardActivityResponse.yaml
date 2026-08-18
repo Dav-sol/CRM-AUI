@@ -1,0 +1,14 @@
+type: object
+
+description: Envelope for the activity feed (GET /dashboard/activity).
+
+required:
+  - data
+
+properties:
+
+  data:
+    type: array
+    description: Last 20 audit entries of the organization, newest first.
+    items:
+      $ref: "./DashboardActivityItem.yaml"

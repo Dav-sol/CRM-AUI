@@ -1,0 +1,169 @@
+/dashboard/summary:
+  get:
+    tags:
+      - Dashboard
+
+    summary: Global KPIs
+
+    description: |
+      Returns the global KPIs of the organization (FR-001), computed
+      on-the-fly from the existing org-scoped tables (HG-1). All
+      authenticated organization roles may read the dashboard. All counts
+      exclude soft-deleted records; month metrics use the UTC calendar
+      month (HG-3).
+
+    operationId: getDashboardSummary
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Dashboard KPIs
+
+        content:
+
+          application/json:
+
+            schema:
+
+              $ref: "../components/schemas/Dashboard/DashboardResponse.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+/dashboard/campaigns:
+  get:
+    tags:
+      - Dashboard
+
+    summary: Campaigns panel
+
+    description: |
+      Returns the recent campaigns (createdAt desc, take 10) and the
+      upcoming scheduled campaigns (ACTIVE with future startAt, ascending)
+      of the organization (FR-002).
+
+    operationId: getDashboardCampaigns
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Recent and upcoming campaigns
+
+        content:
+
+          application/json:
+
+            schema:
+
+              $ref: "../components/schemas/Dashboard/DashboardCampaignsResponse.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+/dashboard/activity:
+  get:
+    tags:
+      - Dashboard
+
+    summary: Activity feed
+
+    description: |
+      Returns the last 20 audit entries of the organization, newest first
+      (FR-003). Read-only view of the existing audit trail; the feed never
+      exposes message content or customer PII.
+
+    operationId: getDashboardActivity
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Latest audit entries
+
+        content:
+
+          application/json:
+
+            schema:
+
+              $ref: "../components/schemas/Dashboard/DashboardActivityResponse.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized

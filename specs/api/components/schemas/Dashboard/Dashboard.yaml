@@ -1,0 +1,82 @@
+type: object
+
+description: |
+  Global KPIs of the organization (GET /dashboard/summary), computed
+  on-the-fly from the existing org-scoped tables (HG-1). All counts
+  exclude soft-deleted records.
+
+required:
+  - customers
+  - purchases
+  - automations
+  - messages
+  - conversations
+  - campaigns
+
+properties:
+
+  customers:
+    type: object
+    required:
+      - total
+      - newThisMonth
+    properties:
+      total:
+        type: integer
+        description: Registered customers.
+      newThisMonth:
+        type: integer
+        description: Customers created in the current calendar month (UTC).
+
+  purchases:
+    type: object
+    required:
+      - total
+      - thisMonth
+    properties:
+      total:
+        type: integer
+        description: Imported purchases.
+      thisMonth:
+        type: integer
+        description: Purchases with purchaseDate in the current calendar month (UTC).
+
+  automations:
+    type: object
+    required:
+      - scheduled
+    properties:
+      scheduled:
+        type: integer
+        description: Automations with status SCHEDULED.
+
+  messages:
+    type: object
+    required:
+      - sent
+      - pending
+    properties:
+      sent:
+        type: integer
+        description: Messages with status SENT.
+      pending:
+        type: integer
+        description: Messages with status QUEUED.
+
+  conversations:
+    type: object
+    required:
+      - open
+    properties:
+      open:
+        type: integer
+        description: Conversations with status OPEN.
+
+  campaigns:
+    type: object
+    required:
+      - active
+    properties:
+      active:
+        type: integer
+        description: Campaigns with status ACTIVE.

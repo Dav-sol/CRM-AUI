@@ -1,0 +1,11 @@
+type: object
+
+description: Envelope for the dashboard summary (GET /dashboard/summary).
+
+required:
+  - data
+
+properties:
+
+  data:
+    $ref: "./Dashboard.yaml"
