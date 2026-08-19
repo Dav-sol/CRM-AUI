@@ -35,3 +35,12 @@ Thumbs.db
 .opencode/*.json
 .opencode/auth/
 .opencode/state/
+
+# impeccable-ignore-start
+# Ephemeral output, runtime state, and per-dev overrides.
+.impeccable/*
+!.impeccable/config.json
+!.impeccable/live/config.json
+!.impeccable/design.json
+!.impeccable/critique/
+# impeccable-ignore-end
