@@ -819,7 +819,7 @@ describe('WhatsappService', () => {
       expect(result).toBeNull();
     });
 
-    it('throws CUSTOMER_NO_PHONE and fails the message when the customer has no phone', async () => {
+    it('throws VALIDATION_ERROR and fails the message when the customer has no phone (018 contract)', async () => {
       prisma.conversation.findFirst.mockResolvedValue({
         ...replyConversation,
         customer: { phone: null },
@@ -831,7 +831,9 @@ describe('WhatsappService', () => {
 
       await expect(
         service.sendReply(orgUser, 'cou-1', 'Hola'),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      ).rejects.toMatchObject({
+        response: { error: { code: 'VALIDATION_ERROR' } },
+      });
       expect(emittedNames()).toContain('MessageFailed');
     });
 

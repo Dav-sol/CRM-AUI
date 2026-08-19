@@ -28,7 +28,7 @@
 - [x] `npm run api:validate` green (solo warning pre-existente no-server-example-com).
 
 ## CR-06: Tests
-- [x] Unit `dashboard.service.spec.ts` (KPIs + límite de mes UTC + exclusión soft-delete + org-scope + paralelismo + orden/límites de campañas y actividad + usuarios PLATFORM; 12 casos).
+- [x] Unit `dashboard.service.spec.ts` (KPIs + límite de mes UTC + exclusión soft-delete + org-scope + paralelismo + orden/límites de campañas y actividad + usuarios PLATFORM; 10 casos).
 - [x] Unit `dashboard.controller.spec.ts` (3 endpoints, guard JwtAuthGuard sin ROLES_KEY, envelope; 4 casos).
 - [x] e2e `dashboard.e2e-spec.ts` (D1-D6: KPIs vs seeds, campañas recientes/próximas, actividad con nombres, aislamiento cross-org, 401, rol OPERADOR 200; 6 casos).
 - [x] Cobertura dashboard module: service 100% lines / 91.66% branch; controller 100% (target >80% OK).

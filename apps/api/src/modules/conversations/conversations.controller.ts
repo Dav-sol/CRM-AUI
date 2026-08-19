@@ -34,7 +34,7 @@ import {
   UpdateQuickReplyDto,
 } from './dto/conversations.dto';
 
-const MANAGER_ROLES = ['PLATFORM_OWNER', 'ADMINISTRADOR', 'GERENTE'] as const;
+const MANAGER_ROLES = ['ADMINISTRADOR', 'GERENTE'] as const;
 
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)

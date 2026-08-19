@@ -31,7 +31,7 @@ Traceability: every requirement from the base specs and the approved HUMAN GATES
 - [x] Lint passes
 - [x] Typecheck passes
 - [x] Formatting passes
-- [x] Unit tests green (automations unit 25, controller 3; overall 248/248)
+- [x] Unit tests green (automations unit 25, controller 7; overall 248/248)
 - [x] E2E tests green (automations.e2e-spec.ts 10/10; overall 108/108)
 - [x] Combined suite green (356/356)
 - [x] Coverage: all files 94.32% stmts; automations module 96.29% stmts (>80%)

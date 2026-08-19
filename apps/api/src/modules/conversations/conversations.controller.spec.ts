@@ -228,7 +228,7 @@ describe('ConversationsController', () => {
     }
   });
 
-  it('restricts catalog management to ADMINISTRADOR/GERENTE/PLATFORM_OWNER', () => {
+  it('restricts catalog management to ADMINISTRADOR/GERENTE', () => {
     const proto = ConversationsController.prototype as unknown as Record<
       string,
       (this: void) => unknown
@@ -236,7 +236,6 @@ describe('ConversationsController', () => {
 
     for (const handler of ['createTag', 'updateTag', 'deleteTag']) {
       expect(Reflect.getMetadata(ROLES_KEY, proto[handler])).toEqual([
-        'PLATFORM_OWNER',
         'ADMINISTRADOR',
         'GERENTE',
       ]);
@@ -247,7 +246,6 @@ describe('ConversationsController', () => {
       'deleteQuickReply',
     ]) {
       expect(Reflect.getMetadata(ROLES_KEY, proto[handler])).toEqual([
-        'PLATFORM_OWNER',
         'ADMINISTRADOR',
         'GERENTE',
       ]);

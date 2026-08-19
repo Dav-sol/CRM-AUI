@@ -50,7 +50,7 @@
 - [x] `CampaignsModule` registrado en `app.module.ts` (imports: PrismaModule + AuthModule).
 
 ## CR-06: Tests & coverage
-- [x] Unit campaigns.service.spec.ts green (32 casos: 10 métodos + guardas de estado, segmento completo, límite 5.000, finish idempotente).
+- [x] Unit campaigns.service.spec.ts green (29 casos: 10 métodos + guardas de estado, segmento completo, límite 5.000, finish idempotente).
 - [x] Unit campaigns.controller.spec.ts green (11 casos: envelope `{ data }`, 9 endpoints, preview sin body, guard HG-3).
 - [x] e2e campaigns.e2e-spec.ts green (11 casos, C1..C9 + variantes: aislamiento multi-tenant, segmento vacío, doble activación; suite e2e completa 144/144 con DB local).
 - [x] Coverage target >80%: campaigns.service.ts 95.78% lines / 81.95% branch; campaigns.controller.ts 100% stmts/funcs/lines.

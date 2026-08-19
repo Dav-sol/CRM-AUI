@@ -30,6 +30,7 @@ describe('Conversations Inbox (e2e) — Flujo 07, US1..US10, HG-1..HG-8', () => 
     gerente1: 'conv-gerente@org1.test',
     operador1: 'conv-operador@org1.test',
     admin2: 'conv-admin2@org2.test',
+    platform: 'conv-platform@platform.test',
   };
   let org1Id: string;
   let org2Id: string;
@@ -187,6 +188,16 @@ describe('Conversations Inbox (e2e) — Flujo 07, US1..US10, HG-1..HG-8', () => 
           accountType: 'ORGANIZATION',
           organizationId: org2Id,
           roleId: admin2Role?.id ?? null,
+          status: 'ACTIVE',
+        },
+        {
+          email: emails.platform,
+          passwordHash: hash,
+          firstName: 'Conv',
+          lastName: 'Platform',
+          accountType: 'PLATFORM',
+          organizationId: null,
+          roleId: null,
           status: 'ACTIVE',
         },
       ],
@@ -385,6 +396,29 @@ describe('Conversations Inbox (e2e) — Flujo 07, US1..US10, HG-1..HG-8', () => 
     expect((list.body as { data: unknown[] }).data).toHaveLength(1);
   });
 
+  it('AS-009b — catalog management roles: GERENTE allowed, PLATFORM_OWNER rejected', async () => {
+    const gerenteToken = await login(emails.gerente1);
+    const platformToken = await login(emails.platform);
+
+    await request(app.getHttpServer())
+      .post('/api/v1/conversation-tags')
+      .set('Authorization', `Bearer ${gerenteToken}`)
+      .send({ name: 'GerenteTag', color: '#111111' })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post('/api/v1/conversation-tags')
+      .set('Authorization', `Bearer ${platformToken}`)
+      .send({ name: 'SinPermiso' })
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .post('/api/v1/quick-replies')
+      .set('Authorization', `Bearer ${platformToken}`)
+      .send({ title: 'SinPermiso', body: 'No.' })
+      .expect(403);
+  });
+
   it('AS-001b — bandeja tagIds filter returns the tagged conversation', async () => {
     const operadorToken = await login(emails.operador1);
 
@@ -500,6 +534,29 @@ describe('Conversations Inbox (e2e) — Flujo 07, US1..US10, HG-1..HG-8', () => 
       direction: 'OUTBOUND',
       status: 'SENT',
     });
+  });
+
+  it('AS-003b — reply when the customer has no phone → 400 VALIDATION_ERROR', async () => {
+    const operadorToken = await login(emails.operador1);
+
+    const noPhoneConversation = await prisma.conversation.create({
+      data: {
+        organizationId: org1Id,
+        customerId: null,
+        channel: 'WHATSAPP_CLIENTS',
+        status: 'OPEN',
+      },
+    });
+
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/conversations/${noPhoneConversation.uuid}/messages`)
+      .set('Authorization', `Bearer ${operadorToken}`)
+      .send({ content: 'Hola' })
+      .expect(400);
+
+    expect((res.body as { error: { code: string } }).error.code).toBe(
+      'VALIDATION_ERROR',
+    );
   });
 
   it('AS-004 — reply to a CLOSED conversation reopens it to OPEN', async () => {

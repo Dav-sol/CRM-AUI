@@ -610,7 +610,7 @@ export class WhatsappService {
       });
       throw new BadRequestException({
         error: {
-          code: 'CUSTOMER_NO_PHONE',
+          code: 'VALIDATION_ERROR',
           message: 'Customer has no phone number',
         },
       });
