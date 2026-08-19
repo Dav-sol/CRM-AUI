@@ -23,6 +23,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatRelative } from "@/lib/format";
+import { noteSchema } from "@/lib/validators";
 
 type ConversationInfoPanelProps = {
   status: "OPEN" | "CLOSED" | "ARCHIVED";
@@ -70,6 +71,11 @@ export function ConversationInfoPanel({
   async function addNote() {
     const content = noteContent.trim();
     if (!content || savingNote) {
+      return;
+    }
+    const parsed = noteSchema.safeParse({ content });
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message ?? "Nota inválida");
       return;
     }
     setSavingNote(true);
@@ -288,6 +294,7 @@ export function ConversationInfoPanel({
               rows={2}
               className="resize-none text-sm"
               aria-label="Nueva nota"
+              maxLength={4000}
             />
             <Button
               variant="secondary"

@@ -47,7 +47,7 @@ export function Header({ collapsed, onToggleSidebar }: HeaderProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="size-9"
+              className="size-10 md:size-9"
               onClick={onToggleSidebar}
               aria-label={collapsed ? "Expandir menú" : "Colapsar menú"}
             />
@@ -60,12 +60,20 @@ export function Header({ collapsed, onToggleSidebar }: HeaderProps) {
 
       <div className="relative hidden max-w-md flex-1 sm:block">
         <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          type="search"
-          placeholder="Buscar clientes, conversaciones…"
-          className="pl-9"
-          aria-label="Buscar"
-        />
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Input
+                type="search"
+                placeholder="Buscar clientes, conversaciones…"
+                className="pl-9"
+                aria-label="Buscar"
+                disabled
+              />
+            }
+          />
+          <TooltipContent>Próximamente</TooltipContent>
+        </Tooltip>
       </div>
 
       <div className="ml-auto flex items-center gap-1.5">
@@ -84,7 +92,7 @@ export function Header({ collapsed, onToggleSidebar }: HeaderProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-9"
+                className="size-10 md:size-9"
                 aria-label="Notificaciones"
                 disabled
               />

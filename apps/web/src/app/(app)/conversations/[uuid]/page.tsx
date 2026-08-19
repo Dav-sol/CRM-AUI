@@ -198,7 +198,10 @@ export default function ConversationDetailPage() {
             <Link
               href="/conversations"
               aria-label="Volver a conversaciones"
-              className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "shrink-0 lg:hidden")}
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "icon" }),
+                "size-10 shrink-0 lg:hidden",
+              )}
             >
               <ArrowLeft />
             </Link>

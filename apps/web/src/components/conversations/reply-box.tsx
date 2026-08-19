@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, apiListQuickReplies } from "@/lib/api";
+import { replySchema } from "@/lib/validators";
 
 type ReplyBoxProps = {
   onSend: (content: string, quickReplyId?: string) => Promise<void>;
@@ -47,6 +48,11 @@ export function ReplyBox({ onSend }: ReplyBoxProps) {
     if (!text || sending) {
       return;
     }
+    const parsed = replySchema.safeParse({ content: text });
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message ?? "Mensaje inválido");
+      return;
+    }
     setSending(true);
     try {
       await onSend(text, quickReply?.uuid);
@@ -76,6 +82,7 @@ export function ReplyBox({ onSend }: ReplyBoxProps) {
           rows={2}
           className="min-h-11 resize-none"
           aria-label="Respuesta"
+          maxLength={4096}
           disabled={sending}
         />
         <Popover>

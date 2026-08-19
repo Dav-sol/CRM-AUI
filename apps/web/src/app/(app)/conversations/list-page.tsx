@@ -10,6 +10,7 @@ import {
 } from "@/components/conversations/conversation-list";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 const STATUS_TABS: { label: string; value: ConversationFilters["status"] }[] = [
@@ -42,12 +43,20 @@ export function ConversationsIndexPage() {
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <div className="relative w-full max-w-xs">
           <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Buscar conversación…"
-            className="pl-9"
-            aria-label="Buscar conversación"
-          />
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Input
+                  type="search"
+                  placeholder="Buscar conversación…"
+                  className="pl-9"
+                  aria-label="Buscar conversación"
+                  disabled
+                />
+              }
+            />
+            <TooltipContent>Próximamente</TooltipContent>
+          </Tooltip>
         </div>
         <div className="flex items-center gap-1 rounded-lg bg-muted p-1" role="tablist">
           {STATUS_TABS.map((tab) => (
