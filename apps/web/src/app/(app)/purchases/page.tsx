@@ -1,0 +1,1 @@
+export { PurchasesIndexPage as default } from "./list-page";

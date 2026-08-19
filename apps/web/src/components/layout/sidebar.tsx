@@ -25,8 +25,8 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard", available: true },
-  { label: "Clientes", icon: Users, available: false },
-  { label: "Compras", icon: ShoppingCart, available: false },
+  { label: "Clientes", icon: Users, href: "/customers", available: true },
+  { label: "Compras", icon: ShoppingCart, href: "/purchases", available: true },
   { label: "Campañas", icon: Megaphone, available: false },
   { label: "Automatizaciones", icon: Workflow, available: false },
   { label: "Conversaciones", icon: MessagesSquare, href: "/conversations", available: true },

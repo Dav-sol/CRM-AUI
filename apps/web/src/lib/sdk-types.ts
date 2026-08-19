@@ -1,6 +1,9 @@
 import type {
   assignConversationTag,
   createConversationNote,
+  createCustomer,
+  createProduct,
+  createPurchase,
   getConversation,
   getDashboardActivity,
   getDashboardCampaigns,
@@ -8,7 +11,10 @@ import type {
   listConversationNotes,
   listConversations,
   listConversationTags,
+  listCustomers,
   listMessages,
+  listProducts,
+  listPurchases,
   listQuickReplies,
   login,
   me,
@@ -48,3 +54,15 @@ export type DashboardCampaigns = NonNullable<SuccessData<typeof getDashboardCamp
 export type DashboardActivityItem = NonNullable<
   SuccessData<typeof getDashboardActivity>
 >[number];
+
+export type CustomerItem = SuccessData<typeof listCustomers>[number];
+export type CustomerListParams = Parameters<typeof listCustomers>[0];
+export type CreateCustomerBody = Parameters<typeof createCustomer>[0];
+
+export type ProductItem = SuccessData<typeof listProducts>[number];
+export type ProductListParams = Parameters<typeof listProducts>[0];
+export type CreateProductBody = Parameters<typeof createProduct>[0];
+
+export type PurchaseItem = SuccessData<typeof listPurchases>[number];
+export type PurchaseListParams = Parameters<typeof listPurchases>[0];
+export type CreatePurchaseBody = Parameters<typeof createPurchase>[0];

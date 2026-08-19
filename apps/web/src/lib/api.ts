@@ -4,6 +4,8 @@ import {
   assignConversationTag,
   closeConversation,
   createConversationNote,
+  createCustomer,
+  createPurchase,
   getConversation,
   getDashboardActivity,
   getDashboardCampaigns,
@@ -11,7 +13,10 @@ import {
   listConversationNotes,
   listConversations,
   listConversationTags,
+  listCustomers,
   listMessages,
+  listProducts,
+  listPurchases,
   listQuickReplies,
   login,
   logout,
@@ -26,9 +31,14 @@ import { authStore, notifySessionExpired, refreshAccessToken } from "./auth";
 import type {
   AssignTagArgs,
   ConversationListParams,
+  CreateCustomerBody,
   CreateNoteBody,
+  CreatePurchaseBody,
+  CustomerListParams,
   LoginData,
   MeData,
+  ProductListParams,
+  PurchaseListParams,
   ReplyBody,
 } from "./sdk-types";
 
@@ -88,6 +98,28 @@ async function call<T extends SdkResult>(
 function unwrap<T extends SdkFn>(fn: T, res: Awaited<ReturnType<T>>): SdkData<T> {
   if (res.status >= 200 && res.status < 300) {
     return ((res.data as { data?: unknown } | null)?.data ?? res.data) as SdkData<T>;
+  }
+  const error = (res.data ?? {}) as { code?: string; message?: string };
+  throw new ApiError(
+    res.status,
+    error.code ?? "UNKNOWN_ERROR",
+    error.message ?? "Error inesperado del servidor",
+  );
+}
+
+type ListSdkFn = (...args: never[]) => Promise<{
+  status: number;
+  data: { data?: unknown[]; meta?: unknown } | null;
+}>;
+
+async function callList<T extends ListSdkFn>(
+  run: (options: RequestInit) => Promise<Awaited<ReturnType<T>>>,
+): Promise<NonNullable<Extract<Awaited<ReturnType<T>>, { status: 200 | 201 }>["data"]>> {
+  const res = await call(run);
+  if (res.status >= 200 && res.status < 300) {
+    return res.data as NonNullable<
+      Extract<Awaited<ReturnType<T>>, { status: 200 | 201 }>["data"]
+    >;
   }
   const error = (res.data ?? {}) as { code?: string; message?: string };
   throw new ApiError(
@@ -231,4 +263,36 @@ export async function apiDashboardCampaigns(): Promise<SdkData<typeof getDashboa
 export async function apiDashboardActivity(): Promise<SdkData<typeof getDashboardActivity>> {
   const res = await call((options) => getDashboardActivity(options));
   return unwrap(getDashboardActivity, res);
+}
+
+export async function apiListCustomers(
+  params?: CustomerListParams,
+): Promise<NonNullable<Extract<Awaited<ReturnType<typeof listCustomers>>, { status: 200 }>["data"]>> {
+  return callList((options) => listCustomers(params, options));
+}
+
+export async function apiCreateCustomer(
+  body: CreateCustomerBody,
+): Promise<SdkData<typeof createCustomer>> {
+  const res = await call((options) => createCustomer(body, options));
+  return unwrap(createCustomer, res);
+}
+
+export async function apiListProducts(
+  params?: ProductListParams,
+): Promise<NonNullable<Extract<Awaited<ReturnType<typeof listProducts>>, { status: 200 }>["data"]>> {
+  return callList((options) => listProducts(params, options));
+}
+
+export async function apiListPurchases(
+  params?: PurchaseListParams,
+): Promise<NonNullable<Extract<Awaited<ReturnType<typeof listPurchases>>, { status: 200 }>["data"]>> {
+  return callList((options) => listPurchases(params, options));
+}
+
+export async function apiCreatePurchase(
+  body: CreatePurchaseBody,
+): Promise<SdkData<typeof createPurchase>> {
+  const res = await call((options) => createPurchase(body, options));
+  return unwrap(createPurchase, res);
 }

@@ -1,0 +1,1 @@
+export { CustomersIndexPage as default } from "./list-page";
