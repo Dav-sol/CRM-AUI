@@ -7,7 +7,10 @@
     "doc": "docs"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "turbo run test --filter=web",
+    "lint": "turbo run lint --filter=web",
+    "typecheck": "turbo run typecheck --filter=web",
+    "build:web": "turbo run build --filter=web",
     "api:lint": "redocly lint --config .redocly.yaml",
     "api:bundle": "redocly bundle specs/api/openapi.yaml -o specs/api/dist/openapi.yaml",
     "api:docs": "redocly preview-docs specs/api/openapi.yaml",
@@ -19,6 +22,7 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "packageManager": "pnpm@11.18.0",
   "devDependencies": {
     "@nestjs/cli": "^11.0.24",
     "@openapitools/openapi-generator-cli": "^2.40.1",
