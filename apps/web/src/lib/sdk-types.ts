@@ -26,6 +26,7 @@ import type {
   login,
   me,
   replyConversation,
+  updateProduct,
 } from "@automatize-it/sdk";
 
 type SuccessData<T extends (...args: never[]) => Promise<{ status: number; data: unknown }>> =
@@ -69,6 +70,8 @@ export type CreateCustomerBody = Parameters<typeof createCustomer>[0];
 export type ProductItem = SuccessData<typeof listProducts>[number];
 export type ProductListParams = Parameters<typeof listProducts>[0];
 export type CreateProductBody = Parameters<typeof createProduct>[0];
+export type UpdateProductBody = Parameters<typeof updateProduct>[1];
+export type ProductStatus = ProductItem["status"];
 
 export type PurchaseItem = SuccessData<typeof listPurchases>[number];
 export type PurchaseListParams = Parameters<typeof listPurchases>[0];

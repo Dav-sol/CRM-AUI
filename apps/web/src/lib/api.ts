@@ -9,6 +9,7 @@ import {
   createCampaign,
   createConversationNote,
   createCustomer,
+  createProduct,
   createPurchase,
   getAutomation,
   getCommercialCycle,
@@ -36,6 +37,8 @@ import {
   replyConversation,
   resumeCampaign,
   transferConversation,
+  updateProduct,
+  deleteProduct,
 } from "@automatize-it/sdk";
 
 import { authStore, notifySessionExpired, refreshAccessToken } from "./auth";
@@ -48,6 +51,7 @@ import type {
   CreateCampaignBody,
   CreateCustomerBody,
   CreateNoteBody,
+  CreateProductBody,
   CreatePurchaseBody,
   CustomerListParams,
   LoginData,
@@ -55,6 +59,7 @@ import type {
   ProductListParams,
   PurchaseListParams,
   ReplyBody,
+  UpdateProductBody,
 } from "./sdk-types";
 
 export class ApiError extends Error {
@@ -297,6 +302,26 @@ export async function apiListProducts(
   params?: ProductListParams,
 ): Promise<NonNullable<Extract<Awaited<ReturnType<typeof listProducts>>, { status: 200 }>["data"]>> {
   return callList((options) => listProducts(params, options));
+}
+
+export async function apiCreateProduct(
+  body: CreateProductBody,
+): Promise<SdkData<typeof createProduct>> {
+  const res = await call((options) => createProduct(body, options));
+  return unwrap(createProduct, res);
+}
+
+export async function apiUpdateProduct(
+  id: string,
+  body: UpdateProductBody,
+): Promise<SdkData<typeof updateProduct>> {
+  const res = await call((options) => updateProduct(id, body, options));
+  return unwrap(updateProduct, res);
+}
+
+export async function apiDeleteProduct(id: string): Promise<SdkData<typeof deleteProduct>> {
+  const res = await call((options) => deleteProduct(id, options));
+  return unwrap(deleteProduct, res);
 }
 
 export async function apiListPurchases(

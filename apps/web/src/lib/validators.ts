@@ -129,6 +129,34 @@ export const campaignSchema = z.object({
 
 export type CampaignFormValues = z.output<typeof campaignSchema>;
 
+export const productSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .min(1, "Ingresá el código del producto")
+    .max(50, "El código no puede superar los 50 caracteres"),
+  name: z
+    .string()
+    .trim()
+    .min(1, "Ingresá el nombre del producto")
+    .max(200, "El nombre no puede superar los 200 caracteres"),
+  category: z
+    .string()
+    .trim()
+    .max(100, "La categoría no puede superar los 100 caracteres")
+    .optional()
+    .or(z.literal("")),
+  status: z.enum(["ACTIVE", "INACTIVE"]),
+});
+
+export type ProductFormValues = z.output<typeof productSchema>;
+export type ProductFormInput = z.input<typeof productSchema>;
+
+export const PRODUCT_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Activo",
+  INACTIVE: "Inactivo",
+};
+
 export const CAMPAIGN_STATUS_LABELS: Record<string, string> = {
   DRAFT: "Borrador",
   ACTIVE: "Activa",

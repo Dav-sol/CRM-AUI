@@ -1,0 +1,1 @@
+export { ProductsIndexPage as default } from "./list-page";
