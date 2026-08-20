@@ -62,7 +62,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
           const content = (
             <span
               className={cn(
-                "flex h-9 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors duration-150 motion-reduce:transition-none",
+                "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors duration-150 motion-reduce:transition-none md:h-9",
                 collapsed && "justify-center px-0",
                 active && "bg-sidebar-accent text-sidebar-accent-foreground",
                 !active &&
@@ -100,6 +100,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
             <Link
               key={item.label}
               href={item.href!}
+              aria-label={collapsed ? item.label : undefined}
               aria-current={active ? "page" : undefined}
               className="block"
             >

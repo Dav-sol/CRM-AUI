@@ -6,18 +6,30 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { status } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
+  const isMobile = useIsMobile();
+  const [collapsed, setCollapsed] = useState(() => isMobile);
+  const [snapshot, setSnapshot] = useState({ isMobile, pathname });
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.replace("/login");
     }
   }, [status, router, pathname]);
+
+  if (snapshot.isMobile !== isMobile || snapshot.pathname !== pathname) {
+    setSnapshot({ isMobile, pathname });
+    if (isMobile) {
+      setCollapsed(true);
+    } else if (snapshot.isMobile !== isMobile) {
+      setCollapsed(false);
+    }
+  }
 
   if (status === "loading") {
     return (
