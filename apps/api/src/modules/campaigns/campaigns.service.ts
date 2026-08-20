@@ -123,6 +123,9 @@ export class CampaignsService {
         description: dto.description,
         type: dto.type,
         template: dto.template,
+        templateD3: dto.templateD3,
+        templateD180: dto.templateD180,
+        templateD365: dto.templateD365,
         segment: dto.segment
           ? (dto.segment as Prisma.InputJsonValue)
           : undefined,
@@ -252,6 +255,9 @@ export class CampaignsService {
         description: dto.description,
         type: dto.type,
         template: dto.template,
+        templateD3: dto.templateD3,
+        templateD180: dto.templateD180,
+        templateD365: dto.templateD365,
         segment: dto.segment
           ? (dto.segment as Prisma.InputJsonValue)
           : undefined,

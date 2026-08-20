@@ -130,6 +130,9 @@ describe('CampaignsService', () => {
           description: undefined,
           type: 'MANUAL',
           template: 'Hola {customerName}',
+          templateD3: undefined,
+          templateD180: undefined,
+          templateD365: undefined,
           segment: undefined,
           startAt: undefined,
           status: 'DRAFT',
@@ -154,6 +157,28 @@ describe('CampaignsService', () => {
         status: 'DRAFT',
         organizationId: 'org-1',
         createdAt: expect.any(Date) as unknown,
+      });
+    });
+
+    it('persists per-stage templates when provided (AU-005)', async () => {
+      prisma.campaign.create.mockResolvedValue(campaignRow());
+
+      await service.create(orgUser, {
+        name: 'Mi campaña',
+        template: 'base',
+        templateD3: 'd3',
+        templateD180: 'd180',
+        templateD365: 'd365',
+        type: 'REPURCHASE',
+      });
+
+      expect(prisma.campaign.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          template: 'base',
+          templateD3: 'd3',
+          templateD180: 'd180',
+          templateD365: 'd365',
+        }),
       });
     });
 

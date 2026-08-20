@@ -191,7 +191,14 @@ export class WhatsappService {
           },
         },
         organization: { select: { name: true } },
-        campaign: { select: { template: true } },
+        campaign: {
+          select: {
+            template: true,
+            templateD3: true,
+            templateD180: true,
+            templateD365: true,
+          },
+        },
       },
       orderBy: { scheduledDate: 'asc' },
       take: SCHEDULER_BATCH_SIZE,
@@ -209,6 +216,7 @@ export class WhatsappService {
     purchaseId: string;
     scheduledDate: Date;
     purchase: {
+      purchaseDate: Date;
       customer: {
         id: string;
         uuid: string;
@@ -219,7 +227,12 @@ export class WhatsappService {
       product: { name: string } | null;
     };
     organization: { name: string } | null;
-    campaign?: { template: string } | null;
+    campaign?: {
+      template: string;
+      templateD3: string | null;
+      templateD180: string | null;
+      templateD365: string | null;
+    } | null;
   }): Promise<void> {
     const customer = automation.purchase.customer;
     const content = this.buildAutomaticContent(automation);
@@ -375,14 +388,33 @@ export class WhatsappService {
   }
 
   private buildAutomaticContent(automation: {
+    scheduledDate: Date;
     purchase: {
+      purchaseDate: Date;
       customer: { name: string };
       product: { name: string } | null;
     };
     organization: { name: string } | null;
-    campaign?: { template: string } | null;
+    campaign?: {
+      template: string;
+      templateD3: string | null;
+      templateD180: string | null;
+      templateD365: string | null;
+    } | null;
   }): string {
-    const template = automation.campaign?.template ?? AUTOMATIC_TEMPLATE;
+    // AU-005 stages: +3 días, +6 meses, +12 meses. La plantilla de etapa
+    // gana; si no está definida se usa la plantilla base de la campaña.
+    const days = Math.ceil(
+      (automation.scheduledDate.getTime() -
+        automation.purchase.purchaseDate.getTime()) /
+        86_400_000,
+    );
+    const campaign = automation.campaign;
+    const stageTemplate =
+      (campaign && days <= 3 && campaign.templateD3) ||
+      (campaign && days <= 180 && campaign.templateD180) ||
+      (campaign && days <= 365 && campaign.templateD365);
+    const template = stageTemplate || campaign?.template || AUTOMATIC_TEMPLATE;
     return template
       .replace('{customerName}', automation.purchase.customer.name)
       .replace('{productName}', automation.purchase.product?.name ?? '')

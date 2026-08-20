@@ -32,6 +32,24 @@ export type CreateCampaignBody = {
      * @maxLength 4096
      */
   template: string;
+  /**
+     * Message for the +3 days stage. When defined, replaces `template`
+     * for that stage.
+     * @maxLength 4096
+     */
+  templateD3?: string;
+  /**
+     * Message for the +6 months stage. When defined, replaces `template`
+     * for that stage.
+     * @maxLength 4096
+     */
+  templateD180?: string;
+  /**
+     * Message for the +12 months stage. When defined, replaces `template`
+     * for that stage.
+     * @maxLength 4096
+     */
+  templateD365?: string;
   /** At least one criterion required when present. */
   segment?: CreateCampaignBodySegment;
   /** Optional scheduled start (automations are scheduled for max(startAt, now)). */

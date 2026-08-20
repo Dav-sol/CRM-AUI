@@ -110,6 +110,24 @@ export const campaignSchema = z.object({
     .trim()
     .min(1, "Ingresá el mensaje de la campaña")
     .max(4096, "El mensaje no puede superar los 4096 caracteres"),
+  templateD3: z
+    .string()
+    .trim()
+    .max(4096, "El mensaje no puede superar los 4096 caracteres")
+    .optional()
+    .or(z.literal("")),
+  templateD180: z
+    .string()
+    .trim()
+    .max(4096, "El mensaje no puede superar los 4096 caracteres")
+    .optional()
+    .or(z.literal("")),
+  templateD365: z
+    .string()
+    .trim()
+    .max(4096, "El mensaje no puede superar los 4096 caracteres")
+    .optional()
+    .or(z.literal("")),
   startAt: z
     .string()
     .min(1, "Ingresá la fecha de inicio")

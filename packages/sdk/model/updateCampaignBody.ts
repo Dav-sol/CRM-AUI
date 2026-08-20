@@ -32,6 +32,12 @@ export type UpdateCampaignBody = {
      * @maxLength 4096
      */
   template?: string;
+  /** Message for the +3 days stage. When defined, replaces `template` for that stage. */
+  templateD3?: string;
+  /** Message for the +6 months stage. When defined, replaces `template` for that stage. */
+  templateD180?: string;
+  /** Message for the +12 months stage. When defined, replaces `template` for that stage. */
+  templateD365?: string;
   /** Customer segment filter for campaign automations. All criteria combine with AND; at least one criterion is required when the segment is provided. */
   segment?: UpdateCampaignBodySegment;
   startAt?: string;

@@ -115,6 +115,7 @@ describe('WhatsappService', () => {
       purchaseId: 'pu-1',
       scheduledDate: new Date(now),
       purchase: {
+        purchaseDate: new Date(new Date(now).getTime() - 3 * 86_400_000),
         customer: {
           id: 'cu-1',
           uuid: 'cuu-1',
@@ -151,6 +152,79 @@ describe('WhatsappService', () => {
           uuid: 'msg-uuid-1',
         }),
       },
+    });
+
+    it('uses the per-stage campaign template for +3d/+6m/+12m (AU-005)', async () => {
+      const withCampaign = (days: number) => ({
+        ...dueAutomation,
+        scheduledDate: new Date(
+          dueAutomation.purchase.purchaseDate.getTime() + days * 86_400_000,
+        ),
+        campaign: {
+          template: 'base {customerName}',
+          templateD3: 'd3 {customerName}',
+          templateD180: 'd180 {customerName}',
+          templateD365: 'd365 {customerName}',
+        },
+      });
+      const cases = [
+        { days: 3, expected: 'd3 Juan Perez' },
+        { days: 180, expected: 'd180 Juan Perez' },
+        { days: 365, expected: 'd365 Juan Perez' },
+      ];
+      for (const entry of cases) {
+        const due = withCampaign(entry.days);
+        prisma.automation.findMany.mockResolvedValue([due]);
+        let txMessageCreate: jest.Mock | undefined;
+        prisma.$transaction.mockImplementation(
+          async (fn: (tx: unknown) => Promise<unknown>) => {
+            const tx = txMock();
+            txMessageCreate = tx.message.create;
+            return fn(tx);
+          },
+        );
+        provider.sendMessage.mockResolvedValue({
+          providerMessageId: 'wamid-1',
+          providerConversationId: '573000000000',
+          status: 'SENT',
+        });
+        prisma.message.update.mockResolvedValue({});
+
+        await service.executeDueAutomations();
+
+        expect(provider.sendMessage).toHaveBeenCalledWith(
+          '573000000000',
+          expect.stringContaining(entry.expected),
+        );
+      }
+    });
+
+    it('falls back to the campaign base template when the stage template is missing', async () => {
+      const due = {
+        ...dueAutomation,
+        scheduledDate: new Date(now),
+        campaign: { template: 'base {customerName}' },
+      };
+      prisma.automation.findMany.mockResolvedValue([due]);
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = txMock();
+          return fn(tx);
+        },
+      );
+      provider.sendMessage.mockResolvedValue({
+        providerMessageId: 'wamid-1',
+        providerConversationId: '573000000000',
+        status: 'SENT',
+      });
+      prisma.message.update.mockResolvedValue({});
+
+      await service.executeDueAutomations();
+
+      expect(provider.sendMessage).toHaveBeenCalledWith(
+        '573000000000',
+        expect.stringContaining('base Juan Perez'),
+      );
     });
 
     it('executes a due automation, creates an OUTBOUND AUTOMATIC message and marks it SENT', async () => {

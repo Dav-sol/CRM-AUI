@@ -38,6 +38,24 @@ export class UpdateCampaignDto {
   @MaxLength(4096)
   template?: string;
 
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4096)
+  templateD3?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4096)
+  templateD180?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4096)
+  templateD365?: string;
+
   @ValidateIf((_o, value) => value !== undefined)
   @Validate(SegmentHasCriterionConstraint)
   @ValidateNested()

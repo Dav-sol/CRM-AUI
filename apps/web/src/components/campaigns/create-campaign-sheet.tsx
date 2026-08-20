@@ -36,6 +36,9 @@ const EMPTY_FORM: CampaignFormValues = {
   description: "",
   type: "AUTOMATIC",
   template: "",
+  templateD3: "",
+  templateD180: "",
+  templateD365: "",
   startAt: "",
   segment: undefined,
 };
@@ -116,6 +119,9 @@ export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
         description: values.description || undefined,
         type: values.type,
         template: values.template,
+        templateD3: values.templateD3?.trim() || undefined,
+        templateD180: values.templateD180?.trim() || undefined,
+        templateD365: values.templateD365?.trim() || undefined,
         startAt: values.startAt ? new Date(values.startAt).toISOString() : undefined,
         segment,
       });
@@ -251,6 +257,46 @@ export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
             <p className="text-xs text-muted-foreground">
               Podés usar {"{customerName}"}, {"{productName}"} y {"{organizationName}"} como
               variables.
+            </p>
+          </div>
+
+          <div className="space-y-3 rounded-lg border border-border/60 p-3">
+            <p className="text-sm font-medium">Mensajes por etapa (opcional)</p>
+            <div className="space-y-2">
+              <Label htmlFor="campaign-template-d3">+3 días</Label>
+              <Textarea
+                id="campaign-template-d3"
+                placeholder="Agradecimiento y cuidados tras la compra…"
+                rows={2}
+                maxLength={4096}
+                className="resize-none text-sm"
+                {...register("templateD3")}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="campaign-template-d180">+6 meses</Label>
+              <Textarea
+                id="campaign-template-d180"
+                placeholder="Chequeo gratuito de la batería…"
+                rows={2}
+                maxLength={4096}
+                className="resize-none text-sm"
+                {...register("templateD180")}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="campaign-template-d365">+12 meses</Label>
+              <Textarea
+                id="campaign-template-d365"
+                placeholder="Invitación a recompra…"
+                rows={2}
+                maxLength={4096}
+                className="resize-none text-sm"
+                {...register("templateD365")}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Si una etapa queda vacía, se usa el mensaje principal.
             </p>
           </div>
 
