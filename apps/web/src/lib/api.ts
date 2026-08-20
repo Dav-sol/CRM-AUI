@@ -5,10 +5,12 @@ import {
   assignConversationTag,
   cancelAutomation,
   cancelCampaign,
+  cancelImportJob,
   closeConversation,
   createCampaign,
   createConversationNote,
   createCustomer,
+  createImportJob,
   createProduct,
   createPurchase,
   getAutomation,
@@ -17,6 +19,7 @@ import {
   getDashboardActivity,
   getDashboardCampaigns,
   getDashboardSummary,
+  getImportJob,
   listAutomations,
   listCampaigns,
   listCommercialCycles,
@@ -24,6 +27,7 @@ import {
   listConversations,
   listConversationTags,
   listCustomers,
+  listImportJobs,
   listMessages,
   listProducts,
   listPurchases,
@@ -36,6 +40,7 @@ import {
   reopenConversation,
   replyConversation,
   resumeCampaign,
+  retryImportJob,
   transferConversation,
   updateProduct,
   deleteProduct,
@@ -50,10 +55,12 @@ import type {
   ConversationListParams,
   CreateCampaignBody,
   CreateCustomerBody,
+  CreateImportJobBody,
   CreateNoteBody,
   CreateProductBody,
   CreatePurchaseBody,
   CustomerListParams,
+  ImportJobListParams,
   LoginData,
   MeData,
   ProductListParams,
@@ -409,4 +416,32 @@ export async function apiGetCommercialCycle(
 ): Promise<SdkData<typeof getCommercialCycle>> {
   const res = await call((options) => getCommercialCycle(uuid, options));
   return unwrap(getCommercialCycle, res);
+}
+
+export async function apiListImportJobs(
+  params?: ImportJobListParams,
+): Promise<NonNullable<Extract<Awaited<ReturnType<typeof listImportJobs>>, { status: 200 }>["data"]>> {
+  return callList((options) => listImportJobs(params, options));
+}
+
+export async function apiCreateImportJob(
+  body: CreateImportJobBody,
+): Promise<SdkData<typeof createImportJob>> {
+  const res = await call((options) => createImportJob(body, options));
+  return unwrap(createImportJob, res);
+}
+
+export async function apiGetImportJob(uuid: string): Promise<SdkData<typeof getImportJob>> {
+  const res = await call((options) => getImportJob(uuid, options));
+  return unwrap(getImportJob, res);
+}
+
+export async function apiCancelImportJob(uuid: string): Promise<SdkData<typeof cancelImportJob>> {
+  const res = await call((options) => cancelImportJob(uuid, options));
+  return unwrap(cancelImportJob, res);
+}
+
+export async function apiRetryImportJob(uuid: string): Promise<SdkData<typeof retryImportJob>> {
+  const res = await call((options) => retryImportJob(uuid, options));
+  return unwrap(retryImportJob, res);
 }

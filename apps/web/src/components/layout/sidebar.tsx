@@ -2,6 +2,7 @@
 
 import {
   BarChart3,
+  FileUp,
   LayoutDashboard,
   Megaphone,
   MessagesSquare,
@@ -31,6 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Productos", icon: Package, href: "/products", available: true },
   { label: "Campañas", icon: Megaphone, href: "/campaigns", available: true },
   { label: "Automatizaciones", icon: Workflow, href: "/automations", available: true },
+  { label: "Importaciones", icon: FileUp, href: "/imports", available: true },
   { label: "Conversaciones", icon: MessagesSquare, href: "/conversations", available: true },
   { label: "Reportes", icon: BarChart3, available: false },
   { label: "Configuración", icon: Settings, available: false },

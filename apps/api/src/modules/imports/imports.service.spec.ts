@@ -398,6 +398,25 @@ describe('ImportsService', () => {
       );
     });
 
+    it('retries a FAILED job reprocessing the whole file', async () => {
+      const failed = { ...job, status: 'FAILED', errors: null };
+      prisma.import.findFirst.mockResolvedValue(failed);
+      prisma.import.count.mockResolvedValue(0);
+      prisma.import.update.mockResolvedValue({ ...failed, status: 'PENDING' });
+
+      await service.retry(orgUser, 'job-1');
+
+      expect(prisma.import.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'PENDING' }),
+        }),
+      );
+      expect(processor.process).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'i-1' }),
+        undefined,
+      );
+    });
+
     it('rejects retry of a COMPLETED job', async () => {
       prisma.import.findFirst.mockResolvedValue({
         ...job,

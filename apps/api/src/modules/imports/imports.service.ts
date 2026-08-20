@@ -392,16 +392,19 @@ export class ImportsService {
       });
     }
 
-    const retryRows = new Set(
-      ((job.errors as { rows?: { row: number }[] } | null)?.rows ?? [])
-        .map((entry) => entry.row)
-        .filter((row): row is number => typeof row === 'number'),
-    );
+    const isStructuralRetry = job.status === 'FAILED';
+    const retryRows = isStructuralRetry
+      ? undefined
+      : new Set(
+          ((job.errors as { rows?: { row: number }[] } | null)?.rows ?? [])
+            .map((entry) => entry.row)
+            .filter((row): row is number => typeof row === 'number'),
+        );
 
     const updated = await this.prisma.import.update({
       where: { id: job.id },
       data: {
-        status: 'PROCESSING',
+        status: isStructuralRetry ? 'PENDING' : 'PROCESSING',
         startedAt: new Date(),
         completedAt: null,
         processedRecords: 0,
@@ -416,7 +419,7 @@ export class ImportsService {
       outcome: 'success',
       userId: user.id,
       organizationId: job.organizationId,
-      description: `import retried uuid=${job.uuid} rows=${retryRows.size}`,
+      description: `import retried uuid=${job.uuid} rows=${retryRows?.size ?? 'all'}`,
     });
 
     void this.processor.process(updated, retryRows);

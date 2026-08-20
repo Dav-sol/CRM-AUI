@@ -4,6 +4,7 @@ import type {
   createCampaign,
   createConversationNote,
   createCustomer,
+  createImportJob,
   createProduct,
   createPurchase,
   getAutomation,
@@ -12,6 +13,7 @@ import type {
   getDashboardActivity,
   getDashboardCampaigns,
   getDashboardSummary,
+  getImportJob,
   listAutomations,
   listCampaigns,
   listCommercialCycles,
@@ -19,6 +21,7 @@ import type {
   listConversations,
   listConversationTags,
   listCustomers,
+  listImportJobs,
   listMessages,
   listProducts,
   listPurchases,
@@ -89,3 +92,9 @@ export type CancelAutomationResult = NonNullable<SuccessData<typeof cancelAutoma
 export type CommercialCycleItem = SuccessData<typeof listCommercialCycles>[number];
 export type CommercialCycleListParams = Parameters<typeof listCommercialCycles>[0];
 export type CommercialCycleDetail = NonNullable<SuccessData<typeof getCommercialCycle>>;
+
+export type ImportJobItem = SuccessData<typeof listImportJobs>[number];
+export type ImportJobListParams = Parameters<typeof listImportJobs>[0];
+export type ImportJobDetail = NonNullable<SuccessData<typeof getImportJob>>;
+export type CreateImportJobBody = Parameters<typeof createImportJob>[0];
+export type ImportErrorSample = ImportJobDetail["errorsSummary"]["samples"][number];

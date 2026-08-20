@@ -186,3 +186,25 @@ export const COMMERCIAL_CYCLE_STATUS_LABELS: Record<string, string> = {
   FINISHED: "Finalizado",
   CANCELLED: "Cancelado",
 };
+
+export const IMPORT_TYPE_LABELS: Record<string, string> = {
+  CUSTOMERS: "Clientes",
+  PRODUCTS: "Productos",
+  PURCHASES: "Compras",
+};
+
+export const IMPORT_STATUS_LABELS: Record<string, string> = {
+  PENDING: "Pendiente",
+  VALIDATING: "Validando",
+  PROCESSING: "Procesando",
+  COMPLETED: "Completada",
+  FAILED: "Fallida",
+  PARTIAL: "Con errores",
+  CANCELLED: "Cancelada",
+};
+
+export const ACTIVE_IMPORT_STATUSES = new Set([
+  "PENDING",
+  "VALIDATING",
+  "PROCESSING",
+]);

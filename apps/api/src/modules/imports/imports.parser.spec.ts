@@ -63,6 +63,85 @@ describe('imports.parser', () => {
       );
       expect(result.rows[0].cells['phone']).toBe('+593 99');
     });
+
+    it('maps Baterías del Caribe DIRECTORIO headers (nomcli/telecli/mail_fe/direcli)', async () => {
+      const result = await parseImportFile(
+        bufferFromCsv(
+          'codcli,nomcli,telecli,mail_fe,direcli,ciudad\n11771,.ANA ACKLE GUERRERO,3046776023,ana@example.com,CR 20 27 39,BARRANQUILLA\n',
+        ),
+        'csv',
+        'CUSTOMERS',
+      );
+      expect(result.issues).toEqual([]);
+      expect(result.rows[0].cells).toEqual({
+        codcli: '11771',
+        name: '.ANA ACKLE GUERRERO',
+        phone: '3046776023',
+        email: 'ana@example.com',
+        address: 'CR 20 27 39',
+        city: 'BARRANQUILLA',
+      });
+    });
+
+    it('maps aESTADVENTAS headers (codmer/producto) and prefers nomcategoria over categoria', async () => {
+      const result = await parseImportFile(
+        bufferFromCsv(
+          'codmer,producto,categoria,nomcategoria,cantidad\n1202,22850 BATERIA DUNCAN,5,DUNCAN,1\n',
+        ),
+        'csv',
+        'PRODUCTS',
+      );
+      expect(result.issues).toEqual([]);
+      expect(result.rows[0].cells).toEqual({
+        code: '1202',
+        name: '22850 BATERIA DUNCAN',
+        category: 'DUNCAN',
+        quantity: '1',
+      });
+    });
+
+    it('maps VENTAS_XPROD headers (numero/cod_cliente/sale/venta) for PURCHASES', async () => {
+      const result = await parseImportFile(
+        bufferFromCsv(
+          'codigo,producto,fecha,sale,cod_cliente,numero,venta\n1202,22850 BATERIA DUNCAN,2026-04-16,1,10000,2551,317322.6\n',
+        ),
+        'csv',
+        'PURCHASES',
+      );
+      expect(result.issues).toEqual([]);
+      expect(result.rows[0].cells).toEqual({
+        code: '1202',
+        name: '22850 BATERIA DUNCAN',
+        purchaseDate: '2026-04-16',
+        quantity: '1',
+        codcli: '10000',
+        invoiceNumber: '2551',
+        value: '317322.6',
+      });
+    });
+
+    it('resolves duplicate non-required columns with last-wins (VENTAS_XPROD cliente/razon_social)', async () => {
+      const result = await parseImportFile(
+        bufferFromCsv(
+          'codigo,producto,fecha,sale,cod_cliente,numero,cliente,razon_social,venta\n1202,22850 BATERIA DUNCAN,2026-04-16,1,10000,2551,JUAN PEREZ,JUAN PEREZ SA,317322.6\n',
+        ),
+        'csv',
+        'PURCHASES',
+      );
+      expect(result.issues).toEqual([]);
+      expect(result.rows[0].cells['name']).toBe('JUAN PEREZ SA');
+    });
+
+    it('keeps failing on duplicate REQUIRED columns (name for PRODUCTS)', async () => {
+      const result = await parseImportFile(
+        bufferFromCsv('codigo,nombre,cliente\n1202,A,B\n'),
+        'csv',
+        'PRODUCTS',
+      );
+      expect(
+        result.issues.some((issue) => issue.message.includes('duplicate column')),
+      ).toBe(true);
+    });
   });
 
   describe('parseImportFile XLSX', () => {

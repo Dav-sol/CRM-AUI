@@ -1,0 +1,1 @@
+export { ImportsIndexPage as default } from "./list-page";

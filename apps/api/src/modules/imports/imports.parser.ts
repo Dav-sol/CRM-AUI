@@ -75,6 +75,17 @@ const HEADER_ALIASES: Record<string, string> = {
   codigoproducto: 'code',
   numerofactura: 'invoiceNumber',
   correoelectronico: 'email',
+  codmer: 'code',
+  nomcli: 'name',
+  producto: 'name',
+  telecli: 'phone',
+  mail_fe: 'email',
+  direcli: 'address',
+  nomcategoria: 'category',
+  numero: 'invoiceNumber',
+  cod_cliente: 'codcli',
+  sale: 'quantity',
+  venta: 'value',
 };
 
 const REQUIRED_COLUMNS: Record<ImportType, string[]> = {
@@ -150,13 +161,21 @@ function mapHeaders(
       continue;
     }
     if (seen.has(canonical)) {
-      issues.push({
-        row: 1,
-        field: 'header',
-        message: `duplicate column: ${header}`,
-        raw: header,
-      });
-      columnIndexes.push('');
+      if (REQUIRED_COLUMNS[type].includes(canonical)) {
+        issues.push({
+          row: 1,
+          field: 'header',
+          message: `duplicate column: ${header}`,
+          raw: header,
+        });
+        columnIndexes.push('');
+        continue;
+      }
+      const previous = columnIndexes.lastIndexOf(canonical);
+      if (previous !== -1) {
+        columnIndexes[previous] = '';
+      }
+      columnIndexes.push(canonical);
       continue;
     }
     seen.add(canonical);
