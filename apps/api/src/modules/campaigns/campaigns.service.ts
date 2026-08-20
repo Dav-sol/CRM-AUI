@@ -343,16 +343,66 @@ export class CampaignsService {
       }
 
       for (let i = 0; i < rows.length; i += CAMPAIGN_BATCH_SIZE) {
-        await tx.automation.createMany({
-          data: rows.slice(i, i + CAMPAIGN_BATCH_SIZE).map((row) => ({
+        const batch = rows.slice(i, i + CAMPAIGN_BATCH_SIZE);
+        const cycles = await tx.commercialCycle.findMany({
+          where: {
+            purchaseId: { in: batch.map((row) => row.purchaseId) },
+            deletedAt: null,
+          },
+          select: { id: true, status: true, purchaseId: true },
+        });
+        const cycleByPurchase = new Map(
+          cycles.map((cycle) => [cycle.purchaseId, cycle]),
+        );
+
+        const automationRows: Array<{
+          organizationId: string;
+          purchaseId: string;
+          campaignId: string;
+          commercialCycleId: string;
+          scheduledDate: Date;
+          status: 'SCHEDULED';
+          priority: number;
+        }> = [];
+
+        for (const row of batch) {
+          const existing = cycleByPurchase.get(row.purchaseId);
+          let cycleId: string;
+          if (!existing) {
+            const created = await tx.commercialCycle.create({
+              data: {
+                purchaseId: row.purchaseId,
+                status: 'ACTIVE',
+                startDate: row.purchaseDate,
+              },
+              select: { id: true },
+            });
+            cycleId = created.id;
+          } else if (existing.status === 'ACTIVE') {
+            cycleId = existing.id;
+          } else {
+            await tx.commercialCycle.update({
+              where: { id: existing.id },
+              data: {
+                status: 'ACTIVE',
+                startDate: row.purchaseDate,
+                endDate: null,
+              },
+            });
+            cycleId = existing.id;
+          }
+          automationRows.push({
             organizationId,
             purchaseId: row.purchaseId,
             campaignId: campaign.id,
+            commercialCycleId: cycleId,
             scheduledDate,
             status: 'SCHEDULED',
             priority: 0,
-          })),
-        });
+          });
+        }
+
+        await tx.automation.createMany({ data: automationRows });
       }
       automationCount = rows.length;
     });
@@ -759,7 +809,9 @@ export class CampaignsService {
     client: Prisma.TransactionClient,
     organizationId: string,
     segment: CampaignSegmentDto | null,
-  ): Promise<Array<{ purchaseId: string; customerId: string }>> {
+  ): Promise<
+    Array<{ purchaseId: string; customerId: string; purchaseDate: Date }>
+  > {
     const where: Prisma.PurchaseWhereInput = {
       organizationId,
       deletedAt: null,
@@ -795,13 +847,21 @@ export class CampaignsService {
 
     // One automation per qualifying customer (most recent purchase, C-06/HG-6).
     const seen = new Set<string>();
-    const rows: Array<{ purchaseId: string; customerId: string }> = [];
+    const rows: Array<{
+      purchaseId: string;
+      customerId: string;
+      purchaseDate: Date;
+    }> = [];
     for (const purchase of purchases) {
       if (seen.has(purchase.customerId)) {
         continue;
       }
       seen.add(purchase.customerId);
-      rows.push({ purchaseId: purchase.id, customerId: purchase.customerId });
+      rows.push({
+        purchaseId: purchase.id,
+        customerId: purchase.customerId,
+        purchaseDate: purchase.purchaseDate,
+      });
     }
     return rows;
   }

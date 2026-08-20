@@ -59,6 +59,11 @@ describe('CampaignsService', () => {
       createMany: jest.Mock;
       updateMany: jest.Mock;
     };
+    commercialCycle: {
+      findMany: jest.Mock;
+      create: jest.Mock;
+      update: jest.Mock;
+    };
     purchase: { findMany: jest.Mock };
     $transaction: jest.Mock;
   };
@@ -81,6 +86,11 @@ describe('CampaignsService', () => {
         groupBy: jest.fn(),
         createMany: jest.fn(),
         updateMany: jest.fn(),
+      },
+      commercialCycle: {
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
       },
       purchase: { findMany: jest.fn() },
       $transaction: jest.fn(),
@@ -289,6 +299,12 @@ describe('CampaignsService', () => {
   describe('activate (US5, FR-006)', () => {
     it('activates campaign and generates automations inside a transaction', async () => {
       prisma.campaign.findFirst.mockResolvedValue(campaignRow());
+      let txRef:
+        | {
+            commercialCycle: { create: jest.Mock; update: jest.Mock };
+            automation: { createMany: jest.Mock };
+          }
+        | undefined;
       prisma.$transaction.mockImplementation(
         async (fn: (tx: unknown) => Promise<unknown>) => {
           const tx = {
@@ -297,14 +313,31 @@ describe('CampaignsService', () => {
             },
             purchase: {
               findMany: jest.fn().mockResolvedValue([
-                { id: 'pu-1', customerId: 'cu-a', purchaseDate: new Date() },
-                { id: 'pu-2', customerId: 'cu-b', purchaseDate: new Date() },
+                {
+                  id: 'pu-1',
+                  customerId: 'cu-a',
+                  purchaseDate: new Date('2026-08-01T12:00:00.000Z'),
+                },
+                {
+                  id: 'pu-2',
+                  customerId: 'cu-b',
+                  purchaseDate: new Date('2026-08-02T12:00:00.000Z'),
+                },
               ]),
+            },
+            commercialCycle: {
+              findMany: jest.fn().mockResolvedValue([]),
+              create: jest
+                .fn()
+                .mockResolvedValueOnce({ id: 'cy-1' })
+                .mockResolvedValueOnce({ id: 'cy-2' }),
+              update: jest.fn(),
             },
             automation: {
               createMany: jest.fn().mockResolvedValue({ count: 2 }),
             },
           };
+          txRef = tx;
           return fn(tx);
         },
       );
@@ -316,6 +349,34 @@ describe('CampaignsService', () => {
         status: 'ACTIVE',
         automationCount: 2,
         startedAt: expect.any(Date) as unknown,
+      });
+      expect(txRef?.commercialCycle.create).toHaveBeenNthCalledWith(1, {
+        data: {
+          purchaseId: 'pu-1',
+          status: 'ACTIVE',
+          startDate: new Date('2026-08-01T12:00:00.000Z'),
+        },
+        select: { id: true },
+      });
+      expect(txRef?.commercialCycle.create).toHaveBeenNthCalledWith(2, {
+        data: {
+          purchaseId: 'pu-2',
+          status: 'ACTIVE',
+          startDate: new Date('2026-08-02T12:00:00.000Z'),
+        },
+        select: { id: true },
+      });
+      expect(txRef?.automation.createMany).toHaveBeenCalledWith({
+        data: expect.arrayContaining([
+          expect.objectContaining({
+            purchaseId: 'pu-1',
+            commercialCycleId: 'cy-1',
+          }),
+          expect.objectContaining({
+            purchaseId: 'pu-2',
+            commercialCycleId: 'cy-2',
+          }),
+        ]) as unknown[],
       });
       expect(auditService.record).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'campaign.activate' }),
@@ -329,6 +390,113 @@ describe('CampaignsService', () => {
           payload: expect.objectContaining({ automationCount: 2 }) as object,
         }),
       );
+    });
+
+    it('reuses an existing ACTIVE cycle for the purchase', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(campaignRow());
+      let txRef:
+        | {
+            commercialCycle: { create: jest.Mock; update: jest.Mock };
+            automation: { createMany: jest.Mock };
+          }
+        | undefined;
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = {
+            campaign: {
+              updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+            },
+            purchase: {
+              findMany: jest.fn().mockResolvedValue([
+                {
+                  id: 'pu-1',
+                  customerId: 'cu-a',
+                  purchaseDate: new Date('2026-08-01T12:00:00.000Z'),
+                },
+              ]),
+            },
+            commercialCycle: {
+              findMany: jest
+                .fn()
+                .mockResolvedValue([
+                  { id: 'cy-1', status: 'ACTIVE', purchaseId: 'pu-1' },
+                ]),
+              create: jest.fn(),
+              update: jest.fn(),
+            },
+            automation: {
+              createMany: jest.fn().mockResolvedValue({ count: 1 }),
+            },
+          };
+          txRef = tx;
+          return fn(tx);
+        },
+      );
+
+      await service.activate(orgUser, 'cu-1');
+
+      expect(txRef?.commercialCycle.create).not.toHaveBeenCalled();
+      expect(txRef?.commercialCycle.update).not.toHaveBeenCalled();
+      expect(txRef?.automation.createMany).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ commercialCycleId: 'cy-1' })],
+      });
+    });
+
+    it('reopens a CANCELLED cycle to ACTIVE before attaching the automation', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(campaignRow());
+      let txRef:
+        | {
+            commercialCycle: { create: jest.Mock; update: jest.Mock };
+            automation: { createMany: jest.Mock };
+          }
+        | undefined;
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = {
+            campaign: {
+              updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+            },
+            purchase: {
+              findMany: jest.fn().mockResolvedValue([
+                {
+                  id: 'pu-1',
+                  customerId: 'cu-a',
+                  purchaseDate: new Date('2026-08-01T12:00:00.000Z'),
+                },
+              ]),
+            },
+            commercialCycle: {
+              findMany: jest
+                .fn()
+                .mockResolvedValue([
+                  { id: 'cy-1', status: 'CANCELLED', purchaseId: 'pu-1' },
+                ]),
+              create: jest.fn(),
+              update: jest.fn().mockResolvedValue({ id: 'cy-1' }),
+            },
+            automation: {
+              createMany: jest.fn().mockResolvedValue({ count: 1 }),
+            },
+          };
+          txRef = tx;
+          return fn(tx);
+        },
+      );
+
+      await service.activate(orgUser, 'cu-1');
+
+      expect(txRef?.commercialCycle.create).not.toHaveBeenCalled();
+      expect(txRef?.commercialCycle.update).toHaveBeenCalledWith({
+        where: { id: 'cy-1' },
+        data: {
+          status: 'ACTIVE',
+          startDate: new Date('2026-08-01T12:00:00.000Z'),
+          endDate: null,
+        },
+      });
+      expect(txRef?.automation.createMany).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ commercialCycleId: 'cy-1' })],
+      });
     });
 
     it('rejects activation when not DRAFT', async () => {
