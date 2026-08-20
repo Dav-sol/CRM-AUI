@@ -91,3 +91,55 @@ export const purchaseSchema = z.object({
 
 export type PurchaseFormValues = z.output<typeof purchaseSchema>;
 export type PurchaseFormInput = z.input<typeof purchaseSchema>;
+
+export const campaignSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Ingresá el nombre de la campaña")
+    .max(120, "El nombre no puede superar los 120 caracteres"),
+  description: z
+    .string()
+    .trim()
+    .max(1000, "La descripción no puede superar los 1000 caracteres")
+    .optional()
+    .or(z.literal("")),
+  type: z.enum(["AUTOMATIC", "MANUAL", "REPURCHASE", "SPECIAL"]),
+  template: z
+    .string()
+    .trim()
+    .min(1, "Ingresá el mensaje de la campaña")
+    .max(4096, "El mensaje no puede superar los 4096 caracteres"),
+  startAt: z
+    .string()
+    .min(1, "Ingresá la fecha de inicio")
+    .optional()
+    .or(z.literal("")),
+  segment: z
+    .object({
+      city: z.string().trim().max(200, "La ciudad no puede superar los 200 caracteres"),
+      productId: z.string(),
+      purchaseFrom: z.string(),
+      purchaseTo: z.string(),
+      customerStatus: z.enum(["ACTIVE", "INACTIVE", "BLOCKED"]).or(z.literal("")),
+    })
+    .partial()
+    .optional(),
+});
+
+export type CampaignFormValues = z.output<typeof campaignSchema>;
+
+export const CAMPAIGN_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Borrador",
+  ACTIVE: "Activa",
+  PAUSED: "Pausada",
+  FINISHED: "Finalizada",
+  CANCELLED: "Cancelada",
+};
+
+export const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
+  AUTOMATIC: "Automática",
+  MANUAL: "Manual",
+  REPURCHASE: "Recompra",
+  SPECIAL: "Especial",
+};

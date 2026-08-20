@@ -1,8 +1,11 @@
 import {
+  activateCampaign,
   archiveConversation,
   assignConversation,
   assignConversationTag,
+  cancelCampaign,
   closeConversation,
+  createCampaign,
   createConversationNote,
   createCustomer,
   createPurchase,
@@ -10,6 +13,7 @@ import {
   getDashboardActivity,
   getDashboardCampaigns,
   getDashboardSummary,
+  listCampaigns,
   listConversationNotes,
   listConversations,
   listConversationTags,
@@ -21,16 +25,20 @@ import {
   login,
   logout,
   me,
+  pauseCampaign,
   removeConversationTag,
   reopenConversation,
   replyConversation,
+  resumeCampaign,
   transferConversation,
 } from "@automatize-it/sdk";
 
 import { authStore, notifySessionExpired, refreshAccessToken } from "./auth";
 import type {
   AssignTagArgs,
+  CampaignListParams,
   ConversationListParams,
+  CreateCampaignBody,
   CreateCustomerBody,
   CreateNoteBody,
   CreatePurchaseBody,
@@ -295,4 +303,45 @@ export async function apiCreatePurchase(
 ): Promise<SdkData<typeof createPurchase>> {
   const res = await call((options) => createPurchase(body, options));
   return unwrap(createPurchase, res);
+}
+
+export async function apiListCampaigns(
+  params?: CampaignListParams,
+): Promise<NonNullable<Extract<Awaited<ReturnType<typeof listCampaigns>>, { status: 200 }>["data"]>> {
+  return callList((options) => listCampaigns(params, options));
+}
+
+export async function apiCreateCampaign(
+  body: CreateCampaignBody,
+): Promise<SdkData<typeof createCampaign>> {
+  const res = await call((options) => createCampaign(body, options));
+  return unwrap(createCampaign, res);
+}
+
+export async function apiActivateCampaign(
+  uuid: string,
+): Promise<SdkData<typeof activateCampaign>> {
+  const res = await call((options) => activateCampaign(uuid, options));
+  return unwrap(activateCampaign, res);
+}
+
+export async function apiPauseCampaign(
+  uuid: string,
+): Promise<SdkData<typeof pauseCampaign>> {
+  const res = await call((options) => pauseCampaign(uuid, options));
+  return unwrap(pauseCampaign, res);
+}
+
+export async function apiResumeCampaign(
+  uuid: string,
+): Promise<SdkData<typeof resumeCampaign>> {
+  const res = await call((options) => resumeCampaign(uuid, options));
+  return unwrap(resumeCampaign, res);
+}
+
+export async function apiCancelCampaign(
+  uuid: string,
+): Promise<SdkData<typeof cancelCampaign>> {
+  const res = await call((options) => cancelCampaign(uuid, options));
+  return unwrap(cancelCampaign, res);
 }

@@ -1,5 +1,6 @@
 import type {
   assignConversationTag,
+  createCampaign,
   createConversationNote,
   createCustomer,
   createProduct,
@@ -8,6 +9,7 @@ import type {
   getDashboardActivity,
   getDashboardCampaigns,
   getDashboardSummary,
+  listCampaigns,
   listConversationNotes,
   listConversations,
   listConversationTags,
@@ -66,3 +68,7 @@ export type CreateProductBody = Parameters<typeof createProduct>[0];
 export type PurchaseItem = SuccessData<typeof listPurchases>[number];
 export type PurchaseListParams = Parameters<typeof listPurchases>[0];
 export type CreatePurchaseBody = Parameters<typeof createPurchase>[0];
+
+export type CampaignItem = SuccessData<typeof listCampaigns>[number];
+export type CampaignListParams = Parameters<typeof listCampaigns>[0];
+export type CreateCampaignBody = Parameters<typeof createCampaign>[0];

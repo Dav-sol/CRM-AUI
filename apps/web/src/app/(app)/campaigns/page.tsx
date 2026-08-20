@@ -1,0 +1,1 @@
+export { CampaignsIndexPage as default } from "./list-page";
