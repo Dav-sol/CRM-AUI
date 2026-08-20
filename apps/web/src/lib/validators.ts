@@ -143,3 +143,18 @@ export const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
   REPURCHASE: "Recompra",
   SPECIAL: "Especial",
 };
+
+export const AUTOMATION_STATUS_LABELS: Record<string, string> = {
+  PENDING: "Pendiente",
+  SCHEDULED: "Programada",
+  EXECUTED: "Ejecutada",
+  CANCELLED: "Cancelada",
+  ERROR: "Error",
+  PAUSED: "Pausada",
+};
+
+export const COMMERCIAL_CYCLE_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Activo",
+  FINISHED: "Finalizado",
+  CANCELLED: "Cancelado",
+};

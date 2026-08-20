@@ -1,15 +1,20 @@
 import type {
   assignConversationTag,
+  cancelAutomation,
   createCampaign,
   createConversationNote,
   createCustomer,
   createProduct,
   createPurchase,
+  getAutomation,
+  getCommercialCycle,
   getConversation,
   getDashboardActivity,
   getDashboardCampaigns,
   getDashboardSummary,
+  listAutomations,
   listCampaigns,
+  listCommercialCycles,
   listConversationNotes,
   listConversations,
   listConversationTags,
@@ -72,3 +77,12 @@ export type CreatePurchaseBody = Parameters<typeof createPurchase>[0];
 export type CampaignItem = SuccessData<typeof listCampaigns>[number];
 export type CampaignListParams = Parameters<typeof listCampaigns>[0];
 export type CreateCampaignBody = Parameters<typeof createCampaign>[0];
+
+export type AutomationItem = SuccessData<typeof listAutomations>[number];
+export type AutomationListParams = Parameters<typeof listAutomations>[0];
+export type AutomationDetail = NonNullable<SuccessData<typeof getAutomation>>;
+export type CancelAutomationResult = NonNullable<SuccessData<typeof cancelAutomation>>;
+
+export type CommercialCycleItem = SuccessData<typeof listCommercialCycles>[number];
+export type CommercialCycleListParams = Parameters<typeof listCommercialCycles>[0];
+export type CommercialCycleDetail = NonNullable<SuccessData<typeof getCommercialCycle>>;

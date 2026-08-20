@@ -1,0 +1,1 @@
+export { AutomationsIndexPage as default } from "./list-page";

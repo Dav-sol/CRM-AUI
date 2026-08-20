@@ -3,17 +3,22 @@ import {
   archiveConversation,
   assignConversation,
   assignConversationTag,
+  cancelAutomation,
   cancelCampaign,
   closeConversation,
   createCampaign,
   createConversationNote,
   createCustomer,
   createPurchase,
+  getAutomation,
+  getCommercialCycle,
   getConversation,
   getDashboardActivity,
   getDashboardCampaigns,
   getDashboardSummary,
+  listAutomations,
   listCampaigns,
+  listCommercialCycles,
   listConversationNotes,
   listConversations,
   listConversationTags,
@@ -36,7 +41,9 @@ import {
 import { authStore, notifySessionExpired, refreshAccessToken } from "./auth";
 import type {
   AssignTagArgs,
+  AutomationListParams,
   CampaignListParams,
+  CommercialCycleListParams,
   ConversationListParams,
   CreateCampaignBody,
   CreateCustomerBody,
@@ -344,4 +351,37 @@ export async function apiCancelCampaign(
 ): Promise<SdkData<typeof cancelCampaign>> {
   const res = await call((options) => cancelCampaign(uuid, options));
   return unwrap(cancelCampaign, res);
+}
+
+export async function apiListAutomations(
+  params?: AutomationListParams,
+): Promise<NonNullable<Extract<Awaited<ReturnType<typeof listAutomations>>, { status: 200 }>["data"]>> {
+  return callList((options) => listAutomations(params, options));
+}
+
+export async function apiGetAutomation(
+  uuid: string,
+): Promise<SdkData<typeof getAutomation>> {
+  const res = await call((options) => getAutomation(uuid, options));
+  return unwrap(getAutomation, res);
+}
+
+export async function apiCancelAutomation(
+  uuid: string,
+): Promise<SdkData<typeof cancelAutomation>> {
+  const res = await call((options) => cancelAutomation(uuid, options));
+  return unwrap(cancelAutomation, res);
+}
+
+export async function apiListCommercialCycles(
+  params?: CommercialCycleListParams,
+): Promise<NonNullable<Extract<Awaited<ReturnType<typeof listCommercialCycles>>, { status: 200 }>["data"]>> {
+  return callList((options) => listCommercialCycles(params, options));
+}
+
+export async function apiGetCommercialCycle(
+  uuid: string,
+): Promise<SdkData<typeof getCommercialCycle>> {
+  const res = await call((options) => getCommercialCycle(uuid, options));
+  return unwrap(getCommercialCycle, res);
 }
