@@ -139,7 +139,9 @@ describe('imports.parser', () => {
         'PRODUCTS',
       );
       expect(
-        result.issues.some((issue) => issue.message.includes('duplicate column')),
+        result.issues.some((issue) =>
+          issue.message.includes('duplicate column'),
+        ),
       ).toBe(true);
     });
   });

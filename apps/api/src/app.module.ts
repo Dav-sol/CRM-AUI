@@ -19,6 +19,7 @@ import { AutomationsModule } from './modules/automations/automations.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { ConversationsModule } from './modules/conversations/conversations.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
+import { FollowUpSequencesModule } from './modules/follow-up-sequences/follow-up-sequences.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
@@ -60,6 +61,8 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     ConversationsModule,
 
     CampaignsModule,
+
+    FollowUpSequencesModule,
 
     DashboardModule,
   ],

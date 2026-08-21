@@ -48,6 +48,12 @@ properties:
       - REFUNDED
     description: Defaults to COMPLETED.
 
+  warrantyMonths:
+    type: integer
+    minimum: 1
+    maximum: 24
+    description: Optional override of product warranty duration in months.
+
   organizationId:
     type: string
     description: Only accepted for PLATFORM_OWNER; required for them. Organization users must not send it (400 VALIDATION_ERROR).

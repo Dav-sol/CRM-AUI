@@ -1,0 +1,1 @@
+export { FollowUpSequencesIndexPage as default } from "./list-page";

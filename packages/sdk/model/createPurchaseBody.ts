@@ -39,6 +39,12 @@ export type CreatePurchaseBody = {
   value: string;
   /** Defaults to COMPLETED. */
   status?: CreatePurchaseBodyStatus;
+  /**
+     * Optional override of product warranty duration in months.
+     * @minimum 1
+     * @maximum 24
+     */
+  warrantyMonths?: number;
   /** Only accepted for PLATFORM_OWNER; required for them. Organization users must not send it (400 VALIDATION_ERROR). */
   organizationId?: string;
 };

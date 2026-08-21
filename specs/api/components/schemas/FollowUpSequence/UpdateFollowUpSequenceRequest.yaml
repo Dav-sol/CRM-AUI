@@ -1,0 +1,22 @@
+type: object
+description: Payload to update a follow-up sequence. At least one field required.
+properties:
+  name:
+    type: string
+    minLength: 1
+    maxLength: 120
+  description:
+    type: string
+    maxLength: 1000
+  warrantyMonths:
+    type: integer
+    enum: [12, 15, 18, 24]
+    description: Warranty duration in months. Cannot be changed if sequence is used by campaigns.
+  stages:
+    type: array
+    minItems: 1
+    items:
+      $ref: "./FollowUpSequenceStage.yaml"
+    description: |
+      Complete replacement of stages. Cannot be changed if sequence is used by campaigns.
+      Each stage must have unique offsetDays.

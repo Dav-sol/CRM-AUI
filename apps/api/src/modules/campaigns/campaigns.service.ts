@@ -87,6 +87,16 @@ interface CampaignRow {
   status: CampaignStatus;
   startAt: Date | null;
   segment: Prisma.JsonValue | null;
+  followUpSequence?: {
+    uuid: string;
+    warrantyMonths: number;
+    stages: Array<{
+      uuid: string;
+      name: string;
+      offsetDays: number;
+      template: string;
+    }>;
+  } | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -301,7 +311,10 @@ export class CampaignsService {
     startedAt: Date;
   }> {
     const organizationId = this.requireOrg(user);
-    const campaign = await this.findScopedCampaign(organizationId, uuid);
+    const campaign = await this.findScopedCampaignWithSequence(
+      organizationId,
+      uuid,
+    );
     if (!campaign) {
       throw this.campaignNotFound();
     }
@@ -315,6 +328,30 @@ export class CampaignsService {
     }
 
     const segment = campaign.segment as CampaignSegmentDto | null;
+    const followUpSequence = campaign.followUpSequence as {
+      uuid: string;
+      warrantyMonths: number;
+      stages: Array<{
+        uuid: string;
+        name: string;
+        offsetDays: number;
+        template: string;
+      }>;
+    } | null;
+
+    // If campaign has a followUpSequence, validate it has stages
+    if (
+      followUpSequence &&
+      (!followUpSequence.stages || followUpSequence.stages.length === 0)
+    ) {
+      throw new BadRequestException({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'La secuencia de seguimiento no tiene etapas definidas',
+        },
+      });
+    }
+
     const now = new Date();
     const scheduledDate =
       campaign.startAt && campaign.startAt > now ? campaign.startAt : now;
@@ -334,6 +371,9 @@ export class CampaignsService {
         });
       }
 
+      // If campaign has a followUpSequence, use its stages; otherwise use single template
+      const useFollowUpSequence = !!followUpSequence;
+
       const rows = await this.resolveSegmentPurchases(
         tx,
         organizationId,
@@ -348,69 +388,82 @@ export class CampaignsService {
         });
       }
 
-      for (let i = 0; i < rows.length; i += CAMPAIGN_BATCH_SIZE) {
-        const batch = rows.slice(i, i + CAMPAIGN_BATCH_SIZE);
-        const cycles = await tx.commercialCycle.findMany({
-          where: {
-            purchaseId: { in: batch.map((row) => row.purchaseId) },
-            deletedAt: null,
-          },
-          select: { id: true, status: true, purchaseId: true },
-        });
-        const cycleByPurchase = new Map(
-          cycles.map((cycle) => [cycle.purchaseId, cycle]),
+      if (useFollowUpSequence) {
+        // Generate one automation per stage per qualifying purchase
+        // scheduledDate = purchase.warrantyExpiresAt + stage.offsetDays
+        automationCount = await this.generateAutomationsFromSequence(
+          tx,
+          campaign.id,
+          organizationId,
+          rows,
+          followUpSequence.stages,
         );
-
-        const automationRows: Array<{
-          organizationId: string;
-          purchaseId: string;
-          campaignId: string;
-          commercialCycleId: string;
-          scheduledDate: Date;
-          status: 'SCHEDULED';
-          priority: number;
-        }> = [];
-
-        for (const row of batch) {
-          const existing = cycleByPurchase.get(row.purchaseId);
-          let cycleId: string;
-          if (!existing) {
-            const created = await tx.commercialCycle.create({
-              data: {
-                purchaseId: row.purchaseId,
-                status: 'ACTIVE',
-                startDate: row.purchaseDate,
-              },
-              select: { id: true },
-            });
-            cycleId = created.id;
-          } else if (existing.status === 'ACTIVE') {
-            cycleId = existing.id;
-          } else {
-            await tx.commercialCycle.update({
-              where: { id: existing.id },
-              data: {
-                status: 'ACTIVE',
-                startDate: row.purchaseDate,
-                endDate: null,
-              },
-            });
-            cycleId = existing.id;
-          }
-          automationRows.push({
-            organizationId,
-            purchaseId: row.purchaseId,
-            campaignId: campaign.id,
-            commercialCycleId: cycleId,
-            scheduledDate,
-            status: 'SCHEDULED',
-            priority: 0,
+      } else {
+        // Original single-template logic
+        for (let i = 0; i < rows.length; i += CAMPAIGN_BATCH_SIZE) {
+          const batch = rows.slice(i, i + CAMPAIGN_BATCH_SIZE);
+          const cycles = await tx.commercialCycle.findMany({
+            where: {
+              purchaseId: { in: batch.map((row) => row.purchaseId) },
+              deletedAt: null,
+            },
+            select: { id: true, status: true, purchaseId: true },
           });
-        }
+          const cycleByPurchase = new Map(
+            cycles.map((cycle) => [cycle.purchaseId, cycle]),
+          );
 
-        await tx.automation.createMany({ data: automationRows });
+          const automationRows: Array<{
+            organizationId: string;
+            purchaseId: string;
+            campaignId: string;
+            commercialCycleId: string;
+            scheduledDate: Date;
+            status: 'SCHEDULED';
+            priority: number;
+          }> = [];
+
+          for (const row of batch) {
+            const existing = cycleByPurchase.get(row.purchaseId);
+            let cycleId: string;
+            if (!existing) {
+              const created = await tx.commercialCycle.create({
+                data: {
+                  purchaseId: row.purchaseId,
+                  status: 'ACTIVE',
+                  startDate: row.purchaseDate,
+                },
+                select: { id: true },
+              });
+              cycleId = created.id;
+            } else if (existing.status === 'ACTIVE') {
+              cycleId = existing.id;
+            } else {
+              await tx.commercialCycle.update({
+                where: { id: existing.id },
+                data: {
+                  status: 'ACTIVE',
+                  startDate: row.purchaseDate,
+                  endDate: null,
+                },
+              });
+              cycleId = existing.id;
+            }
+            automationRows.push({
+              organizationId,
+              purchaseId: row.purchaseId,
+              campaignId: campaign.id,
+              commercialCycleId: cycleId,
+              scheduledDate,
+              status: 'SCHEDULED',
+              priority: 0,
+            });
+          }
+
+          await tx.automation.createMany({ data: automationRows });
+        }
+        automationCount = rows.length;
       }
-      automationCount = rows.length;
     });
 
     await this.auditService.record({
@@ -766,10 +819,127 @@ export class CampaignsService {
     });
   }
 
+  private async findScopedCampaignWithSequence(
+    organizationId: string,
+    uuid: string,
+  ): Promise<CampaignRow | null> {
+    const campaign = await this.prisma.campaign.findFirst({
+      where: { uuid, organizationId, deletedAt: null },
+      include: {
+        followUpSequence: {
+          include: {
+            stages: {
+              where: { deletedAt: null },
+              orderBy: { offsetDays: 'asc' },
+            },
+          },
+        },
+      },
+    });
+    return campaign;
+  }
+
   private campaignNotFound(): NotFoundException {
     return new NotFoundException({
       error: { code: 'CAMPAIGN_NOT_FOUND', message: 'Campaign not found' },
     });
+  }
+
+  private async generateAutomationsFromSequence(
+    tx: Prisma.TransactionClient,
+    campaignId: string,
+    organizationId: string,
+    rows: Array<{ purchaseId: string; customerId: string; purchaseDate: Date }>,
+    stages: Array<{
+      uuid: string;
+      name: string;
+      offsetDays: number;
+      template: string;
+    }>,
+  ): Promise<number> {
+    let automationCount = 0;
+
+    for (let i = 0; i < rows.length; i += CAMPAIGN_BATCH_SIZE) {
+      const batch = rows.slice(i, i + CAMPAIGN_BATCH_SIZE);
+      const cycles = await tx.commercialCycle.findMany({
+        where: {
+          purchaseId: { in: batch.map((row) => row.purchaseId) },
+          deletedAt: null,
+        },
+        select: { id: true, status: true, purchaseId: true },
+      });
+      const cycleByPurchase = new Map(
+        cycles.map((cycle) => [cycle.purchaseId, cycle]),
+      );
+
+      // Get purchases with warrantyExpiresAt for this batch
+      const purchaseIds = batch.map((row) => row.purchaseId);
+      const purchases = await tx.purchase.findMany({
+        where: { id: { in: purchaseIds }, deletedAt: null },
+        select: { id: true, warrantyExpiresAt: true },
+      });
+      const purchaseWarrantyMap = new Map(
+        purchases.map((p) => [p.id, p.warrantyExpiresAt]),
+      );
+
+      for (const row of batch) {
+        const warrantyExpiresAt = purchaseWarrantyMap.get(row.purchaseId);
+        if (!warrantyExpiresAt) {
+          // Skip if no warranty expiration date
+          continue;
+        }
+
+        const existing = cycleByPurchase.get(row.purchaseId);
+        let cycleId: string;
+        if (!existing) {
+          const created = await tx.commercialCycle.create({
+            data: {
+              purchaseId: row.purchaseId,
+              status: 'ACTIVE',
+              startDate: row.purchaseDate,
+            },
+            select: { id: true },
+          });
+          cycleId = created.id;
+        } else if (existing.status === 'ACTIVE') {
+          cycleId = existing.id;
+        } else {
+          await tx.commercialCycle.update({
+            where: { id: existing.id },
+            data: {
+              status: 'ACTIVE',
+              startDate: row.purchaseDate,
+              endDate: null,
+            },
+          });
+          cycleId = existing.id;
+        }
+
+        // Create one automation per stage
+        for (const stage of stages) {
+          const scheduledDate = new Date(warrantyExpiresAt);
+          scheduledDate.setDate(scheduledDate.getDate() + stage.offsetDays);
+
+          await tx.automation.create({
+            data: {
+              organizationId,
+              purchaseId: row.purchaseId,
+              campaignId,
+              commercialCycleId: cycleId,
+              scheduledDate,
+              status: 'SCHEDULED',
+              priority: 0,
+              // Snapshot (HG-FUS-02 option A): the automation is
+              // self-sufficient — later sequence edits do not affect
+              // already generated campaigns/automations.
+              messageTemplate: stage.template,
+            },
+          });
+          automationCount++;
+        }
+      }
+    }
+    return automationCount;
   }
 
   private async loadCampaignStats(
@@ -843,6 +1013,31 @@ export class CampaignsService {
             },
           }
         : {}),
+      ...(segment?.warrantyExpiresFrom || segment?.warrantyExpiresTo
+        ? {
+            warrantyExpiresAt: {
+              ...(segment.warrantyExpiresFrom
+                ? {
+                    gte: this.resolveDateBoundary(
+                      segment.warrantyExpiresFrom,
+                      false,
+                    ),
+                  }
+                : {}),
+              ...(segment.warrantyExpiresTo
+                ? {
+                    lte: this.resolveDateBoundary(
+                      segment.warrantyExpiresTo,
+                      true,
+                    ),
+                  }
+                : {}),
+            },
+          }
+        : {}),
+      ...(segment?.warrantyMonths
+        ? { product: { warrantyMonths: segment.warrantyMonths } }
+        : {}),
     };
 
     const purchases = await client.purchase.findMany({
@@ -911,7 +1106,10 @@ function hasSegmentCriterion(segment: CampaignSegmentDto): boolean {
     segment.productId !== undefined ||
     segment.purchaseFrom !== undefined ||
     segment.purchaseTo !== undefined ||
-    segment.customerStatus !== undefined
+    segment.customerStatus !== undefined ||
+    segment.warrantyExpiresFrom !== undefined ||
+    segment.warrantyExpiresTo !== undefined ||
+    segment.warrantyMonths !== undefined
   );
 }
 

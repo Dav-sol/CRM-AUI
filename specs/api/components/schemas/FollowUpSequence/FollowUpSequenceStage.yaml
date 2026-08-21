@@ -1,0 +1,24 @@
+type: object
+description: A stage in a follow-up sequence.
+required:
+  - name
+  - offsetDays
+  - template
+properties:
+  name:
+    type: string
+    minLength: 1
+    maxLength: 120
+  offsetDays:
+    type: integer
+    minimum: -365
+    maximum: 365
+    description: |
+      Offset in days from warranty expiration date.
+      Negative = before expiration, 0 = day of expiration, positive = after expiration.
+  template:
+    type: string
+    minLength: 1
+    maxLength: 4096
+    description: |
+      Message template with placeholders: {customerName}, {productName}, {organizationName}, {warrantyExpiresAt}.

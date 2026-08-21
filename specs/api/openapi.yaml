@@ -110,6 +110,10 @@ paths:
     $ref: "./paths/dashboard.yaml#/~1dashboard~1campaigns"
   /dashboard/activity:
     $ref: "./paths/dashboard.yaml#/~1dashboard~1activity"
+  /follow-up-sequences:
+    $ref: "./paths/follow-up-sequences.yaml#/~1follow-up-sequences"
+  /follow-up-sequences/{uuid}:
+    $ref: "./paths/follow-up-sequences.yaml#/~1follow-up-sequences~1{uuid}"
 
 components:
 

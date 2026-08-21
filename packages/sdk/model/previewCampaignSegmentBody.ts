@@ -11,6 +11,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { PreviewCampaignSegmentBodyCustomerStatus } from './previewCampaignSegmentBodyCustomerStatus';
+import type { PreviewCampaignSegmentBodyWarrantyMonths } from './previewCampaignSegmentBodyWarrantyMonths';
 
 /**
  * Customer segment filter for campaign automations. All criteria combine with AND; at least one criterion is required when the segment is provided.
@@ -34,4 +35,21 @@ export type PreviewCampaignSegmentBody = {
      */
   purchaseTo?: string;
   customerStatus?: PreviewCampaignSegmentBodyCustomerStatus;
+  /**
+     * Lower bound on the purchase warranty expiration date
+     * (`warrantyExpiresAt`). Date-only (`YYYY-MM-DD`) includes the whole
+     * requested day.
+     */
+  warrantyExpiresFrom?: string;
+  /**
+     * Upper bound on the purchase warranty expiration date
+     * (`warrantyExpiresAt`). Date-only (`YYYY-MM-DD`) includes the whole
+     * requested day.
+     */
+  warrantyExpiresTo?: string;
+  /**
+     * Warranty duration in months of the purchased product. Restricted to
+     * the catalog values supported by Product/Purchase/FollowUpSequence.
+     */
+  warrantyMonths?: PreviewCampaignSegmentBodyWarrantyMonths;
 };

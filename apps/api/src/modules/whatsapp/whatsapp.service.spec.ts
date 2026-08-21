@@ -227,6 +227,89 @@ describe('WhatsappService', () => {
       );
     });
 
+    it('uses the sequence snapshot (messageTemplate) over the campaign stage heuristics', async () => {
+      const due = {
+        ...dueAutomation,
+        scheduledDate: new Date(now),
+        messageTemplate: 'Hola {customerName}, tu {productName} vence pronto.',
+        campaign: {
+          template: 'base {customerName}',
+          templateD3: 'd3 {customerName}',
+          templateD180: 'd180 {customerName}',
+          templateD365: 'd365 {customerName}',
+        },
+      };
+      prisma.automation.findMany.mockResolvedValue([due]);
+      let txMessageCreate: jest.Mock | undefined;
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = txMock();
+          txMessageCreate = tx.message.create;
+          return fn(tx);
+        },
+      );
+      provider.sendMessage.mockResolvedValue({
+        providerMessageId: 'wamid-1',
+        providerConversationId: '573000000000',
+        status: 'SENT',
+      });
+      prisma.message.update.mockResolvedValue({});
+
+      await service.executeDueAutomations();
+
+      // Snapshot wins: neither the D3 heuristic nor the base template applies.
+      expect(provider.sendMessage).toHaveBeenCalledWith(
+        '573000000000',
+        'Hola Juan Perez, tu Lavadora vence pronto.',
+      );
+      expect(txMessageCreate).toHaveBeenCalledWith(
+        expectData({
+          type: 'AUTOMATIC',
+          direction: 'OUTBOUND',
+          status: 'QUEUED',
+          automationId: 'a-1',
+        }),
+      );
+    });
+
+    it('falls back to legacy heuristics when the snapshot is empty or missing', async () => {
+      const cases = [undefined, null, ''];
+      for (const messageTemplate of cases) {
+        provider.sendMessage.mockClear();
+        const due = {
+          ...dueAutomation,
+          scheduledDate: new Date(now),
+          messageTemplate,
+          campaign: {
+            template: 'base {customerName}',
+            templateD3: null,
+            templateD180: null,
+            templateD365: null,
+          },
+        };
+        prisma.automation.findMany.mockResolvedValue([due]);
+        prisma.$transaction.mockImplementation(
+          async (fn: (tx: unknown) => Promise<unknown>) => {
+            const tx = txMock();
+            return fn(tx);
+          },
+        );
+        provider.sendMessage.mockResolvedValue({
+          providerMessageId: 'wamid-1',
+          providerConversationId: '573000000000',
+          status: 'SENT',
+        });
+        prisma.message.update.mockResolvedValue({});
+
+        await service.executeDueAutomations();
+
+        expect(provider.sendMessage).toHaveBeenCalledWith(
+          '573000000000',
+          expect.stringContaining('base Juan Perez'),
+        );
+      }
+    });
+
     it('executes a due automation, creates an OUTBOUND AUTOMATIC message and marks it SENT', async () => {
       prisma.automation.findMany.mockResolvedValue([dueAutomation]);
       let txMessageCreate: jest.Mock | undefined;

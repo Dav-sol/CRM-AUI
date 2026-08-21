@@ -1,0 +1,24 @@
+type: object
+required:
+  - uuid
+  - name
+  - warrantyMonths
+  - stageCount
+  - createdAt
+properties:
+  uuid:
+    type: string
+  name:
+    type: string
+  description:
+    type: string
+    nullable: true
+  warrantyMonths:
+    type: integer
+    enum: [12, 15, 18, 24]
+  stageCount:
+    type: integer
+    description: Number of stages in the sequence.
+  createdAt:
+    type: string
+    format: date-time

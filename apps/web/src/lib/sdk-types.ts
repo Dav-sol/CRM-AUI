@@ -4,6 +4,7 @@ import type {
   createCampaign,
   createConversationNote,
   createCustomer,
+  createFollowUpSequence,
   createImportJob,
   createProduct,
   createPurchase,
@@ -13,6 +14,7 @@ import type {
   getDashboardActivity,
   getDashboardCampaigns,
   getDashboardSummary,
+  getFollowUpSequence,
   getImportJob,
   listAutomations,
   listCampaigns,
@@ -21,6 +23,7 @@ import type {
   listConversations,
   listConversationTags,
   listCustomers,
+  listFollowUpSequences,
   listImportJobs,
   listMessages,
   listProducts,
@@ -29,6 +32,7 @@ import type {
   login,
   me,
   replyConversation,
+  updateFollowUpSequence,
   updateProduct,
 } from "@automatize-it/sdk";
 
@@ -98,3 +102,9 @@ export type ImportJobListParams = Parameters<typeof listImportJobs>[0];
 export type ImportJobDetail = NonNullable<SuccessData<typeof getImportJob>>;
 export type CreateImportJobBody = Parameters<typeof createImportJob>[0];
 export type ImportErrorSample = ImportJobDetail["errorsSummary"]["samples"][number];
+
+export type FollowUpSequenceItem = SuccessData<typeof listFollowUpSequences>[number];
+export type FollowUpSequenceListParams = Parameters<typeof listFollowUpSequences>[0];
+export type FollowUpSequenceDetail = NonNullable<SuccessData<typeof getFollowUpSequence>>;
+export type CreateFollowUpSequenceBody = Parameters<typeof createFollowUpSequence>[0];
+export type UpdateFollowUpSequenceBody = Parameters<typeof updateFollowUpSequence>[1];

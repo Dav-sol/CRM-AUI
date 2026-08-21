@@ -13,12 +13,15 @@ import {
   createImportJob,
   createProduct,
   createPurchase,
+  createFollowUpSequence,
+  deleteFollowUpSequence,
   getAutomation,
   getCommercialCycle,
   getConversation,
   getDashboardActivity,
   getDashboardCampaigns,
   getDashboardSummary,
+  getFollowUpSequence,
   getImportJob,
   listAutomations,
   listCampaigns,
@@ -27,6 +30,7 @@ import {
   listConversations,
   listConversationTags,
   listCustomers,
+  listFollowUpSequences,
   listImportJobs,
   listMessages,
   listProducts,
@@ -36,12 +40,14 @@ import {
   logout,
   me,
   pauseCampaign,
+  previewCampaignSegment,
   removeConversationTag,
   reopenConversation,
   replyConversation,
   resumeCampaign,
   retryImportJob,
   transferConversation,
+  updateFollowUpSequence,
   updateProduct,
   deleteProduct,
 } from "@automatize-it/sdk";
@@ -55,17 +61,20 @@ import type {
   ConversationListParams,
   CreateCampaignBody,
   CreateCustomerBody,
+  CreateFollowUpSequenceBody,
   CreateImportJobBody,
   CreateNoteBody,
   CreateProductBody,
   CreatePurchaseBody,
   CustomerListParams,
+  FollowUpSequenceListParams,
   ImportJobListParams,
   LoginData,
   MeData,
   ProductListParams,
   PurchaseListParams,
   ReplyBody,
+  UpdateFollowUpSequenceBody,
   UpdateProductBody,
 } from "./sdk-types";
 
@@ -385,6 +394,14 @@ export async function apiCancelCampaign(
   return unwrap(cancelCampaign, res);
 }
 
+export async function apiPreviewCampaignSegment(
+  uuid: string,
+  segment?: Record<string, unknown>,
+): Promise<{ count: number }> {
+  const res = await call((options) => previewCampaignSegment(uuid, segment, options));
+  return unwrap(previewCampaignSegment, res);
+}
+
 export async function apiListAutomations(
   params?: AutomationListParams,
 ): Promise<NonNullable<Extract<Awaited<ReturnType<typeof listAutomations>>, { status: 200 }>["data"]>> {
@@ -444,4 +461,39 @@ export async function apiCancelImportJob(uuid: string): Promise<SdkData<typeof c
 export async function apiRetryImportJob(uuid: string): Promise<SdkData<typeof retryImportJob>> {
   const res = await call((options) => retryImportJob(uuid, options));
   return unwrap(retryImportJob, res);
+}
+
+export async function apiListFollowUpSequences(
+  params?: FollowUpSequenceListParams,
+): Promise<NonNullable<Extract<Awaited<ReturnType<typeof listFollowUpSequences>>, { status: 200 }>["data"]>> {
+  return callList((options) => listFollowUpSequences(params, options));
+}
+
+export async function apiCreateFollowUpSequence(
+  body: CreateFollowUpSequenceBody,
+): Promise<SdkData<typeof createFollowUpSequence>> {
+  const res = await call((options) => createFollowUpSequence(body, options));
+  return unwrap(createFollowUpSequence, res);
+}
+
+export async function apiGetFollowUpSequence(
+  uuid: string,
+): Promise<SdkData<typeof getFollowUpSequence>> {
+  const res = await call((options) => getFollowUpSequence(uuid, options));
+  return unwrap(getFollowUpSequence, res);
+}
+
+export async function apiUpdateFollowUpSequence(
+  uuid: string,
+  body: UpdateFollowUpSequenceBody,
+): Promise<SdkData<typeof updateFollowUpSequence>> {
+  const res = await call((options) => updateFollowUpSequence(uuid, body, options));
+  return unwrap(updateFollowUpSequence, res);
+}
+
+export async function apiDeleteFollowUpSequence(
+  uuid: string,
+): Promise<SdkData<typeof deleteFollowUpSequence>> {
+  const res = await call((options) => deleteFollowUpSequence(uuid, options));
+  return unwrap(deleteFollowUpSequence, res);
 }

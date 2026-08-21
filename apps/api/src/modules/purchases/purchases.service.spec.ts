@@ -346,7 +346,7 @@ describe('PurchasesService', () => {
       });
       expect(prisma.product.findFirst).toHaveBeenCalledWith({
         where: { id: 'p-1', organizationId: 'org-1', deletedAt: null },
-        select: { id: true },
+        select: { id: true, warrantyMonths: true },
       });
       expect(prisma.purchase.create).toHaveBeenCalledWith({
         data: {
@@ -355,6 +355,8 @@ describe('PurchasesService', () => {
           productId: 'p-1',
           invoiceNumber: 'INV-0001',
           purchaseDate: new Date('2026-07-22T14:35:18Z'),
+          warrantyMonths: null,
+          warrantyExpiresAt: null,
           quantity: 2,
           value: new Prisma.Decimal('450.50'),
           status: undefined,
@@ -386,6 +388,8 @@ describe('PurchasesService', () => {
           productId: 'p-1',
           invoiceNumber: 'INV-0001',
           purchaseDate: new Date('2026-07-22T14:35:18Z'),
+          warrantyMonths: null,
+          warrantyExpiresAt: null,
           quantity: 2,
           value: new Prisma.Decimal('450.50'),
           status: 'REFUNDED',
@@ -521,6 +525,8 @@ describe('PurchasesService', () => {
           productId: 'p-1',
           invoiceNumber: 'INV-0001',
           purchaseDate: new Date('2026-07-22T14:35:18Z'),
+          warrantyMonths: null,
+          warrantyExpiresAt: null,
           quantity: 2,
           value: new Prisma.Decimal('450.50'),
           status: undefined,

@@ -87,6 +87,7 @@ export const purchaseSchema = z.object({
     .min(1, "Ingresá el valor de la compra")
     .regex(/^\d{1,10}(\.\d{1,2})?$/, "El valor debe ser un monto válido (ej: 125.50)"),
   status: z.enum(["COMPLETED", "CANCELLED", "REFUNDED"]).default("COMPLETED"),
+  warrantyMonths: z.number().int().positive().max(24).optional(),
 });
 
 export type PurchaseFormValues = z.output<typeof purchaseSchema>;
@@ -105,6 +106,7 @@ export const campaignSchema = z.object({
     .optional()
     .or(z.literal("")),
   type: z.enum(["AUTOMATIC", "MANUAL", "REPURCHASE", "SPECIAL"]),
+  followUpSequenceId: z.string().uuid().optional().or(z.literal("")),
   template: z
     .string()
     .trim()
@@ -140,6 +142,16 @@ export const campaignSchema = z.object({
       purchaseFrom: z.string(),
       purchaseTo: z.string(),
       customerStatus: z.enum(["ACTIVE", "INACTIVE", "BLOCKED"]).or(z.literal("")),
+      warrantyExpiresFrom: z.string().optional().or(z.literal("")),
+      warrantyExpiresTo: z.string().optional().or(z.literal("")),
+      warrantyMonths: z
+        .union([
+          z.literal(12),
+          z.literal(15),
+          z.literal(18),
+          z.literal(24),
+        ])
+        .optional(),
     })
     .partial()
     .optional(),
@@ -226,3 +238,50 @@ export const ACTIVE_IMPORT_STATUSES = new Set([
   "VALIDATING",
   "PROCESSING",
 ]);
+
+export const followUpSequenceStageSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Ingresá el nombre de la etapa")
+    .max(120, "El nombre no puede superar los 120 caracteres"),
+  offsetDays: z
+    .number()
+    .int("Los días de offset deben ser un número entero")
+    .min(-365, "El offset no puede ser menor a -365 días")
+    .max(365, "El offset no puede ser mayor a 365 días"),
+  template: z
+    .string()
+    .trim()
+    .min(1, "Ingresá el mensaje de la etapa")
+    .max(4096, "El mensaje no puede superar los 4096 caracteres"),
+});
+
+export type FollowUpSequenceStageFormValues = z.output<typeof followUpSequenceStageSchema>;
+
+export const followUpSequenceSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Ingresá el nombre de la secuencia")
+    .max(120, "El nombre no puede superar los 120 caracteres"),
+  description: z
+    .string()
+    .trim()
+    .max(1000, "La descripción no puede superar los 1000 caracteres")
+    .optional()
+    .or(z.literal("")),
+  warrantyMonths: z
+    .number()
+    .int()
+    .min(1)
+    .max(24)
+    .refine((val) => [12, 15, 18, 24].includes(val), {
+      message: "La duración de garantía debe ser 12, 15, 18 o 24 meses",
+    }),
+  stages: z
+    .array(followUpSequenceStageSchema)
+    .min(1, "Al menos una etapa es requerida"),
+});
+
+export type FollowUpSequenceFormValues = z.output<typeof followUpSequenceSchema>;

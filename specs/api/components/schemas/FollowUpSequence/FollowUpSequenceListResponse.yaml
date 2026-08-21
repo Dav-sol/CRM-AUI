@@ -1,0 +1,11 @@
+type: object
+required:
+  - data
+  - meta
+properties:
+  data:
+    type: array
+    items:
+      $ref: "./FollowUpSequenceSummary.yaml"
+  meta:
+    $ref: "../../responses/pagination.yaml"

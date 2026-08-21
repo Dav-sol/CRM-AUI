@@ -33,3 +33,30 @@ properties:
       - ACTIVE
       - INACTIVE
       - BLOCKED
+
+  warrantyExpiresFrom:
+    type: string
+    format: date
+    description: |
+      Lower bound on the purchase warranty expiration date
+      (`warrantyExpiresAt`). Date-only (`YYYY-MM-DD`) includes the whole
+      requested day.
+
+  warrantyExpiresTo:
+    type: string
+    format: date
+    description: |
+      Upper bound on the purchase warranty expiration date
+      (`warrantyExpiresAt`). Date-only (`YYYY-MM-DD`) includes the whole
+      requested day.
+
+  warrantyMonths:
+    type: integer
+    enum:
+      - 12
+      - 15
+      - 18
+      - 24
+    description: |
+      Warranty duration in months of the purchased product. Restricted to
+      the catalog values supported by Product/Purchase/FollowUpSequence.

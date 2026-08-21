@@ -215,6 +215,7 @@ export class WhatsappService {
     organizationId: string;
     purchaseId: string;
     scheduledDate: Date;
+    messageTemplate?: string | null;
     purchase: {
       purchaseDate: Date;
       customer: {
@@ -389,6 +390,7 @@ export class WhatsappService {
 
   private buildAutomaticContent(automation: {
     scheduledDate: Date;
+    messageTemplate?: string | null;
     purchase: {
       purchaseDate: Date;
       customer: { name: string };
@@ -402,6 +404,15 @@ export class WhatsappService {
       templateD365: string | null;
     } | null;
   }): string {
+    // Snapshot template (sequence-generated automations) wins over every
+    // heuristic; the automation is self-sufficient at generation time.
+    const snapshotTemplate =
+      automation.messageTemplate && automation.messageTemplate.length > 0
+        ? automation.messageTemplate
+        : null;
+    if (snapshotTemplate) {
+      return this.renderTemplate(snapshotTemplate, automation);
+    }
     // AU-005 stages: +3 días, +6 meses, +12 meses. La plantilla de etapa
     // gana; si no está definida se usa la plantilla base de la campaña.
     const days = Math.ceil(
@@ -415,6 +426,19 @@ export class WhatsappService {
       (campaign && days <= 180 && campaign.templateD180) ||
       (campaign && days <= 365 && campaign.templateD365);
     const template = stageTemplate || campaign?.template || AUTOMATIC_TEMPLATE;
+    return this.renderTemplate(template, automation);
+  }
+
+  private renderTemplate(
+    template: string,
+    automation: {
+      purchase: {
+        customer: { name: string };
+        product: { name: string } | null;
+      };
+      organization: { name: string } | null;
+    },
+  ): string {
     return template
       .replace('{customerName}', automation.purchase.customer.name)
       .replace('{productName}', automation.purchase.product?.name ?? '')

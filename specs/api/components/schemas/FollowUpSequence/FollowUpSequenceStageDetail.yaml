@@ -1,0 +1,19 @@
+type: object
+required:
+  - uuid
+  - name
+  - offsetDays
+  - template
+  - createdAt
+properties:
+  uuid:
+    type: string
+  name:
+    type: string
+  offsetDays:
+    type: integer
+  template:
+    type: string
+  createdAt:
+    type: string
+    format: date-time

@@ -1,0 +1,419 @@
+/follow-up-sequences:
+  post:
+    tags:
+      - FollowUpSequences
+    summary: Create a follow-up sequence
+    description: |
+      Creates a follow-up sequence with stages in DRAFT state.
+      All authenticated organization roles may create sequences.
+      At least one stage is required.
+    operationId: createFollowUpSequence
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/FollowUpSequence/CreateFollowUpSequenceRequest.yaml"
+    responses:
+      "201":
+        description: Sequence created
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - data
+              properties:
+                data:
+                  type: object
+                  required:
+                    - uuid
+                    - name
+                    - organizationId
+                    - createdAt
+                  properties:
+                    uuid:
+                      type: string
+                    name:
+                      type: string
+                    organizationId:
+                      type: string
+                    createdAt:
+                      type: string
+                      format: date-time
+      "400":
+        description: Missing required fields or validation error (VALIDATION_ERROR)
+        content:
+          application/json:
+            schema:
+              $ref: "../components/responses/error.yaml"
+      "401":
+        description: Missing or invalid access token
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+      "403":
+        description: Organization scope required (FORBIDDEN)
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+                      example: Organization scope required
+
+  get:
+    tags:
+      - FollowUpSequences
+    summary: List follow-up sequences
+    description: |
+      Returns a paginated list of follow-up sequences ordered by -createdAt,
+      scoped to the caller organization.
+    operationId: listFollowUpSequences
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      - name: search
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Case-insensitive partial match over the sequence name.
+      - name: warrantyMonths
+        in: query
+        required: false
+        schema:
+          type: integer
+          enum: [12, 15, 18, 24]
+        description: Exact match over warranty months.
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: "^-?(createdAt|updatedAt|name|warrantyMonths)$"
+        description: Field sorted by; "-" prefix means descending. Defaults to -createdAt.
+    responses:
+      "200":
+        description: Paginated sequence list
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/FollowUpSequence/FollowUpSequenceListResponse.yaml"
+      "401":
+        description: Missing or invalid access token
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+      "403":
+        description: Organization scope required (FORBIDDEN)
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+                      example: Organization scope required
+
+/follow-up-sequences/{uuid}:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Sequence uuid
+  get:
+    tags:
+      - FollowUpSequences
+    summary: Get a follow-up sequence by uuid
+    description: |
+      Returns the sequence with its stages only if it belongs to the caller organization.
+      Unknown or cross-tenant sequences return 404 FOLLOW_UP_SEQUENCE_NOT_FOUND.
+    operationId: getFollowUpSequence
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: Sequence detail with stages
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/FollowUpSequence/FollowUpSequenceResponse.yaml"
+      "401":
+        description: Missing or invalid access token
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+      "403":
+        description: Organization scope required (FORBIDDEN)
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+                      example: Organization scope required
+      "404":
+        description: "Unknown or cross-tenant sequence (FOLLOW_UP_SEQUENCE_NOT_FOUND)"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/responses/error.yaml"
+
+  patch:
+    tags:
+      - FollowUpSequences
+    summary: Update a follow-up sequence
+    description: |
+      Partially updates the sequence. If the sequence is used by campaigns,
+      only name and description can be modified. Otherwise, warrantyMonths and stages
+      can also be updated. At least one field must be provided.
+    operationId: updateFollowUpSequence
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/FollowUpSequence/UpdateFollowUpSequenceRequest.yaml"
+    responses:
+      "200":
+        description: Sequence updated
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - data
+              properties:
+                data:
+                  type: object
+                  required:
+                    - uuid
+                    - name
+                  properties:
+                    uuid:
+                      type: string
+                    name:
+                      type: string
+      "400":
+        description: Sequence used by campaigns and forbidden fields modified, or validation error (VALIDATION_ERROR)
+        content:
+          application/json:
+            schema:
+              $ref: "../components/responses/error.yaml"
+      "401":
+        description: Missing or invalid access token
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+      "403":
+        description: Organization scope required (FORBIDDEN)
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+                      example: Organization scope required
+      "404":
+        description: "Unknown or cross-tenant sequence (FOLLOW_UP_SEQUENCE_NOT_FOUND)"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/responses/error.yaml"
+
+  delete:
+    tags:
+      - FollowUpSequences
+    summary: Delete a follow-up sequence (soft delete)
+    description: |
+      Soft-deletes the sequence. Cannot delete if used by campaigns.
+    operationId: deleteFollowUpSequence
+    security:
+      - bearerAuth: []
+    responses:
+      "200":
+        description: Sequence soft-deleted
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - data
+              properties:
+                data:
+                  type: object
+                  required:
+                    - uuid
+                    - success
+                  properties:
+                    uuid:
+                      type: string
+                    success:
+                      type: boolean
+      "400":
+        description: Sequence used by campaigns (VALIDATION_ERROR)
+        content:
+          application/json:
+            schema:
+              $ref: "../components/responses/error.yaml"
+      "401":
+        description: Missing or invalid access token
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+      "403":
+        description: Organization scope required (FORBIDDEN)
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: FORBIDDEN
+                    message:
+                      type: string
+                      example: Organization scope required
+      "404":
+        description: "Unknown or cross-tenant sequence (FOLLOW_UP_SEQUENCE_NOT_FOUND)"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/responses/error.yaml"

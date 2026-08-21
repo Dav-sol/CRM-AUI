@@ -33,4 +33,21 @@ export type CreateCampaignBodySegment = ({
      */
   purchaseTo?: string;
   customerStatus?: 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
+  /**
+     * Lower bound on the purchase warranty expiration date
+     * (`warrantyExpiresAt`). Date-only (`YYYY-MM-DD`) includes the whole
+     * requested day.
+     */
+  warrantyExpiresFrom?: string;
+  /**
+     * Upper bound on the purchase warranty expiration date
+     * (`warrantyExpiresAt`). Date-only (`YYYY-MM-DD`) includes the whole
+     * requested day.
+     */
+  warrantyExpiresTo?: string;
+  /**
+     * Warranty duration in months of the purchased product. Restricted to
+     * the catalog values supported by Product/Purchase/FollowUpSequence.
+     */
+  warrantyMonths?: 12 | 15 | 18 | 24;
 });

@@ -56,6 +56,7 @@ describe('CampaignsService', () => {
       findUnique: jest.Mock;
       count: jest.Mock;
       groupBy: jest.Mock;
+      create: jest.Mock;
       createMany: jest.Mock;
       updateMany: jest.Mock;
     };
@@ -84,6 +85,7 @@ describe('CampaignsService', () => {
         findUnique: jest.fn(),
         count: jest.fn(),
         groupBy: jest.fn(),
+        create: jest.fn(),
         createMany: jest.fn(),
         updateMany: jest.fn(),
       },
@@ -415,6 +417,181 @@ describe('CampaignsService', () => {
           payload: expect.objectContaining({ automationCount: 2 }) as object,
         }),
       );
+    });
+
+    it('generates one automation per stage with the stage template snapshot (HG-FUS-02)', async () => {
+      const warrantyExpires = new Date('2027-08-01T12:00:00.000Z');
+      prisma.campaign.findFirst.mockResolvedValue(
+        campaignRow({
+          followUpSequence: {
+            uuid: 'fus-1',
+            warrantyMonths: 12,
+            stages: [
+              {
+                uuid: 'st-1',
+                name: 'D-30',
+                offsetDays: -30,
+                template: 'Recordatorio {customerName}',
+              },
+              {
+                uuid: 'st-2',
+                name: 'D0',
+                offsetDays: 0,
+                template: 'Vence hoy tu {productName}',
+              },
+            ],
+          },
+        }),
+      );
+      let txRef:
+        | {
+            purchase: { findMany: jest.Mock };
+            automation: { create: jest.Mock; createMany: jest.Mock };
+          }
+        | undefined;
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = {
+            campaign: {
+              updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+            },
+            purchase: {
+              findMany: jest.fn(
+                (
+                  args?: { select?: Record<string, unknown> },
+                ): Promise<unknown> => {
+                  if (args?.select && 'warrantyExpiresAt' in args.select) {
+                    return Promise.resolve([
+                      { id: 'pu-1', warrantyExpiresAt: warrantyExpires },
+                    ]);
+                  }
+                  return Promise.resolve([
+                    {
+                      id: 'pu-1',
+                      customerId: 'cu-a',
+                      purchaseDate: new Date('2026-08-01T12:00:00.000Z'),
+                    },
+                  ]);
+                },
+              ),
+            },
+            commercialCycle: {
+              findMany: jest.fn().mockResolvedValue([]),
+              create: jest.fn().mockResolvedValue({ id: 'cy-1' }),
+              update: jest.fn(),
+            },
+            automation: {
+              createMany: jest.fn(),
+              create: jest.fn().mockResolvedValue({}),
+            },
+          };
+          txRef = tx;
+          return fn(tx);
+        },
+      );
+
+      const result = await service.activate(orgUser, 'cu-1');
+
+      expect(result.automationCount).toBe(2);
+      expect(txRef?.automation.create).toHaveBeenCalledTimes(2);
+      // Snapshot persisted per stage
+      expect(txRef?.automation.create).toHaveBeenNthCalledWith(1, {
+        data: expect.objectContaining({
+          purchaseId: 'pu-1',
+          campaignId: 'c-1',
+          status: 'SCHEDULED',
+          messageTemplate: 'Recordatorio {customerName}',
+        }) as unknown,
+      });
+      expect(txRef?.automation.create).toHaveBeenNthCalledWith(2, {
+        data: expect.objectContaining({
+          messageTemplate: 'Vence hoy tu {productName}',
+        }) as unknown,
+      });
+      // scheduledDate = warrantyExpiresAt + offsetDays
+      const firstCall = txRef!.automation.create.mock.calls[0][0] as {
+        data: { scheduledDate: Date };
+      };
+      const secondCall = txRef!.automation.create.mock.calls[1][0] as {
+        data: { scheduledDate: Date };
+      };
+      const expectedMinus30 = new Date(warrantyExpires);
+      expectedMinus30.setDate(expectedMinus30.getDate() - 30);
+      const expectedZero = new Date(warrantyExpires);
+      expectedZero.setDate(expectedZero.getDate());
+      expect(firstCall.data.scheduledDate.getTime()).toBe(
+        expectedMinus30.getTime(),
+      );
+      expect(secondCall.data.scheduledDate.getTime()).toBe(
+        expectedZero.getTime(),
+      );
+      // Legacy single-template bulk path is not used for sequence campaigns
+      expect(txRef?.automation.createMany).not.toHaveBeenCalled();
+    });
+
+    it('skips purchases without warrantyExpiresAt in sequence campaigns', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        campaignRow({
+          followUpSequence: {
+            uuid: 'fus-1',
+            warrantyMonths: 12,
+            stages: [
+              {
+                uuid: 'st-1',
+                name: 'D0',
+                offsetDays: 0,
+                template: 'Vence hoy',
+              },
+            ],
+          },
+        }),
+      );
+      let txAutomationCreate: jest.Mock | undefined;
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = {
+            campaign: {
+              updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+            },
+            purchase: {
+              findMany: jest.fn(
+                (
+                  args?: { select?: Record<string, unknown> },
+                ): Promise<unknown> => {
+                  if (args?.select && 'warrantyExpiresAt' in args.select) {
+                    return Promise.resolve([
+                      { id: 'pu-1', warrantyExpiresAt: null },
+                    ]);
+                  }
+                  return Promise.resolve([
+                    {
+                      id: 'pu-1',
+                      customerId: 'cu-a',
+                      purchaseDate: new Date('2026-08-01T12:00:00.000Z'),
+                    },
+                  ]);
+                },
+              ),
+            },
+            commercialCycle: {
+              findMany: jest.fn().mockResolvedValue([]),
+              create: jest.fn().mockResolvedValue({ id: 'cy-1' }),
+              update: jest.fn(),
+            },
+            automation: {
+              createMany: jest.fn(),
+              create: jest.fn().mockResolvedValue({}),
+            },
+          };
+          txAutomationCreate = tx.automation.create;
+          return fn(tx);
+        },
+      );
+
+      const result = await service.activate(orgUser, 'cu-1');
+
+      expect(result.automationCount).toBe(0);
+      expect(txAutomationCreate).not.toHaveBeenCalled();
     });
 
     it('reuses an existing ACTIVE cycle for the purchase', async () => {

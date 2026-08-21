@@ -1,6 +1,8 @@
 import {
   IsDateString,
   IsEnum,
+  IsIn,
+  IsInt,
   IsOptional,
   IsString,
   MaxLength,
@@ -8,6 +10,9 @@ import {
   ValidatorConstraintInterface,
 } from 'class-validator';
 import { CustomerStatus } from '@prisma/client';
+
+// Aligned with Product/Purchase/FollowUpSequence warranty catalog values.
+const ALLOWED_WARRANTY_MONTHS = [12, 15, 18, 24] as const;
 
 @ValidatorConstraint({ name: 'segmentHasCriterion', async: false })
 export class SegmentHasCriterionConstraint implements ValidatorConstraintInterface {
@@ -21,7 +26,10 @@ export class SegmentHasCriterionConstraint implements ValidatorConstraintInterfa
       segment.productId !== undefined ||
       segment.purchaseFrom !== undefined ||
       segment.purchaseTo !== undefined ||
-      segment.customerStatus !== undefined
+      segment.customerStatus !== undefined ||
+      segment.warrantyExpiresFrom !== undefined ||
+      segment.warrantyExpiresTo !== undefined ||
+      segment.warrantyMonths !== undefined
     );
   }
 
@@ -52,4 +60,17 @@ export class CampaignSegmentDto {
   @IsOptional()
   @IsEnum(CustomerStatus)
   customerStatus?: CustomerStatus;
+
+  @IsOptional()
+  @IsDateString()
+  warrantyExpiresFrom?: string; // ISO date, whole-day inclusive - warranty expiration date from
+
+  @IsOptional()
+  @IsDateString()
+  warrantyExpiresTo?: string; // ISO date, whole-day inclusive - warranty expiration date to
+
+  @IsOptional()
+  @IsInt()
+  @IsIn(ALLOWED_WARRANTY_MONTHS)
+  warrantyMonths?: number; // warranty duration in months (12, 15, 18, 24)
 }

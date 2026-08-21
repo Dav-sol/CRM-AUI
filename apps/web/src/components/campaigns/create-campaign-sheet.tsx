@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Megaphone } from "lucide-react";
+import { Loader2, Megaphone, Calendar, Shield, AlertTriangle, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
@@ -19,8 +19,8 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, apiCreateCampaign, apiListProducts } from "@/lib/api";
-import type { ProductItem } from "@/lib/sdk-types";
+import { ApiError, apiCreateCampaign, apiListProducts, apiListFollowUpSequences } from "@/lib/api";
+import type { ProductItem, FollowUpSequenceItem } from "@/lib/sdk-types";
 import { cn } from "@/lib/utils";
 import { campaignSchema, type CampaignFormValues } from "@/lib/validators";
 
@@ -35,6 +35,7 @@ const EMPTY_FORM: CampaignFormValues = {
   name: "",
   description: "",
   type: "AUTOMATIC",
+  followUpSequenceId: "",
   template: "",
   templateD3: "",
   templateD180: "",
@@ -43,16 +44,25 @@ const EMPTY_FORM: CampaignFormValues = {
   segment: undefined,
 };
 
+const WARRANTY_STAGES = [
+  { key: "template", label: "Día 0", placeholder: "Confirmación de garantía digital, datos de instalación, recomendaciones de cuidado…", icon: Shield },
+  { key: "templateD3", label: "Mitad de garantía", placeholder: "Recordatorio preventivo, invitación a revisión gratuita de alternador y voltaje…", icon: RotateCcw },
+  { key: "templateD180", label: "Día -60 (Pre-vencimiento)", placeholder: "Aviso de proximidad del vencimiento, diagnóstico gratuito…", icon: AlertTriangle },
+  { key: "templateD365", label: "Día -30 (Renovación)", placeholder: "Oferta de renovación, Plan Retorno, descuento + instalación/domicilio…", icon: Calendar },
+] as const;
+
 export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
   const [open, setOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [products, setProducts] = useState<ProductItem[] | null>(null);
+  const [sequences, setSequences] = useState<FollowUpSequenceItem[] | null>(null);
 
   const {
     register,
     handleSubmit,
     reset,
     control,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignSchema),
@@ -60,13 +70,19 @@ export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
     defaultValues: EMPTY_FORM,
   });
 
+  const followUpSequenceId = watch("followUpSequenceId");
+  const hasSequence = Boolean(followUpSequenceId);
+
   const segment = useWatch({ control, name: "segment" });
   const hasSegmentCriterion = Boolean(
     segment?.city?.trim() ||
       segment?.productId ||
       segment?.purchaseFrom ||
       segment?.purchaseTo ||
-      segment?.customerStatus,
+      segment?.customerStatus ||
+      segment?.warrantyExpiresFrom ||
+      segment?.warrantyExpiresTo ||
+      segment?.warrantyMonths,
   );
 
   useEffect(() => {
@@ -77,9 +93,13 @@ export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
 
     async function load() {
       try {
-        const data = await apiListProducts({ page: 1, limit: 100 });
+        const [productsData, sequencesData] = await Promise.all([
+          apiListProducts({ page: 1, limit: 100 }),
+          apiListFollowUpSequences({ page: 1, limit: 100 }),
+        ]);
         if (!cancelled) {
-          setProducts(data.data);
+          setProducts(productsData.data);
+          setSequences(sequencesData.data);
         }
       } catch (error) {
         if (cancelled) {
@@ -89,6 +109,7 @@ export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
           return;
         }
         setProducts([]);
+        setSequences([]);
       }
     }
 
@@ -111,6 +132,15 @@ export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
             ...(values.segment.customerStatus
               ? { customerStatus: values.segment.customerStatus }
               : {}),
+            ...(values.segment.warrantyExpiresFrom
+              ? { warrantyExpiresFrom: values.segment.warrantyExpiresFrom }
+              : {}),
+            ...(values.segment.warrantyExpiresTo
+              ? { warrantyExpiresTo: values.segment.warrantyExpiresTo }
+              : {}),
+            ...(values.segment.warrantyMonths
+              ? { warrantyMonths: values.segment.warrantyMonths }
+              : {}),
           }
         : undefined;
     try {
@@ -118,10 +148,8 @@ export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
         name: values.name,
         description: values.description || undefined,
         type: values.type,
+        followUpSequenceId: values.followUpSequenceId || undefined,
         template: values.template,
-        templateD3: values.templateD3?.trim() || undefined,
-        templateD180: values.templateD180?.trim() || undefined,
-        templateD365: values.templateD365?.trim() || undefined,
         startAt: values.startAt ? new Date(values.startAt).toISOString() : undefined,
         segment,
       });
@@ -155,8 +183,8 @@ export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
         <SheetHeader className="border-b border-border/60">
           <SheetTitle>Nueva campaña</SheetTitle>
           <SheetDescription>
-            La campaña se crea como borrador. Definí el segmento y el mensaje; activala cuando
-            esté lista.
+            La campaña se crea como borrador. Definí el segmento y los mensajes por etapa; activala
+            cuando esté lista.
           </SheetDescription>
         </SheetHeader>
 
@@ -178,7 +206,7 @@ export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
             <Label htmlFor="campaign-name">Nombre</Label>
             <Input
               id="campaign-name"
-              placeholder="Campaña de recompra"
+              placeholder="Campaña de garantía - Baterías MAC"
               maxLength={120}
               aria-invalid={!!errors.name}
               {...register("name")}
@@ -194,7 +222,7 @@ export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
             <Label htmlFor="campaign-description">Descripción</Label>
             <Textarea
               id="campaign-description"
-              placeholder="Objetivo de la campaña (opcional)"
+              placeholder="Seguimiento de garantía para baterías vendidas (12/15/18/24 meses)"
               rows={2}
               maxLength={1000}
               className="resize-none text-sm"
@@ -239,10 +267,35 @@ export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="campaign-template">Mensaje</Label>
+            <Label htmlFor="campaign-sequence">Secuencia de seguimiento</Label>
+            <select
+              id="campaign-sequence"
+              className={cn(selectClass, "appearance-none")}
+              {...register("followUpSequenceId")}
+            >
+              <option value="">Sin secuencia (usar mensaje principal)</option>
+              {sequences?.map((sequence) => (
+                <option key={sequence.uuid} value={sequence.uuid}>
+                  {sequence.name} ({sequence.warrantyMonths} meses, {sequence.stageCount} etapas)
+                </option>
+              ))}
+            </select>
+            {errors.followUpSequenceId && (
+              <p className="text-xs text-destructive" role="alert">
+                {errors.followUpSequenceId.message}
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Al seleccionar una secuencia, se usarán sus etapas y plantillas. El mensaje principal
+              se usa como fallback.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="campaign-template">Mensaje principal (fallback)</Label>
             <Textarea
               id="campaign-template"
-              placeholder="Hola {customerName}, te esperamos con tu {productName}…"
+              placeholder="Hola {customerName}, tu batería {productName} tiene garantía vigente…"
               rows={4}
               maxLength={4096}
               className="resize-none text-sm"
@@ -255,49 +308,42 @@ export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
               </p>
             )}
             <p className="text-xs text-muted-foreground">
-              Podés usar {"{customerName}"}, {"{productName}"} y {"{organizationName}"} como
-              variables.
+              Podés usar {"{customerName}"}, {"{productName}"}, {"{organizationName}"},{" "}
+              {"{warrantyExpiresAt}"} como variables.
             </p>
           </div>
 
           <div className="space-y-3 rounded-lg border border-border/60 p-3">
-            <p className="text-sm font-medium">Mensajes por etapa (opcional)</p>
-            <div className="space-y-2">
-              <Label htmlFor="campaign-template-d3">+3 días</Label>
-              <Textarea
-                id="campaign-template-d3"
-                placeholder="Agradecimiento y cuidados tras la compra…"
-                rows={2}
-                maxLength={4096}
-                className="resize-none text-sm"
-                {...register("templateD3")}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="campaign-template-d180">+6 meses</Label>
-              <Textarea
-                id="campaign-template-d180"
-                placeholder="Chequeo gratuito de la batería…"
-                rows={2}
-                maxLength={4096}
-                className="resize-none text-sm"
-                {...register("templateD180")}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="campaign-template-d365">+12 meses</Label>
-              <Textarea
-                id="campaign-template-d365"
-                placeholder="Invitación a recompra…"
-                rows={2}
-                maxLength={4096}
-                className="resize-none text-sm"
-                {...register("templateD365")}
-              />
-            </div>
+            <p className="text-sm font-medium">Mensajes por etapa de garantía (opcional)</p>
             <p className="text-xs text-muted-foreground">
-              Si una etapa queda vacía, se usa el mensaje principal.
+              Si una etapa queda vacía, se usa el mensaje principal. Las etapas se disparan
+              respecto a la fecha de vencimiento de la garantía.
             </p>
+            {!hasSequence && (
+              <div className="space-y-2">
+                {WARRANTY_STAGES.map((stage) => (
+                  <div key={stage.key} className="space-y-1">
+                    <Label htmlFor={`campaign-${stage.key}`}>
+                      <stage.icon className="size-3 inline-block mr-1" />
+                      {stage.label}
+                    </Label>
+                    <Textarea
+                      id={`campaign-${stage.key}`}
+                      placeholder={stage.placeholder}
+                      rows={2}
+                      maxLength={4096}
+                      className="resize-none text-sm"
+                      {...register(stage.key)}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+            {hasSequence && (
+              <p className="text-xs text-muted-foreground">
+                Las etapas y plantillas se tomarán de la secuencia seleccionada.
+              </p>
+            )}
           </div>
 
           <fieldset className="space-y-3 rounded-lg border border-border/60 p-3">
@@ -338,18 +384,52 @@ export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
                 <Input id="segment-to" type="date" {...register("segment.purchaseTo")} />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="segment-status">Estado del cliente</Label>
-              <select
-                id="segment-status"
-                className={cn(selectClass, "appearance-none")}
-                {...register("segment.customerStatus")}
-              >
-                <option value="">Todos</option>
-                <option value="ACTIVE">Activo</option>
-                <option value="INACTIVE">Inactivo</option>
-                <option value="BLOCKED">Bloqueado</option>
-              </select>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="segment-warranty-from">Garantía vence desde</Label>
+                <Input
+                  id="segment-warranty-from"
+                  type="date"
+                  {...register("segment.warrantyExpiresFrom")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="segment-warranty-to">Garantía vence hasta</Label>
+                <Input
+                  id="segment-warranty-to"
+                  type="date"
+                  {...register("segment.warrantyExpiresTo")}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="segment-warranty-months">Duración garantía (meses)</Label>
+                <select
+                  id="segment-warranty-months"
+                  className={cn(selectClass, "appearance-none")}
+                  {...register("segment.warrantyMonths", { valueAsNumber: true })}
+                >
+                  <option value="">Todas</option>
+                  <option value={12}>12 meses</option>
+                  <option value={15}>15 meses</option>
+                  <option value={18}>18 meses</option>
+                  <option value={24}>24 meses</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="segment-status">Estado del cliente</Label>
+                <select
+                  id="segment-status"
+                  className={cn(selectClass, "appearance-none")}
+                  {...register("segment.customerStatus")}
+                >
+                  <option value="">Todos</option>
+                  <option value="ACTIVE">Activo</option>
+                  <option value="INACTIVE">Inactivo</option>
+                  <option value="BLOCKED">Bloqueado</option>
+                </select>
+              </div>
             </div>
             {errors.segment && (
               <p className="text-xs text-destructive" role="alert">

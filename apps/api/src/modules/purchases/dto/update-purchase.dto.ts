@@ -50,4 +50,10 @@ export class UpdatePurchaseDto {
   @IsOptional()
   @IsEnum(PurchaseStatus)
   status?: PurchaseStatus;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(24)
+  warrantyMonths?: number;
 }

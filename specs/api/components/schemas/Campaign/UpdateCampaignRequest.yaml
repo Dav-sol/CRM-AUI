@@ -24,6 +24,11 @@ properties:
       - REPURCHASE
       - SPECIAL
 
+  followUpSequenceId:
+    type: string
+    format: uuid
+    description: Optional reference to a FollowUpSequence. If provided, the sequence's stages and templates will be used.
+
   template:
     type: string
     minLength: 1

@@ -1,0 +1,19 @@
+type: object
+required:
+  - data
+properties:
+  data:
+    allOf:
+      - $ref: "./FollowUpSequenceSummary.yaml"
+      - type: object
+        required:
+          - stages
+          - updatedAt
+        properties:
+          stages:
+            type: array
+            items:
+              $ref: "./FollowUpSequenceStageDetail.yaml"
+          updatedAt:
+            type: string
+            format: date-time

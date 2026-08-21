@@ -4,6 +4,7 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   MinLength,
   Validate,
@@ -29,6 +30,10 @@ export class CreateCampaignDto {
 
   @IsEnum(CampaignType)
   type!: CampaignType; // informational in v1 (AUTOMATIC/MANUAL/REPURCHASE/SPECIAL)
+
+  @IsOptional()
+  @IsUUID()
+  followUpSequenceId?: string; // referencia a FollowUpSequence (alternativa a template inline)
 
   @IsString()
   @MinLength(1)

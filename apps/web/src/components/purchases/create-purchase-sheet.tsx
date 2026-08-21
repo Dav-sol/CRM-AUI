@@ -1,9 +1,9 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, Calendar, Shield } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import { ApiError, apiCreatePurchase, apiListCustomers, apiListProducts } from "
 import type { CustomerItem, ProductItem } from "@/lib/sdk-types";
 import { cn } from "@/lib/utils";
 import { purchaseSchema, type PurchaseFormInput, type PurchaseFormValues } from "@/lib/validators";
+import { formatDate } from "@/lib/format";
 
 type CreatePurchaseSheetProps = {
   onCreated?: () => void;
@@ -41,6 +42,7 @@ export function CreatePurchaseSheet({ onCreated }: CreatePurchaseSheetProps) {
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<PurchaseFormInput, unknown, PurchaseFormValues>({
     resolver: zodResolver(purchaseSchema),
@@ -51,6 +53,19 @@ export function CreatePurchaseSheet({ onCreated }: CreatePurchaseSheetProps) {
       value: "",
     },
   });
+
+  const selectedProductId = useWatch({ control, name: "productId" });
+  const selectedPurchaseDate = useWatch({ control, name: "purchaseDate" });
+
+  const selectedProduct = products?.find((p) => p.id === selectedProductId);
+  const warrantyMonths = (selectedProduct as unknown as { warrantyMonths?: number })?.warrantyMonths;
+  const warrantyExpiresAt = warrantyMonths && selectedPurchaseDate
+    ? (() => {
+        const d = new Date(selectedPurchaseDate);
+        d.setMonth(d.getMonth() + warrantyMonths);
+        return d;
+      })()
+    : null;
 
   useEffect(() => {
     if (!open) {
@@ -99,6 +114,7 @@ export function CreatePurchaseSheet({ onCreated }: CreatePurchaseSheetProps) {
         quantity: values.quantity,
         value: values.value.replace(",", "."),
         status: values.status,
+        warrantyMonths: values.warrantyMonths,
       });
       toast.success("Compra registrada correctamente");
       setOpen(false);
@@ -199,6 +215,47 @@ export function CreatePurchaseSheet({ onCreated }: CreatePurchaseSheetProps) {
                 {errors.productId.message}
               </p>
             )}
+            {selectedProduct && warrantyMonths && (
+              <div className="mt-2 rounded-lg bg-muted/50 p-3 border border-border/60">
+                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <Shield className="size-4" />
+                  <span>Garantía del producto</span>
+                </div>
+                <div className="mt-1 grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Duración: </span>
+                    <span className="font-medium">{warrantyMonths} meses</span>
+                  </div>
+                  {warrantyExpiresAt && (
+                    <div>
+                      <span className="text-muted-foreground">Vence: </span>
+                      <span className="font-medium">
+                        <Calendar className="size-3 inline-block align-middle mr-1" />
+                        {formatDate(warrantyExpiresAt.toISOString())}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="purchase-warranty-months">Duración garantía (meses) <span className="text-xs text-muted-foreground">(opcional, sobrescribe la del producto)</span></Label>
+              <Input
+                id="purchase-warranty-months"
+                type="number"
+                min={1}
+                max={24}
+                step={1}
+                placeholder={warrantyMonths ? `${warrantyMonths} (producto)` : "Usa la del producto"}
+                aria-invalid={!!errors.warrantyMonths}
+                {...register("warrantyMonths", { valueAsNumber: true })}
+              />
+              {errors.warrantyMonths && (
+                <p className="text-xs text-destructive" role="alert">
+                  {errors.warrantyMonths.message}
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">

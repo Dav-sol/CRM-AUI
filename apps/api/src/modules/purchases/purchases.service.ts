@@ -21,6 +21,8 @@ export interface PurchaseListItem {
   productId: string;
   invoiceNumber: string;
   purchaseDate: Date;
+  warrantyMonths: number | null;
+  warrantyExpiresAt: Date | null;
   quantity: number;
   value: Prisma.Decimal;
   status: string;
@@ -56,6 +58,12 @@ const CUSTOMER_PRODUCT_SELECT = {
   customer: { select: { id: true, codcli: true, name: true } },
   product: { select: { id: true, code: true, name: true } },
 } as const;
+
+function addMonths(date: Date, months: number): Date {
+  const result = new Date(date);
+  result.setMonth(result.getMonth() + months);
+  return result;
+}
 
 @Injectable()
 export class PurchasesService {
@@ -125,7 +133,7 @@ export class PurchasesService {
 
     const product = await this.prisma.product.findFirst({
       where: { id: dto.productId, organizationId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, warrantyMonths: true },
     });
     if (!product) {
       await this.auditService.record({
@@ -153,6 +161,12 @@ export class PurchasesService {
         purchaseDate,
       },
     });
+
+    const warrantyMonths = product.warrantyMonths ?? null;
+    const warrantyExpiresAt = warrantyMonths
+      ? addMonths(purchaseDate, warrantyMonths)
+      : null;
+
     if (existing) {
       await this.auditService.record({
         module: MODULE,
@@ -178,6 +192,8 @@ export class PurchasesService {
           productId: dto.productId,
           invoiceNumber: dto.invoiceNumber,
           purchaseDate,
+          warrantyMonths,
+          warrantyExpiresAt,
           quantity: dto.quantity,
           value: new Prisma.Decimal(dto.value),
           status: dto.status ?? undefined,
@@ -238,10 +254,34 @@ export class PurchasesService {
       });
     }
 
+    let warrantyMonths: number | null | undefined = undefined;
+    let warrantyExpiresAt: Date | null | undefined = undefined;
+
+    if (dto.warrantyMonths !== undefined) {
+      warrantyMonths = dto.warrantyMonths;
+    } else if (dto.purchaseDate) {
+      const product = await this.prisma.product.findUnique({
+        where: { id: purchase.productId },
+        select: { warrantyMonths: true },
+      });
+      warrantyMonths =
+        product?.warrantyMonths ?? purchase.warrantyMonths ?? null;
+    }
+
+    if (dto.purchaseDate || dto.warrantyMonths !== undefined) {
+      const newPurchaseDate = dto.purchaseDate
+        ? new Date(dto.purchaseDate)
+        : purchase.purchaseDate;
+      const months = warrantyMonths ?? purchase.warrantyMonths ?? null;
+      warrantyExpiresAt = months ? addMonths(newPurchaseDate, months) : null;
+    }
+
     const updated = await this.prisma.purchase.update({
       where: { id: purchase.id },
       data: {
         purchaseDate: dto.purchaseDate ? new Date(dto.purchaseDate) : undefined,
+        warrantyMonths,
+        warrantyExpiresAt,
         quantity: dto.quantity ?? undefined,
         value: dto.value ? new Prisma.Decimal(dto.value) : undefined,
         status: dto.status ?? undefined,

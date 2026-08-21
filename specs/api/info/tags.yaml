@@ -39,3 +39,6 @@
 
 - name: Dashboard
   description: Dashboard metrics
+
+- name: FollowUpSequences
+  description: Follow-up sequences for warranty management

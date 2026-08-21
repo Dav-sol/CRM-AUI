@@ -67,6 +67,11 @@ import type {
   CreateCustomer403,
   CreateCustomer409,
   CreateCustomerBody,
+  CreateFollowUpSequence201,
+  CreateFollowUpSequence400,
+  CreateFollowUpSequence401,
+  CreateFollowUpSequence403,
+  CreateFollowUpSequenceBody,
   CreateImportJob200,
   CreateImportJob201,
   CreateImportJob400,
@@ -106,6 +111,11 @@ import type {
   DeleteCustomer401,
   DeleteCustomer403,
   DeleteCustomer404,
+  DeleteFollowUpSequence200,
+  DeleteFollowUpSequence400,
+  DeleteFollowUpSequence401,
+  DeleteFollowUpSequence403,
+  DeleteFollowUpSequence404,
   DeleteProduct200,
   DeleteProduct401,
   DeleteProduct403,
@@ -135,6 +145,10 @@ import type {
   GetDashboardCampaigns401,
   GetDashboardSummary200,
   GetDashboardSummary401,
+  GetFollowUpSequence200,
+  GetFollowUpSequence401,
+  GetFollowUpSequence403,
+  GetFollowUpSequence404,
   GetImportJob200,
   GetImportJob401,
   GetImportJob404,
@@ -174,6 +188,10 @@ import type {
   ListCustomers400,
   ListCustomers401,
   ListCustomersParams,
+  ListFollowUpSequences200,
+  ListFollowUpSequences401,
+  ListFollowUpSequences403,
+  ListFollowUpSequencesParams,
   ListImportJobs200,
   ListImportJobs401,
   ListImportJobsParams,
@@ -261,6 +279,12 @@ import type {
   UpdateCustomer403,
   UpdateCustomer404,
   UpdateCustomerBody,
+  UpdateFollowUpSequence200,
+  UpdateFollowUpSequence400,
+  UpdateFollowUpSequence401,
+  UpdateFollowUpSequence403,
+  UpdateFollowUpSequence404,
+  UpdateFollowUpSequenceBody,
   UpdateProduct200,
   UpdateProduct400,
   UpdateProduct401,
@@ -4503,6 +4527,330 @@ export const getDashboardActivity = async ( options?: RequestInit): Promise<getD
 
   const data: getDashboardActivityResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as getDashboardActivityResponse
+}
+
+
+
+export type createFollowUpSequenceResponse201 = {
+  data: CreateFollowUpSequence201
+  status: 201
+}
+
+export type createFollowUpSequenceResponse400 = {
+  data: CreateFollowUpSequence400
+  status: 400
+}
+
+export type createFollowUpSequenceResponse401 = {
+  data: CreateFollowUpSequence401
+  status: 401
+}
+
+export type createFollowUpSequenceResponse403 = {
+  data: CreateFollowUpSequence403
+  status: 403
+}
+
+export type createFollowUpSequenceResponseSuccess = (createFollowUpSequenceResponse201) & {
+  headers: Headers;
+};
+export type createFollowUpSequenceResponseError = (createFollowUpSequenceResponse400 | createFollowUpSequenceResponse401 | createFollowUpSequenceResponse403) & {
+  headers: Headers;
+};
+
+export type createFollowUpSequenceResponse = (createFollowUpSequenceResponseSuccess | createFollowUpSequenceResponseError)
+
+export const getCreateFollowUpSequenceUrl = () => {
+
+
+
+
+  return `/api/v1/follow-up-sequences`
+}
+
+/**
+ * Creates a follow-up sequence with stages in DRAFT state.
+ * All authenticated organization roles may create sequences.
+ * At least one stage is required.
+ * @summary Create a follow-up sequence
+ */
+export const createFollowUpSequence = async (createFollowUpSequenceBody: CreateFollowUpSequenceBody, options?: RequestInit): Promise<createFollowUpSequenceResponse> => {
+
+  const res = await fetch(getCreateFollowUpSequenceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createFollowUpSequenceBody)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: createFollowUpSequenceResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as createFollowUpSequenceResponse
+}
+
+
+
+export type listFollowUpSequencesResponse200 = {
+  data: ListFollowUpSequences200
+  status: 200
+}
+
+export type listFollowUpSequencesResponse401 = {
+  data: ListFollowUpSequences401
+  status: 401
+}
+
+export type listFollowUpSequencesResponse403 = {
+  data: ListFollowUpSequences403
+  status: 403
+}
+
+export type listFollowUpSequencesResponseSuccess = (listFollowUpSequencesResponse200) & {
+  headers: Headers;
+};
+export type listFollowUpSequencesResponseError = (listFollowUpSequencesResponse401 | listFollowUpSequencesResponse403) & {
+  headers: Headers;
+};
+
+export type listFollowUpSequencesResponse = (listFollowUpSequencesResponseSuccess | listFollowUpSequencesResponseError)
+
+export const getListFollowUpSequencesUrl = (params?: ListFollowUpSequencesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/follow-up-sequences?${stringifiedParams}` : `/api/v1/follow-up-sequences`
+}
+
+/**
+ * Returns a paginated list of follow-up sequences ordered by -createdAt,
+ * scoped to the caller organization.
+ * @summary List follow-up sequences
+ */
+export const listFollowUpSequences = async (params?: ListFollowUpSequencesParams, options?: RequestInit): Promise<listFollowUpSequencesResponse> => {
+
+  const res = await fetch(getListFollowUpSequencesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listFollowUpSequencesResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listFollowUpSequencesResponse
+}
+
+
+
+export type getFollowUpSequenceResponse200 = {
+  data: GetFollowUpSequence200
+  status: 200
+}
+
+export type getFollowUpSequenceResponse401 = {
+  data: GetFollowUpSequence401
+  status: 401
+}
+
+export type getFollowUpSequenceResponse403 = {
+  data: GetFollowUpSequence403
+  status: 403
+}
+
+export type getFollowUpSequenceResponse404 = {
+  data: GetFollowUpSequence404
+  status: 404
+}
+
+export type getFollowUpSequenceResponseSuccess = (getFollowUpSequenceResponse200) & {
+  headers: Headers;
+};
+export type getFollowUpSequenceResponseError = (getFollowUpSequenceResponse401 | getFollowUpSequenceResponse403 | getFollowUpSequenceResponse404) & {
+  headers: Headers;
+};
+
+export type getFollowUpSequenceResponse = (getFollowUpSequenceResponseSuccess | getFollowUpSequenceResponseError)
+
+export const getGetFollowUpSequenceUrl = (uuid: string,) => {
+
+
+
+
+  return `/api/v1/follow-up-sequences/${uuid}`
+}
+
+/**
+ * Returns the sequence with its stages only if it belongs to the caller organization.
+ * Unknown or cross-tenant sequences return 404 FOLLOW_UP_SEQUENCE_NOT_FOUND.
+ * @summary Get a follow-up sequence by uuid
+ */
+export const getFollowUpSequence = async (uuid: string, options?: RequestInit): Promise<getFollowUpSequenceResponse> => {
+
+  const res = await fetch(getGetFollowUpSequenceUrl(uuid),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: getFollowUpSequenceResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getFollowUpSequenceResponse
+}
+
+
+
+export type updateFollowUpSequenceResponse200 = {
+  data: UpdateFollowUpSequence200
+  status: 200
+}
+
+export type updateFollowUpSequenceResponse400 = {
+  data: UpdateFollowUpSequence400
+  status: 400
+}
+
+export type updateFollowUpSequenceResponse401 = {
+  data: UpdateFollowUpSequence401
+  status: 401
+}
+
+export type updateFollowUpSequenceResponse403 = {
+  data: UpdateFollowUpSequence403
+  status: 403
+}
+
+export type updateFollowUpSequenceResponse404 = {
+  data: UpdateFollowUpSequence404
+  status: 404
+}
+
+export type updateFollowUpSequenceResponseSuccess = (updateFollowUpSequenceResponse200) & {
+  headers: Headers;
+};
+export type updateFollowUpSequenceResponseError = (updateFollowUpSequenceResponse400 | updateFollowUpSequenceResponse401 | updateFollowUpSequenceResponse403 | updateFollowUpSequenceResponse404) & {
+  headers: Headers;
+};
+
+export type updateFollowUpSequenceResponse = (updateFollowUpSequenceResponseSuccess | updateFollowUpSequenceResponseError)
+
+export const getUpdateFollowUpSequenceUrl = (uuid: string,) => {
+
+
+
+
+  return `/api/v1/follow-up-sequences/${uuid}`
+}
+
+/**
+ * Partially updates the sequence. If the sequence is used by campaigns,
+ * only name and description can be modified. Otherwise, warrantyMonths and stages
+ * can also be updated. At least one field must be provided.
+ * @summary Update a follow-up sequence
+ */
+export const updateFollowUpSequence = async (uuid: string,
+    updateFollowUpSequenceBody: UpdateFollowUpSequenceBody, options?: RequestInit): Promise<updateFollowUpSequenceResponse> => {
+
+  const res = await fetch(getUpdateFollowUpSequenceUrl(uuid),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateFollowUpSequenceBody)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: updateFollowUpSequenceResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as updateFollowUpSequenceResponse
+}
+
+
+
+export type deleteFollowUpSequenceResponse200 = {
+  data: DeleteFollowUpSequence200
+  status: 200
+}
+
+export type deleteFollowUpSequenceResponse400 = {
+  data: DeleteFollowUpSequence400
+  status: 400
+}
+
+export type deleteFollowUpSequenceResponse401 = {
+  data: DeleteFollowUpSequence401
+  status: 401
+}
+
+export type deleteFollowUpSequenceResponse403 = {
+  data: DeleteFollowUpSequence403
+  status: 403
+}
+
+export type deleteFollowUpSequenceResponse404 = {
+  data: DeleteFollowUpSequence404
+  status: 404
+}
+
+export type deleteFollowUpSequenceResponseSuccess = (deleteFollowUpSequenceResponse200) & {
+  headers: Headers;
+};
+export type deleteFollowUpSequenceResponseError = (deleteFollowUpSequenceResponse400 | deleteFollowUpSequenceResponse401 | deleteFollowUpSequenceResponse403 | deleteFollowUpSequenceResponse404) & {
+  headers: Headers;
+};
+
+export type deleteFollowUpSequenceResponse = (deleteFollowUpSequenceResponseSuccess | deleteFollowUpSequenceResponseError)
+
+export const getDeleteFollowUpSequenceUrl = (uuid: string,) => {
+
+
+
+
+  return `/api/v1/follow-up-sequences/${uuid}`
+}
+
+/**
+ * Soft-deletes the sequence. Cannot delete if used by campaigns.
+ * @summary Delete a follow-up sequence (soft delete)
+ */
+export const deleteFollowUpSequence = async (uuid: string, options?: RequestInit): Promise<deleteFollowUpSequenceResponse> => {
+
+  const res = await fetch(getDeleteFollowUpSequenceUrl(uuid),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: deleteFollowUpSequenceResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as deleteFollowUpSequenceResponse
 }
 
 

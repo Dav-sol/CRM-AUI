@@ -28,6 +28,7 @@ model Organization {
   purchases                  Purchase[]
   campaigns                  Campaign[]
   automations                Automation[]
+  followUpSequences          FollowUpSequence[]
   conversations              Conversation[]
   messages                   Message[]
   imports                    Import[]
@@ -125,6 +126,7 @@ model Product {
   name           String
   category       String?
   status         ProductStatus @default(ACTIVE)
+  warrantyMonths Int?          @map("warranty_months")
   createdAt      DateTime      @default(now()) @map("created_at")
   updatedAt      DateTime      @updatedAt @map("updated_at")
   deletedAt      DateTime?     @map("deleted_at")
@@ -142,27 +144,29 @@ model Product {
 }
 
 model Purchase {
-  id             String         @id @default(cuid())
-  uuid           String         @unique @default(uuid())
-  organizationId String         @map("organization_id")
-  customerId     String         @map("customer_id")
-  productId      String         @map("product_id")
-  invoiceNumber  String         @map("invoice_number")
-  purchaseDate   DateTime       @map("purchase_date")
-  quantity       Int
-  value          Decimal        @db.Decimal(12, 2)
-  status         PurchaseStatus @default(COMPLETED)
-  createdAt      DateTime       @default(now()) @map("created_at")
-  updatedAt      DateTime       @updatedAt @map("updated_at")
-  deletedAt      DateTime?      @map("deleted_at")
-  createdBy      String?        @map("created_by")
-  updatedBy      String?        @map("updated_by")
+  id                String         @id @default(cuid())
+  uuid              String         @unique @default(uuid())
+  organizationId    String         @map("organization_id")
+  customerId        String         @map("customer_id")
+  productId         String         @map("product_id")
+  invoiceNumber     String         @map("invoice_number")
+  purchaseDate      DateTime       @map("purchase_date")
+  warrantyMonths    Int?           @map("warranty_months")
+  warrantyExpiresAt DateTime?      @map("warranty_expires_at")
+  quantity          Int
+  value             Decimal        @db.Decimal(12, 2)
+  status            PurchaseStatus @default(COMPLETED)
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+  deletedAt         DateTime?      @map("deleted_at")
+  createdBy         String?        @map("created_by")
+  updatedBy         String?        @map("updated_by")
 
-  organization    Organization     @relation(fields: [organizationId], references: [id])
-  customer        Customer         @relation(fields: [customerId], references: [id])
-  product         Product          @relation(fields: [productId], references: [id])
-  commercialCycle CommercialCycle?
-  automations     Automation[]
+  organization     Organization     @relation(fields: [organizationId], references: [id])
+  customer         Customer         @relation(fields: [customerId], references: [id])
+  product          Product          @relation(fields: [productId], references: [id])
+  commercialCycle  CommercialCycle?
+  automations      Automation[]
 
   @@unique([organizationId, invoiceNumber, customerId, productId, purchaseDate])
   @@index([organizationId])
@@ -195,29 +199,71 @@ model CommercialCycle {
 }
 
 model Campaign {
-  id             String         @id @default(cuid())
-  uuid           String         @unique @default(uuid())
-  organizationId String         @map("organization_id")
-  name           String
-  description    String?
-  type           CampaignType
-  template       String
-  templateD3     String?        @map("template_d3")
-  templateD180   String?        @map("template_d180")
-  templateD365   String?        @map("template_d365")
-  status         CampaignStatus @default(DRAFT)
-  createdAt      DateTime       @default(now()) @map("created_at")
-  updatedAt      DateTime       @updatedAt @map("updated_at")
-  deletedAt      DateTime?      @map("deleted_at")
+  id                    String         @id @default(cuid())
+  uuid                  String         @unique @default(uuid())
+  organizationId        String         @map("organization_id")
+  name                  String
+  description           String?
+  type                  CampaignType
+  template              String
+  templateD3            String?        @map("template_d3")
+  templateD180          String?        @map("template_d180")
+  templateD365          String?        @map("template_d365")
+  status                CampaignStatus @default(DRAFT)
+  createdAt             DateTime       @default(now()) @map("created_at")
+  updatedAt             DateTime       @updatedAt @map("updated_at")
+  deletedAt             DateTime?      @map("deleted_at")
 
-  startAt   DateTime?  @map("start_at")  // send date; "Programada" = ACTIVE con startAt futura (HG-5)
-  segment   Json?    @map("segment")     // { city?, productId?, purchaseFrom?, purchaseTo?, customerStatus? } (HG-7, R-002)
+  startAt              DateTime?       @map("start_at")
+  segment              Json?           @map("segment")
+  followUpSequenceId   String?         @map("follow_up_sequence_id")
 
-  organization Organization @relation(fields: [organizationId], references: [id])
-  automations  Automation[]
+  organization         Organization    @relation(fields: [organizationId], references: [id])
+  automations           Automation[]
+  followUpSequence     FollowUpSequence? @relation(fields: [followUpSequenceId], references: [id])
 
   @@index([organizationId])
   @@map("campaigns")
+}
+
+model FollowUpSequence {
+  id             String   @id @default(cuid())
+  uuid           String   @unique @default(uuid())
+  organizationId String   @map("organization_id")
+  name           String
+  description    String?
+  warrantyMonths Int      @map("warranty_months")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+  deletedBy      String?  @map("deleted_by")
+  createdBy      String?  @map("created_by")
+  updatedBy      String?  @map("updated_by")
+
+  organization Organization                  @relation(fields: [organizationId], references: [id])
+  stages       FollowUpSequenceStage[]
+  campaigns    Campaign[]
+
+  @@index([organizationId])
+  @@map("follow_up_sequences")
+}
+
+model FollowUpSequenceStage {
+  id                  String   @id @default(cuid())
+  uuid                String   @unique @default(uuid())
+  sequenceId          String   @map("sequence_id")
+  name                String
+  offsetDays          Int      @map("offset_days")
+  template            String
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  deletedAt           DateTime? @map("deleted_at")
+  deletedBy           String?  @map("deleted_by")
+
+  sequence FollowUpSequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+
+  @@index([sequenceId])
+  @@map("follow_up_sequence_stages")
 }
 
 model Automation {
@@ -231,6 +277,10 @@ model Automation {
   executedDate      DateTime?        @map("executed_date")
   status            AutomationStatus @default(PENDING)
   priority          Int              @default(0)
+  // Snapshot of the FollowUpSequenceStage template at generation time.
+  // When set, WhatsApp execution uses it directly instead of the legacy
+  // campaign stage heuristics (templateD3/D180/D365).
+  messageTemplate   String?          @map("message_template")
   createdBy         String?          @map("created_by")
   updatedBy         String?          @map("updated_by")
   deletedBy         String?          @map("deleted_by")
