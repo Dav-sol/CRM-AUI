@@ -273,6 +273,13 @@
         schema:
           type: string
 
+      - name: campaignId
+        in: query
+        required: false
+        description: uuid of the owning campaign.
+        schema:
+          type: string
+
       - name: customerId
         in: query
         required: false

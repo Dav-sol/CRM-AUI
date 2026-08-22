@@ -40,6 +40,11 @@ export class QueryAutomationsDto {
   @IsOptional()
   @IsString()
   @MaxLength(64)
+  campaignId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
   customerId?: string;
 
   @IsOptional()

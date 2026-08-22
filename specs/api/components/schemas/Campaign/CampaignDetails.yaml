@@ -20,3 +20,31 @@ properties:
   updatedAt:
     type: string
     format: date-time
+
+  followUpSequence:
+    type: object
+    nullable: true
+    description: Follow-up sequence linked to the campaign, when present.
+    required:
+      - uuid
+      - name
+      - warrantyMonths
+      - stageCount
+    properties:
+
+      uuid:
+        type: string
+
+      name:
+        type: string
+
+      warrantyMonths:
+        type: integer
+        enum:
+          - 12
+          - 15
+          - 18
+          - 24
+
+      stageCount:
+        type: integer

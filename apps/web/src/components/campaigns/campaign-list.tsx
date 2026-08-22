@@ -1,6 +1,7 @@
 "use client";
 
 import { Megaphone } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { CampaignActions } from "@/components/campaigns/campaign-actions";
@@ -75,7 +76,7 @@ export function CampaignStatusBadge({ status }: { status: CampaignItem["status"]
   return <Badge variant={variant}>{CAMPAIGN_STATUS_LABELS[status]}</Badge>;
 }
 
-function segmentSummary(segment: CampaignItem["segment"]): string {
+export function segmentSummary(segment: CampaignItem["segment"]): string {
   if (!segment) {
     return "Todos los clientes";
   }
@@ -146,7 +147,7 @@ export function CampaignList({ items, error, onChanged }: CampaignListProps) {
     <ul className="divide-y divide-border/60" aria-label="Lista de campañas">
       {items.map((campaign) => (
         <li key={campaign.uuid} className="flex items-center gap-4 px-4 py-3">
-          <div className="min-w-0 flex-1">
+          <Link href={`/campaigns/${campaign.uuid}`} className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <p className="truncate text-sm font-medium">{campaign.name}</p>
               <Badge variant="outline">{CAMPAIGN_TYPE_LABELS[campaign.type]}</Badge>
@@ -158,7 +159,7 @@ export function CampaignList({ items, error, onChanged }: CampaignListProps) {
                 : "sin automatizaciones aún"}
               {campaign.startAt ? ` · inicia ${formatDate(campaign.startAt)}` : ""}
             </p>
-          </div>
+          </Link>
           <CampaignStatusBadge status={campaign.status} />
           <CampaignActions uuid={campaign.uuid} status={campaign.status} onChanged={onChanged} />
         </li>

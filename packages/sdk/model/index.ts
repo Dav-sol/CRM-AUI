@@ -265,6 +265,8 @@ export * from './getAutomation404';
 export * from './getAutomation404Error';
 export * from './getCampaign200';
 export * from './getCampaign200Data';
+export * from './getCampaign200DataFollowUpSequence';
+export * from './getCampaign200DataFollowUpSequenceWarrantyMonths';
 export * from './getCampaign401';
 export * from './getCampaign401Error';
 export * from './getCampaign404';

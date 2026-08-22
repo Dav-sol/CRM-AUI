@@ -263,16 +263,47 @@ describe('CampaignsService', () => {
 
       const result = await service.detail(orgUser, 'cu-1');
 
-      expect(prisma.campaign.findFirst).toHaveBeenCalledWith({
-        where: { uuid: 'cu-1', organizationId: 'org-1', deletedAt: null },
-      });
+      expect(prisma.campaign.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { uuid: 'cu-1', organizationId: 'org-1', deletedAt: null },
+          include: {
+            followUpSequence: expect.objectContaining({ select: expect.objectContaining({ uuid: true }) }),
+          },
+        }),
+      );
       expect(result).toEqual(
         expect.objectContaining({
           uuid: 'cu-1',
           template: 'Hola {customerName}',
           updatedAt: expect.any(Date) as unknown,
+          followUpSequence: null,
         }),
       );
+    });
+
+    it('returns the linked follow-up sequence on detail', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        campaignRow({
+          followUpSequence: {
+            uuid: 'seq-uuid-1',
+            name: 'Secuencia Garantía 12',
+            warrantyMonths: 12,
+            stages: [{ id: 'st-1' }, { id: 'st-2' }, { id: 'st-3' }, { id: 'st-4' }],
+          },
+        }),
+      );
+      prisma.automation.groupBy
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      const result = await service.detail(orgUser, 'cu-1');
+
+      expect(result.followUpSequence).toEqual({
+        uuid: 'seq-uuid-1',
+        name: 'Secuencia Garantía 12',
+        warrantyMonths: 12,
+        stageCount: 4,
+      });
     });
   });
 

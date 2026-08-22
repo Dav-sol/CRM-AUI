@@ -38,6 +38,16 @@ export type CreatePurchase201Data = {
   value: string;
   /** Defaults to COMPLETED. Changed freely via PATCH in v1 (HG-7). */
   status: CreatePurchase201DataStatus;
+  /**
+     * Effective warranty duration in months (product default or explicit override at creation); null when the product has no warranty.
+     * @nullable
+     */
+  warrantyMonths?: number | null;
+  /**
+     * Warranty expiration computed as purchaseDate + warrantyMonths; null when the product has no warranty.
+     * @nullable
+     */
+  warrantyExpiresAt?: string | null;
   createdAt: string;
   updatedAt: string;
   /**

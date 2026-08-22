@@ -698,6 +698,9 @@ export class AutomationsService {
     if (query.commercialCycleId) {
       where.commercialCycle = { uuid: query.commercialCycleId };
     }
+    if (query.campaignId) {
+      where.campaign = { uuid: query.campaignId };
+    }
     if (query.customerId) {
       where.purchase = { customer: { uuid: query.customerId } };
     }

@@ -61,6 +61,17 @@ properties:
       - REFUNDED
     description: Defaults to COMPLETED. Changed freely via PATCH in v1 (HG-7).
 
+  warrantyMonths:
+    type: integer
+    nullable: true
+    description: Effective warranty duration in months (product default or explicit override at creation); null when the product has no warranty.
+
+  warrantyExpiresAt:
+    type: string
+    format: date-time
+    nullable: true
+    description: Warranty expiration computed as purchaseDate + warrantyMonths; null when the product has no warranty.
+
   createdAt:
     type: string
     format: date-time
