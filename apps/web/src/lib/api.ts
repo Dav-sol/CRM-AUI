@@ -16,13 +16,16 @@ import {
   createFollowUpSequence,
   deleteFollowUpSequence,
   getAutomation,
+  getCampaign,
   getCommercialCycle,
   getConversation,
+  getCustomer,
   getDashboardActivity,
   getDashboardCampaigns,
   getDashboardSummary,
   getFollowUpSequence,
   getImportJob,
+  getPurchase,
   listAutomations,
   listCampaigns,
   listCommercialCycles,
@@ -191,6 +194,20 @@ export async function apiGetConversation(
 ): Promise<SdkData<typeof getConversation>> {
   const res = await call((options) => getConversation(uuid, options));
   return unwrap(getConversation, res);
+}
+
+export async function apiGetCustomer(
+  uuid: string,
+): Promise<SdkData<typeof getCustomer>> {
+  const res = await call((options) => getCustomer(uuid, options));
+  return unwrap(getCustomer, res);
+}
+
+export async function apiGetPurchase(
+  uuid: string,
+): Promise<SdkData<typeof getPurchase>> {
+  const res = await call((options) => getPurchase(uuid, options));
+  return unwrap(getPurchase, res);
 }
 
 export async function apiReplyConversation(
@@ -392,6 +409,13 @@ export async function apiCancelCampaign(
 ): Promise<SdkData<typeof cancelCampaign>> {
   const res = await call((options) => cancelCampaign(uuid, options));
   return unwrap(cancelCampaign, res);
+}
+
+export async function apiGetCampaign(
+  uuid: string,
+): Promise<SdkData<typeof getCampaign>> {
+  const res = await call((options) => getCampaign(uuid, options));
+  return unwrap(getCampaign, res);
 }
 
 export async function apiPreviewCampaignSegment(

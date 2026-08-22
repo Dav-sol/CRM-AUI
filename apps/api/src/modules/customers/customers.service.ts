@@ -211,18 +211,21 @@ export class CustomersService {
     return deleted;
   }
 
-  private findScoped(user: AuthUser, id: string): Promise<Customer | null> {
+  private findScoped(user: AuthUser, identifier: string): Promise<Customer | null> {
+    const scopedWhere: Prisma.CustomerWhereInput = {
+      OR: [{ id: identifier }, { uuid: identifier }],
+      deletedAt: null,
+    };
     if (user.accountType === 'ORGANIZATION') {
       return this.prisma.customer.findFirst({
         where: {
-          id,
+          ...scopedWhere,
           organizationId: user.organizationId ?? undefined,
-          deletedAt: null,
         },
       });
     }
     return this.prisma.customer.findFirst({
-      where: { id, deletedAt: null },
+      where: scopedWhere,
     });
   }
 

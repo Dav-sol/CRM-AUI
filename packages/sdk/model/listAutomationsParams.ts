@@ -31,6 +31,10 @@ status?: ListAutomationsStatus;
  */
 commercialCycleId?: string;
 /**
+ * uuid of the owning campaign.
+ */
+campaignId?: string;
+/**
  * uuid of the customer that owns the triggering purchase.
  */
 customerId?: string;

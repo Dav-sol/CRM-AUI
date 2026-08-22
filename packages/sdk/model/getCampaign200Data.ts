@@ -10,6 +10,7 @@
  *
  * OpenAPI spec version: 1.0.0
  */
+import type { GetCampaign200DataFollowUpSequence } from './getCampaign200DataFollowUpSequence';
 
 /**
  * Full campaign representation including template and counts.
@@ -88,4 +89,9 @@ export type GetCampaign200Data = (({
      */
   template: string;
   updatedAt: string;
+  /**
+     * Follow-up sequence linked to the campaign, when present.
+     * @nullable
+     */
+  followUpSequence?: GetCampaign200DataFollowUpSequence;
 };

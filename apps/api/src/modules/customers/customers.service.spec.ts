@@ -203,13 +203,17 @@ describe('CustomersService', () => {
   });
 
   describe('findById (US2)', () => {
-    it('finds a customer within the organization scope', async () => {
+    it('finds a customer within the organization scope by id or uuid', async () => {
       prisma.customer.findFirst.mockResolvedValue({ id: 'c-1' });
 
       const result = await service.findById(orgUser, 'c-1');
 
       expect(prisma.customer.findFirst).toHaveBeenCalledWith({
-        where: { id: 'c-1', organizationId: 'org-1', deletedAt: null },
+        where: {
+          OR: [{ id: 'c-1' }, { uuid: 'c-1' }],
+          organizationId: 'org-1',
+          deletedAt: null,
+        },
       });
       expect(result).toEqual({ id: 'c-1' });
     });
@@ -220,7 +224,7 @@ describe('CustomersService', () => {
       await service.findById(platformUser, 'c-1');
 
       expect(prisma.customer.findFirst).toHaveBeenCalledWith({
-        where: { id: 'c-1', deletedAt: null },
+        where: { OR: [{ id: 'c-1' }, { uuid: 'c-1' }], deletedAt: null },
       });
     });
 

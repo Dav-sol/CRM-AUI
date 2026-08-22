@@ -69,6 +69,12 @@ export interface CampaignSummary {
 export interface CampaignDetail extends CampaignSummary {
   template: string;
   updatedAt: Date;
+  followUpSequence: {
+    uuid: string;
+    name: string;
+    warrantyMonths: number;
+    stageCount: number;
+  } | null;
 }
 
 export interface CampaignListResult {
@@ -230,6 +236,19 @@ export class CampaignsService {
     const organizationId = this.requireOrg(user);
     const campaign = await this.prisma.campaign.findFirst({
       where: { uuid, organizationId, deletedAt: null },
+      include: {
+        followUpSequence: {
+          select: {
+            uuid: true,
+            name: true,
+            warrantyMonths: true,
+            stages: {
+              where: { deletedAt: null },
+              select: { id: true },
+            },
+          },
+        },
+      },
     });
     if (!campaign) {
       throw this.campaignNotFound();
@@ -240,6 +259,14 @@ export class CampaignsService {
       ...detail,
       template: campaign.template,
       updatedAt: campaign.updatedAt,
+      followUpSequence: campaign.followUpSequence
+        ? {
+            uuid: campaign.followUpSequence.uuid,
+            name: campaign.followUpSequence.name,
+            warrantyMonths: campaign.followUpSequence.warrantyMonths,
+            stageCount: campaign.followUpSequence.stages.length,
+          }
+        : null,
     };
   }
 

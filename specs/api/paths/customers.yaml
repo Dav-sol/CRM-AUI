@@ -346,13 +346,13 @@
       required: true
       schema:
         type: string
-      description: Customer id
+      description: Customer id or uuid
 
   get:
     tags:
       - Customers
 
-    summary: Get a customer by id
+    summary: Get a customer by id or uuid
 
     description: |
       Returns the customer only if it belongs to the caller organization

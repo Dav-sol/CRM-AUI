@@ -1,6 +1,7 @@
 "use client";
 
 import { Users } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -121,24 +122,29 @@ export function CustomerList({ items, error }: CustomerListProps) {
           key={customer.id}
           className={cn("flex items-center gap-4 px-4 py-3")}
         >
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
-            {customer.name.charAt(0).toUpperCase()}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">
-              {customer.name}
-              <span className="ml-2 text-xs font-normal text-muted-foreground">
-                {customer.codcli}
-              </span>
-            </p>
-            <p className="truncate text-xs text-muted-foreground">
-              {[customer.phone, customer.email].filter(Boolean).join(" · ") || "Sin contacto"}
-              {customer.city ? ` · ${customer.city}` : ""}
-            </p>
-          </div>
-          <div className="hidden shrink-0 text-right text-xs text-muted-foreground sm:block">
-            {formatDate(customer.createdAt)}
-          </div>
+          <Link
+            href={`/customers/${customer.uuid}`}
+            className="flex min-w-0 flex-1 items-center gap-4"
+          >
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
+              {customer.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">
+                {customer.name}
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  {customer.codcli}
+                </span>
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+                {[customer.phone, customer.email].filter(Boolean).join(" · ") || "Sin contacto"}
+                {customer.city ? ` · ${customer.city}` : ""}
+              </p>
+            </div>
+            <div className="hidden shrink-0 text-right text-xs text-muted-foreground sm:block">
+              {formatDate(customer.createdAt)}
+            </div>
+          </Link>
           <CustomerStatusBadge status={customer.status} />
         </li>
       ))}

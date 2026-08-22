@@ -26,6 +26,16 @@ export type ListPurchases200DataItem = {
   /** Total purchase value as a string. */
   value: string;
   status: ListPurchases200DataItemStatus;
+  /**
+     * Effective warranty duration in months (product default or explicit override at creation); null when the product has no warranty.
+     * @nullable
+     */
+  warrantyMonths?: number | null;
+  /**
+     * Warranty expiration computed as purchaseDate + warrantyMonths; null when the product has no warranty.
+     * @nullable
+     */
+  warrantyExpiresAt?: string | null;
   createdAt: string;
   updatedAt: string;
   customer: ListPurchases200DataItemCustomer;

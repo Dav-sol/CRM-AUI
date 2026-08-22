@@ -497,6 +497,37 @@ describe('AutomationsService', () => {
       expect(result.meta).toEqual({ page: 1, limit: 20, total: 1, pages: 1 });
     });
 
+    it('filters by campaignId when provided (G4)', async () => {
+      prisma.automation.count.mockResolvedValue(1);
+      prisma.automation.findMany.mockResolvedValue([
+        {
+          uuid: 'au-1',
+          status: 'SCHEDULED',
+          scheduledDate: baseDate,
+          executedDate: null,
+          priority: 0,
+          purchaseId: 'pu-1',
+          commercialCycleId: 'cc-1',
+          createdAt: baseDate,
+          purchase: { uuid: 'puu-1' },
+          commercialCycle: { uuid: 'ccu-1' },
+        },
+      ]);
+
+      const result = await service.listAutomations(orgUser, {
+        campaignId: 'camp-uuid-1',
+      });
+
+      expect(prisma.automation.count).toHaveBeenCalledWith({
+        where: {
+          deletedAt: null,
+          organizationId: 'org-1',
+          campaign: { uuid: 'camp-uuid-1' },
+        },
+      });
+      expect(result.data).toHaveLength(1);
+    });
+
     it('lets PLATFORM_OWNER list without org scope', async () => {
       prisma.automation.count.mockResolvedValue(0);
       prisma.automation.findMany.mockResolvedValue([]);
