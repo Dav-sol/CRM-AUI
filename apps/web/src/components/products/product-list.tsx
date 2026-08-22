@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, apiListProducts } from "@/lib/api";
-import { formatDate } from "@/lib/format";
 import type { ProductItem, ProductListParams } from "@/lib/sdk-types";
 import { PRODUCT_STATUS_LABELS } from "@/lib/validators";
 import { ProductActions } from "./product-actions";
@@ -79,6 +78,16 @@ type ProductListProps = {
   onChanged: () => void;
 };
 
+function normalizeFamily(category: string | null | undefined): string {
+  const value = (category ?? "").trim().toUpperCase();
+  if (value.startsWith("MAC")) return "MAC";
+  if (value === "WILLARD") return "WILLARD";
+  if (value === "DUNCAN") return "DUNCAN";
+  return "Otras marcas";
+}
+
+const FAMILY_ORDER = ["MAC", "WILLARD", "DUNCAN", "Otras marcas"];
+
 export function ProductList({ items, error, onChanged }: ProductListProps) {
   if (items === null) {
     return (
@@ -113,26 +122,54 @@ export function ProductList({ items, error, onChanged }: ProductListProps) {
     );
   }
 
+  const groups = new Map<string, ProductItem[]>();
+  for (const product of items) {
+    const family = normalizeFamily(product.category);
+    const bucket = groups.get(family) ?? [];
+    bucket.push(product);
+    groups.set(family, bucket);
+  }
+  const families = [...groups.entries()].sort(
+    (a, b) => FAMILY_ORDER.indexOf(a[0]) - FAMILY_ORDER.indexOf(b[0]),
+  );
+
   return (
-    <ul className="divide-y divide-border/60" aria-label="Lista de productos">
-      {items.map((product) => (
-        <li key={product.uuid} className="flex items-center gap-4 px-4 py-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="truncate text-sm font-medium">{product.name}</p>
-              {product.category && (
-                <Badge variant="outline">{product.category}</Badge>
-              )}
-            </div>
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">
-              <span className="font-mono">{product.code}</span>
-              {product.createdAt ? ` · cargado ${formatDate(product.createdAt)}` : ""}
-            </p>
+    <div className="space-y-4 p-3" aria-label="Lista de productos por familia">
+      {families.map(([family, familyItems]) => (
+        <section key={family}>
+          <div className="flex items-center justify-between gap-2 px-2">
+            <h2 className="text-sm font-semibold tracking-tight">{family}</h2>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+              {familyItems.length} {familyItems.length === 1 ? "producto" : "productos"}
+            </span>
           </div>
-          <ProductStatusBadge status={product.status} />
-          <ProductActions product={product} onChanged={onChanged} />
-        </li>
+          <ul className="mt-2 divide-y divide-border/60 rounded-lg border border-border/60 bg-card">
+            {familyItems.map((product) => (
+              <li key={product.uuid} className="flex items-center gap-4 px-4 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm font-medium">{product.name}</p>
+                    <span className="font-mono text-[11px] text-muted-foreground">
+                      {product.code}
+                    </span>
+                  </div>
+                </div>
+                {product.warrantyMonths ? (
+                  <Badge variant="default" className="shrink-0">
+                    {product.warrantyMonths} meses de garantía
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="shrink-0 text-muted-foreground">
+                    Sin garantía
+                  </Badge>
+                )}
+                <ProductStatusBadge status={product.status} />
+                <ProductActions product={product} onChanged={onChanged} />
+              </li>
+            ))}
+          </ul>
+        </section>
       ))}
-    </ul>
+    </div>
   );
 }

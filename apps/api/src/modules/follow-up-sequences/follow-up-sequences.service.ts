@@ -4,13 +4,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { FollowUpStageAnchor, Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
 import { CreateFollowUpSequenceDto } from './dto/create-follow-up-sequence.dto';
 import { UpdateFollowUpSequenceDto } from './dto/update-follow-up-sequence.dto';
 import { QueryFollowUpSequencesDto } from './dto/query-follow-up-sequences.dto';
+import { STAGE_OFFSET_LIMITS } from './follow-up-sequence.constants';
 
 const MODULE = 'follow_up_sequences';
 
@@ -40,8 +41,10 @@ export interface FollowUpSequenceDetail extends FollowUpSequenceSummary {
 export interface FollowUpSequenceStageSummary {
   uuid: string;
   name: string;
+  anchor: FollowUpStageAnchor;
   offsetDays: number;
   template: string;
+  templateOnPast: string | null;
   createdAt: Date;
 }
 
@@ -52,8 +55,10 @@ export interface FollowUpSequenceListResult {
 
 interface StageWriteInput {
   name?: string;
+  anchor?: FollowUpStageAnchor;
   offsetDays?: number;
   template?: string;
+  templateOnPast?: string;
 }
 
 @Injectable()
@@ -89,8 +94,10 @@ export class FollowUpSequencesService {
         stages: {
           create: dto.stages.map((stage) => ({
             name: stage.name,
+            anchor: stage.anchor ?? FollowUpStageAnchor.WARRANTY_EXPIRY,
             offsetDays: stage.offsetDays,
             template: stage.template,
+            templateOnPast: stage.templateOnPast,
             createdBy: user.id,
           })),
         },
@@ -170,7 +177,7 @@ export class FollowUpSequencesService {
       include: {
         stages: {
           where: { deletedAt: null },
-          orderBy: { offsetDays: 'asc' },
+          orderBy: [{ anchor: 'asc' }, { offsetDays: 'asc' }],
         },
       },
     });
@@ -188,8 +195,10 @@ export class FollowUpSequencesService {
       stages: sequence.stages.map((stage) => ({
         uuid: stage.uuid,
         name: stage.name,
+        anchor: stage.anchor,
         offsetDays: stage.offsetDays,
         template: stage.template,
+        templateOnPast: stage.templateOnPast,
         createdAt: stage.createdAt,
       })),
     };
@@ -265,8 +274,10 @@ export class FollowUpSequencesService {
           data: dto.stages.map((stage) => ({
             sequenceId: sequence.id,
             name: stage.name as string,
+            anchor: stage.anchor ?? FollowUpStageAnchor.WARRANTY_EXPIRY,
             offsetDays: stage.offsetDays as number,
             template: stage.template as string,
+            templateOnPast: stage.templateOnPast,
             createdBy: user.id,
           })),
         });
@@ -368,7 +379,7 @@ export class FollowUpSequencesService {
         },
       });
     }
-    const seen = new Set<number>();
+    const seen = new Set<string>();
     for (const stage of stages) {
       if (stage.offsetDays === undefined || Number.isNaN(stage.offsetDays)) {
         throw new BadRequestException({
@@ -378,15 +389,29 @@ export class FollowUpSequencesService {
           },
         });
       }
-      if (seen.has(stage.offsetDays)) {
+      const anchor = stage.anchor ?? FollowUpStageAnchor.WARRANTY_EXPIRY;
+      const limits = STAGE_OFFSET_LIMITS[anchor];
+      if (stage.offsetDays < limits.min || stage.offsetDays > limits.max) {
         throw new BadRequestException({
           error: {
             code: 'VALIDATION_ERROR',
-            message: `Duplicate offsetDays: ${stage.offsetDays}. Each stage must have a unique offset.`,
+            message:
+              anchor === FollowUpStageAnchor.PURCHASE_DATE
+                ? `offsetDays must be between ${limits.min} and ${limits.max} for anchor PURCHASE_DATE`
+                : `offsetDays must be between ${limits.min} and ${limits.max} for anchor WARRANTY_EXPIRY`,
           },
         });
       }
-      seen.add(stage.offsetDays);
+      const key = `${anchor}:${stage.offsetDays}`;
+      if (seen.has(key)) {
+        throw new BadRequestException({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: `Duplicate stage (${anchor}, offsetDays: ${stage.offsetDays}). Each stage must have a unique anchor+offset combination.`,
+          },
+        });
+      }
+      seen.add(key);
     }
   }
 

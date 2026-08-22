@@ -36,7 +36,7 @@ export function ProductsIndexPage() {
   }
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-6xl flex-col p-6 lg:p-8">
+    <div className="flex h-full w-full flex-col p-4 lg:p-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Productos</h1>

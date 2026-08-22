@@ -34,6 +34,8 @@ paths:
     $ref: "./paths/customers.yaml#/~1customers~1{id}"
   /purchases:
     $ref: "./paths/purchases.yaml#/~1purchases"
+  /purchases/stats:
+    $ref: "./paths/purchases.yaml#/~1purchases~1stats"
   /purchases/{id}:
     $ref: "./paths/purchases.yaml#/~1purchases~1{id}"
   /products:

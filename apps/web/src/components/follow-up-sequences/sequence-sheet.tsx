@@ -1,19 +1,14 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  ArrowDown,
-  ArrowUp,
-  Loader2,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, Loader2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   Control,
   FieldErrors,
   useForm,
   useFieldArray,
+  useWatch,
   UseFormRegister,
 } from "react-hook-form";
 import { toast } from "sonner";
@@ -41,7 +36,11 @@ import type { CreateFollowUpSequenceBodyWarrantyMonths } from "@automatize-it/sd
 import type { UpdateFollowUpSequenceBodyWarrantyMonths } from "@automatize-it/sdk/model/updateFollowUpSequenceBodyWarrantyMonths";
 import type { FollowUpSequenceDetail } from "@/lib/sdk-types";
 import { cn } from "@/lib/utils";
-import { followUpSequenceSchema, FollowUpSequenceFormValues } from "@/lib/validators";
+import {
+  followUpSequenceSchema,
+  FollowUpSequenceFormValues,
+  FollowUpStageAnchor,
+} from "@/lib/validators";
 
 const selectClass =
   "flex h-9 w-full items-center justify-between rounded-lg border border-input bg-background px-3 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40";
@@ -53,29 +52,69 @@ const WARRANTY_OPTIONS = [
   { value: 24, label: "24 meses" },
 ] as const;
 
+const ANCHOR_OPTIONS: Array<{ value: FollowUpStageAnchor; label: string }> = [
+  { value: "PURCHASE_DATE", label: "Después de la compra" },
+  { value: "WARRANTY_EXPIRY", label: "Respecto al vencimiento" },
+];
+
+const OFFSET_LIMITS: Record<
+  FollowUpStageAnchor,
+  { min: number; max: number; label: string }
+> = {
+  PURCHASE_DATE: { min: 0, max: 365, label: "Días después de la compra" },
+  WARRANTY_EXPIRY: {
+    min: -365,
+    max: 730,
+    label: "Días (respecto al vencimiento)",
+  },
+};
+
+function momentLabel(anchor: FollowUpStageAnchor, offsetDays: number): string {
+  if (anchor === "PURCHASE_DATE") {
+    return offsetDays === 0
+      ? "Día de la compra"
+      : `Compra · ${offsetDays} días después`;
+  }
+  if (offsetDays === 0) return "Día del vencimiento";
+  if (offsetDays < 0) return `Vencimiento · ${Math.abs(offsetDays)} días antes`;
+  return `Vencimiento · ${offsetDays} días después`;
+}
+
 const EMPTY_FORM: FollowUpSequenceFormValues = {
   name: "",
   description: "",
   warrantyMonths: 12,
-  stages: [{ name: "", offsetDays: -30, template: "" }],
+  stages: [
+    {
+      name: "",
+      anchor: "PURCHASE_DATE",
+      offsetDays: 0,
+      template: "",
+      templateOnPast: "",
+    },
+  ],
 };
 
-function formValuesFromDetail(detail: FollowUpSequenceDetail): FollowUpSequenceFormValues {
+function formValuesFromDetail(
+  detail: FollowUpSequenceDetail,
+): FollowUpSequenceFormValues {
   return {
     name: detail.name,
     description: detail.description ?? "",
     warrantyMonths: (detail.warrantyMonths === 12 ||
-      detail.warrantyMonths === 15 ||
-      detail.warrantyMonths === 18 ||
-      detail.warrantyMonths === 24
+    detail.warrantyMonths === 15 ||
+    detail.warrantyMonths === 18 ||
+    detail.warrantyMonths === 24
       ? detail.warrantyMonths
       : 12) as FollowUpSequenceFormValues["warrantyMonths"],
     stages:
       detail.stages.length > 0
         ? detail.stages.map((stage) => ({
             name: stage.name,
+            anchor: stage.anchor ?? "WARRANTY_EXPIRY",
             offsetDays: stage.offsetDays,
             template: stage.template,
+            templateOnPast: stage.templateOnPast ?? "",
           }))
         : EMPTY_FORM.stages,
   };
@@ -94,6 +133,7 @@ function SequenceFormFields({
     control,
     name: "stages",
   });
+  const watchedStages = useWatch({ control, name: "stages" }) ?? [];
 
   return (
     <>
@@ -158,7 +198,15 @@ function SequenceFormFields({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => append({ name: "", offsetDays: -30, template: "" })}
+            onClick={() =>
+              append({
+                name: "",
+                anchor: "PURCHASE_DATE",
+                offsetDays: 0,
+                template: "",
+                templateOnPast: "",
+              })
+            }
             disabled={fields.length >= 10}
           >
             <Plus className="size-3.5 mr-1" />
@@ -166,11 +214,13 @@ function SequenceFormFields({
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          El offset es en días respecto al vencimiento de la garantía.
-          D-30 = 30 días antes del vencimiento, D0 = día del vencimiento.
+          Cada etapa indica un momento: después de la compra o respecto al
+          vencimiento de la garantía.
         </p>
         {fields.length === 0 && (
-          <p className="text-xs text-muted-foreground">Agregá al menos una etapa.</p>
+          <p className="text-xs text-muted-foreground">
+            Agregá al menos una etapa.
+          </p>
         )}
         <div className="space-y-2">
           {fields.map((field, index) => (
@@ -235,23 +285,64 @@ function SequenceFormFields({
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor={`stage-offset-${index}`}>Offset (días)</Label>
-                  <Input
-                    id={`stage-offset-${index}`}
-                    type="number"
-                    step={1}
-                    min={-365}
-                    max={365}
-                    placeholder="-30"
-                    aria-invalid={!!errors.stages?.[index]?.offsetDays}
-                    {...register(`stages.${index}.offsetDays`, { valueAsNumber: true })}
-                  />
-                  {errors.stages?.[index]?.offsetDays && (
-                    <p className="text-xs text-destructive" role="alert">
-                      {errors.stages[index].offsetDays.message}
-                    </p>
-                  )}
+                  <Label htmlFor={`stage-anchor-${index}`}>Momento</Label>
+                  <select
+                    id={`stage-anchor-${index}`}
+                    className={cn(selectClass, "appearance-none")}
+                    aria-invalid={!!errors.stages?.[index]?.anchor}
+                    {...register(`stages.${index}.anchor`)}
+                  >
+                    {ANCHOR_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`stage-offset-${index}`}>
+                  {
+                    OFFSET_LIMITS[
+                      watchedStages[index]?.anchor ?? "WARRANTY_EXPIRY"
+                    ].label
+                  }
+                </Label>
+                <Input
+                  id={`stage-offset-${index}`}
+                  type="number"
+                  step={1}
+                  min={
+                    OFFSET_LIMITS[
+                      watchedStages[index]?.anchor ?? "WARRANTY_EXPIRY"
+                    ].min
+                  }
+                  max={
+                    OFFSET_LIMITS[
+                      watchedStages[index]?.anchor ?? "WARRANTY_EXPIRY"
+                    ].max
+                  }
+                  placeholder={
+                    watchedStages[index]?.anchor === "PURCHASE_DATE"
+                      ? "0"
+                      : "-30"
+                  }
+                  aria-invalid={!!errors.stages?.[index]?.offsetDays}
+                  {...register(`stages.${index}.offsetDays`, {
+                    valueAsNumber: true,
+                  })}
+                />
+                {errors.stages?.[index]?.offsetDays && (
+                  <p className="text-xs text-destructive" role="alert">
+                    {errors.stages[index].offsetDays.message}
+                  </p>
+                )}
+                <p className="text-xs font-medium text-muted-foreground">
+                  {momentLabel(
+                    watchedStages[index]?.anchor ?? "WARRANTY_EXPIRY",
+                    watchedStages[index]?.offsetDays ?? 0,
+                  )}
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor={`stage-template-${index}`}>Mensaje</Label>
@@ -272,6 +363,29 @@ function SequenceFormFields({
                 <p className="text-xs text-muted-foreground">
                   Variables: {"{"}customerName{"}"}, {"{"}productName{"}"},{" "}
                   {"{"}organizationName{"}"}, {"{"}warrantyExpiresAt{"}"}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`stage-template-on-past-${index}`}>
+                  Mensaje de recompra (opcional)
+                </Label>
+                <Textarea
+                  id={`stage-template-on-past-${index}`}
+                  placeholder="Tu batería ya está fuera de su ciclo recomendado. Podemos ayudarte a revisar su estado."
+                  rows={2}
+                  maxLength={4096}
+                  className="resize-none text-sm"
+                  aria-invalid={!!errors.stages?.[index]?.templateOnPast}
+                  {...register(`stages.${index}.templateOnPast`)}
+                />
+                {errors.stages?.[index]?.templateOnPast && (
+                  <p className="text-xs text-destructive" role="alert">
+                    {errors.stages[index].templateOnPast.message}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Se usa cuando esta etapa ya venció al activar la campaña. Si
+                  lo dejás vacío, se usa el mensaje base de la campaña.
                 </p>
               </div>
             </div>
@@ -327,8 +441,10 @@ export function CreateSequenceSheet({ onCreated }: { onCreated?: () => void }) {
           values.warrantyMonths as CreateFollowUpSequenceBodyWarrantyMonths,
         stages: values.stages.map((stage) => ({
           name: stage.name.trim(),
+          anchor: stage.anchor ?? "WARRANTY_EXPIRY",
           offsetDays: stage.offsetDays,
           template: stage.template.trim(),
+          templateOnPast: stage.templateOnPast?.trim() || undefined,
         })),
       });
       toast.success("Secuencia creada correctamente");
@@ -339,7 +455,9 @@ export function CreateSequenceSheet({ onCreated }: { onCreated?: () => void }) {
       if (error instanceof ApiError) {
         setSubmitError(error.message);
       } else {
-        setSubmitError("No se pudo conectar con el servidor. Inténtalo nuevamente.");
+        setSubmitError(
+          "No se pudo conectar con el servidor. Inténtalo nuevamente.",
+        );
       }
       toast.error("No se pudo crear la secuencia");
     }
@@ -361,8 +479,9 @@ export function CreateSequenceSheet({ onCreated }: { onCreated?: () => void }) {
         <SheetHeader className="border-b border-border/60">
           <SheetTitle>Nueva secuencia</SheetTitle>
           <SheetDescription>
-            La secuencia se crea con sus etapas. Define la duración de garantía y las etapas
-            con sus offsets respecto a la fecha de vencimiento.
+            La secuencia se crea con sus etapas. Definí la duración de garantía
+            y el momento de cada etapa: después de la compra o respecto al
+            vencimiento.
           </SheetDescription>
         </SheetHeader>
 
@@ -372,12 +491,22 @@ export function CreateSequenceSheet({ onCreated }: { onCreated?: () => void }) {
           noValidate
         >
           <SubmitError message={submitError} />
-          <SequenceFormFields register={register} errors={errors} control={control} />
+          <SequenceFormFields
+            register={register}
+            errors={errors}
+            control={control}
+          />
         </form>
 
         <SheetFooter className="border-t border-border/60">
-          <Button type="submit" disabled={isSubmitting} onClick={handleSubmit(onSubmit)}>
-            {isSubmitting && <Loader2 className="animate-spin" aria-hidden="true" />}
+          <Button
+            type="submit"
+            disabled={isSubmitting}
+            onClick={handleSubmit(onSubmit)}
+          >
+            {isSubmitting && (
+              <Loader2 className="animate-spin" aria-hidden="true" />
+            )}
             {isSubmitting ? "Creando…" : "Crear secuencia"}
           </Button>
         </SheetFooter>
@@ -392,7 +521,11 @@ type EditSequenceSheetProps = {
   onSaved?: () => void;
 };
 
-export function EditSequenceSheet({ uuid, onClose, onSaved }: EditSequenceSheetProps) {
+export function EditSequenceSheet({
+  uuid,
+  onClose,
+  onSaved,
+}: EditSequenceSheetProps) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadedUuid, setLoadedUuid] = useState<string | null>(null);
@@ -450,8 +583,10 @@ export function EditSequenceSheet({ uuid, onClose, onSaved }: EditSequenceSheetP
           values.warrantyMonths as UpdateFollowUpSequenceBodyWarrantyMonths,
         stages: values.stages.map((stage) => ({
           name: stage.name.trim(),
+          anchor: stage.anchor ?? "WARRANTY_EXPIRY",
           offsetDays: stage.offsetDays,
           template: stage.template.trim(),
+          templateOnPast: stage.templateOnPast?.trim() || undefined,
         })),
       });
       toast.success("Secuencia actualizada correctamente");
@@ -461,7 +596,9 @@ export function EditSequenceSheet({ uuid, onClose, onSaved }: EditSequenceSheetP
       if (error instanceof ApiError) {
         setSubmitError(error.message);
       } else {
-        setSubmitError("No se pudo conectar con el servidor. Inténtalo nuevamente.");
+        setSubmitError(
+          "No se pudo conectar con el servidor. Inténtalo nuevamente.",
+        );
       }
       toast.error("No se pudo actualizar la secuencia");
     }
@@ -473,8 +610,8 @@ export function EditSequenceSheet({ uuid, onClose, onSaved }: EditSequenceSheetP
         <SheetHeader className="border-b border-border/60">
           <SheetTitle>Editar secuencia</SheetTitle>
           <SheetDescription>
-            Modificá los datos y las etapas. Los cambios se guardan como reemplazo completo de
-            etapas.
+            Modificá los datos y las etapas. Los cambios se guardan como
+            reemplazo completo de etapas.
           </SheetDescription>
         </SheetHeader>
 
@@ -497,12 +634,22 @@ export function EditSequenceSheet({ uuid, onClose, onSaved }: EditSequenceSheetP
               noValidate
             >
               <SubmitError message={submitError} />
-              <SequenceFormFields register={register} errors={errors} control={control} />
+              <SequenceFormFields
+                register={register}
+                errors={errors}
+                control={control}
+              />
             </form>
 
             <SheetFooter className="border-t border-border/60">
-              <Button type="submit" disabled={isSubmitting} onClick={handleSubmit(onSubmit)}>
-                {isSubmitting && <Loader2 className="animate-spin" aria-hidden="true" />}
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                onClick={handleSubmit(onSubmit)}
+              >
+                {isSubmitting && (
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                )}
                 {isSubmitting ? "Guardando…" : "Guardar cambios"}
               </Button>
             </SheetFooter>

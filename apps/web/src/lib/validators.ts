@@ -85,7 +85,10 @@ export const purchaseSchema = z.object({
     .string()
     .trim()
     .min(1, "Ingresá el valor de la compra")
-    .regex(/^\d{1,10}(\.\d{1,2})?$/, "El valor debe ser un monto válido (ej: 125.50)"),
+    .regex(
+      /^\d{1,10}(\.\d{1,2})?$/,
+      "El valor debe ser un monto válido (ej: 125.50)",
+    ),
   status: z.enum(["COMPLETED", "CANCELLED", "REFUNDED"]).default("COMPLETED"),
   warrantyMonths: z.number().int().positive().max(24).optional(),
 });
@@ -137,20 +140,20 @@ export const campaignSchema = z.object({
     .or(z.literal("")),
   segment: z
     .object({
-      city: z.string().trim().max(200, "La ciudad no puede superar los 200 caracteres"),
+      city: z
+        .string()
+        .trim()
+        .max(200, "La ciudad no puede superar los 200 caracteres"),
       productId: z.string(),
       purchaseFrom: z.string(),
       purchaseTo: z.string(),
-      customerStatus: z.enum(["ACTIVE", "INACTIVE", "BLOCKED"]).or(z.literal("")),
+      customerStatus: z
+        .enum(["ACTIVE", "INACTIVE", "BLOCKED"])
+        .or(z.literal("")),
       warrantyExpiresFrom: z.string().optional().or(z.literal("")),
       warrantyExpiresTo: z.string().optional().or(z.literal("")),
       warrantyMonths: z
-        .union([
-          z.literal(12),
-          z.literal(15),
-          z.literal(18),
-          z.literal(24),
-        ])
+        .union([z.literal(12), z.literal(15), z.literal(18), z.literal(24)])
         .optional(),
     })
     .partial()
@@ -239,49 +242,94 @@ export const ACTIVE_IMPORT_STATUSES = new Set([
   "PROCESSING",
 ]);
 
-export const followUpSequenceStageSchema = z.object({
+export const FOLLOW_UP_ANCHORS = ["PURCHASE_DATE", "WARRANTY_EXPIRY"] as const;
+
+export type FollowUpStageAnchor = (typeof FOLLOW_UP_ANCHORS)[number];
+
+const followUpSequenceStageSchemaBase = z.object({
   name: z
     .string()
     .trim()
     .min(1, "Ingresá el nombre de la etapa")
     .max(120, "El nombre no puede superar los 120 caracteres"),
+  anchor: z.enum(FOLLOW_UP_ANCHORS).optional(),
   offsetDays: z
     .number()
     .int("Los días de offset deben ser un número entero")
     .min(-365, "El offset no puede ser menor a -365 días")
-    .max(365, "El offset no puede ser mayor a 365 días"),
+    .max(730, "El offset no puede superar los 730 días"),
   template: z
     .string()
     .trim()
     .min(1, "Ingresá el mensaje de la etapa")
     .max(4096, "El mensaje no puede superar los 4096 caracteres"),
-});
-
-export type FollowUpSequenceStageFormValues = z.output<typeof followUpSequenceStageSchema>;
-
-export const followUpSequenceSchema = z.object({
-  name: z
+  templateOnPast: z
     .string()
     .trim()
-    .min(1, "Ingresá el nombre de la secuencia")
-    .max(120, "El nombre no puede superar los 120 caracteres"),
-  description: z
-    .string()
-    .trim()
-    .max(1000, "La descripción no puede superar los 1000 caracteres")
+    .max(4096, "El mensaje de recompra no puede superar los 4096 caracteres")
     .optional()
     .or(z.literal("")),
-  warrantyMonths: z
-    .number()
-    .int()
-    .min(1)
-    .max(24)
-    .refine((val) => [12, 15, 18, 24].includes(val), {
-      message: "La duración de garantía debe ser 12, 15, 18 o 24 meses",
-    }),
-  stages: z
-    .array(followUpSequenceStageSchema)
-    .min(1, "Al menos una etapa es requerida"),
 });
 
-export type FollowUpSequenceFormValues = z.output<typeof followUpSequenceSchema>;
+export const followUpSequenceStageSchema =
+  followUpSequenceStageSchemaBase.superRefine((stage, ctx) => {
+    if (
+      (stage.anchor ?? "WARRANTY_EXPIRY") === "PURCHASE_DATE" &&
+      stage.offsetDays < 0
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["offsetDays"],
+        message: "Después de la compra no admite días negativos",
+      });
+    }
+  });
+
+export type FollowUpSequenceStageFormValues = z.output<
+  typeof followUpSequenceStageSchema
+>;
+
+export const followUpSequenceSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1, "Ingresá el nombre de la secuencia")
+      .max(120, "El nombre no puede superar los 120 caracteres"),
+    description: z
+      .string()
+      .trim()
+      .max(1000, "La descripción no puede superar los 1000 caracteres")
+      .optional()
+      .or(z.literal("")),
+    warrantyMonths: z
+      .number()
+      .int()
+      .min(1)
+      .max(24)
+      .refine((val) => [12, 15, 18, 24].includes(val), {
+        message: "La duración de garantía debe ser 12, 15, 18 o 24 meses",
+      }),
+    stages: z
+      .array(followUpSequenceStageSchema)
+      .min(1, "Al menos una etapa es requerida"),
+  })
+  .superRefine((value, ctx) => {
+    const seen = new Set<string>();
+    value.stages.forEach((stage, index) => {
+      const key = `${stage.anchor ?? "WARRANTY_EXPIRY"}:${stage.offsetDays}`;
+      if (seen.has(key)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["stages", index, "offsetDays"],
+          message:
+            "Ya existe una etapa con ese momento y la misma cantidad de días",
+        });
+      }
+      seen.add(key);
+    });
+  });
+
+export type FollowUpSequenceFormValues = z.output<
+  typeof followUpSequenceSchema
+>;

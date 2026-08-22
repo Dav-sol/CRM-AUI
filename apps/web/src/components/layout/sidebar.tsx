@@ -11,7 +11,6 @@ import {
   ShoppingCart,
   Users,
   Workflow,
-  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -31,9 +30,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Clientes", icon: Users, href: "/customers", available: true },
   { label: "Compras", icon: ShoppingCart, href: "/purchases", available: true },
   { label: "Productos", icon: Package, href: "/products", available: true },
-  { label: "Campañas", icon: Megaphone, href: "/campaigns", available: true },
+  { label: "Seguimientos", icon: Megaphone, href: "/campaigns", available: true },
   { label: "Automatizaciones", icon: Workflow, href: "/automations", available: true },
-  { label: "Secuencias", icon: Zap, href: "/follow-up-sequences", available: true },
   { label: "Importaciones", icon: FileUp, href: "/imports", available: true },
   { label: "Conversaciones", icon: MessagesSquare, href: "/conversations", available: true },
   { label: "Reportes", icon: BarChart3, available: false },

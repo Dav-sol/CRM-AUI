@@ -1,4 +1,6 @@
+import { FollowUpStageAnchor } from '@prisma/client';
 import {
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -14,15 +16,25 @@ export class CreateFollowUpSequenceStageDto {
   @MaxLength(120)
   name!: string;
 
+  @IsOptional()
+  @IsEnum(FollowUpStageAnchor)
+  anchor?: FollowUpStageAnchor;
+
   @IsInt()
   @Min(-365)
-  @Max(365)
+  @Max(730)
   offsetDays!: number;
 
   @IsString()
   @MinLength(1)
   @MaxLength(4096)
   template!: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4096)
+  templateOnPast?: string;
 }
 
 export class UpdateFollowUpSequenceStageDto {
@@ -33,9 +45,13 @@ export class UpdateFollowUpSequenceStageDto {
   name?: string;
 
   @IsOptional()
+  @IsEnum(FollowUpStageAnchor)
+  anchor?: FollowUpStageAnchor;
+
+  @IsOptional()
   @IsInt()
   @Min(-365)
-  @Max(365)
+  @Max(730)
   offsetDays?: number;
 
   @IsOptional()
@@ -43,4 +59,10 @@ export class UpdateFollowUpSequenceStageDto {
   @MinLength(1)
   @MaxLength(4096)
   template?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4096)
+  templateOnPast?: string;
 }

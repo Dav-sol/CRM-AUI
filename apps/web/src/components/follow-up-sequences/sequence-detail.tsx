@@ -4,7 +4,12 @@ import { useEffect, useState } from "react";
 
 import { Calendar, Shield } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { ApiError, apiGetFollowUpSequence } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import type { FollowUpSequenceDetail } from "@/lib/sdk-types";
@@ -18,7 +23,10 @@ type LoadedState =
   | { uuid: string; detail: FollowUpSequenceDetail; error: null }
   | { uuid: string; detail: null; error: string };
 
-export function SequenceDetailSheet({ uuid, onClose }: SequenceDetailSheetProps) {
+export function SequenceDetailSheet({
+  uuid,
+  onClose,
+}: SequenceDetailSheetProps) {
   const [loaded, setLoaded] = useState<LoadedState | null>(null);
 
   useEffect(() => {
@@ -40,7 +48,11 @@ export function SequenceDetailSheet({ uuid, onClose }: SequenceDetailSheetProps)
         if (caught instanceof ApiError && caught.status === 401) {
           return;
         }
-        setLoaded({ uuid, detail: null, error: "No se pudo cargar el detalle de la secuencia." });
+        setLoaded({
+          uuid,
+          detail: null,
+          error: "No se pudo cargar el detalle de la secuencia.",
+        });
       });
 
     return () => {
@@ -68,6 +80,20 @@ export function SequenceDetailSheet({ uuid, onClose }: SequenceDetailSheetProps)
       </SheetContent>
     </Sheet>
   );
+}
+
+function stageMomentLabel(
+  anchor: "PURCHASE_DATE" | "WARRANTY_EXPIRY",
+  offsetDays: number,
+): string {
+  if (anchor === "PURCHASE_DATE") {
+    return offsetDays === 0
+      ? "Día de la compra"
+      : `Compra · ${offsetDays} días después`;
+  }
+  if (offsetDays === 0) return "Día del vencimiento";
+  if (offsetDays < 0) return `Vencimiento · ${Math.abs(offsetDays)} días antes`;
+  return `Vencimiento · ${offsetDays} días después`;
 }
 
 function SequenceDetailContent({ detail }: { detail: FollowUpSequenceDetail }) {
@@ -100,30 +126,39 @@ function SequenceDetailContent({ detail }: { detail: FollowUpSequenceDetail }) {
           {detail.stages.map((stage) => (
             <Badge key={stage.uuid} variant="outline" className="gap-1">
               <Calendar className="size-3" />
-              {stage.offsetDays === 0
-                ? "D0"
-                : stage.offsetDays < 0
-                ? `D${stage.offsetDays}`
-                : `D+${stage.offsetDays}`}
+              {stageMomentLabel(
+                stage.anchor ?? "WARRANTY_EXPIRY",
+                stage.offsetDays,
+              )}
             </Badge>
           ))}
         </div>
       </div>
       {detail.stages.length > 0 && (
         <div className="rounded-lg border border-border/60 p-3">
-          <p className="text-xs text-muted-foreground mb-2">Detalle de etapas:</p>
+          <p className="text-xs text-muted-foreground mb-2">
+            Detalle de etapas:
+          </p>
           <div className="space-y-2">
             {detail.stages.map((stage) => (
               <div key={stage.uuid} className="space-y-1">
                 <p className="text-xs font-medium">
-                  {stage.offsetDays === 0
-                    ? "D0"
-                    : stage.offsetDays < 0
-                    ? `D${stage.offsetDays}`
-                    : `D+${stage.offsetDays}`}
-                  <span className="text-muted-foreground ml-2">{stage.name}</span>
+                  {stageMomentLabel(
+                    stage.anchor ?? "WARRANTY_EXPIRY",
+                    stage.offsetDays,
+                  )}
+                  <span className="text-muted-foreground ml-2">
+                    {stage.name}
+                  </span>
                 </p>
-                <p className="text-xs text-muted-foreground line-clamp-2">{stage.template}</p>
+                <p className="text-xs text-muted-foreground line-clamp-2">
+                  {stage.template}
+                </p>
+                {stage.templateOnPast && (
+                  <p className="text-xs text-muted-foreground line-clamp-2">
+                    Recompra: {stage.templateOnPast}
+                  </p>
+                )}
               </div>
             ))}
           </div>

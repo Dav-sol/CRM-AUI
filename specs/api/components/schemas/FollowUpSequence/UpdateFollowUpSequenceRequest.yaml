@@ -19,4 +19,4 @@ properties:
       $ref: "./FollowUpSequenceStage.yaml"
     description: |
       Complete replacement of stages. Cannot be changed if sequence is used by campaigns.
-      Each stage must have unique offsetDays.
+      Each stage must have a unique anchor+offsetDays combination.

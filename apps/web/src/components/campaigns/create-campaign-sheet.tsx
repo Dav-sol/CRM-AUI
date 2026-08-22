@@ -26,6 +26,8 @@ import { campaignSchema, type CampaignFormValues } from "@/lib/validators";
 
 type CreateCampaignSheetProps = {
   onCreated?: () => void;
+  autoOpenPreset?: string | null;
+  onAutoClose?: () => void;
 };
 
 const selectClass =
@@ -51,11 +53,63 @@ const WARRANTY_STAGES = [
   { key: "templateD365", label: "Día -30 (Renovación)", placeholder: "Oferta de renovación, Plan Retorno, descuento + instalación/domicilio…", icon: Calendar },
 ] as const;
 
-export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
-  const [open, setOpen] = useState(false);
+const PRESETS = [
+  {
+    key: "bienvenida",
+    label: "Bienvenida",
+    description: "Da la bienvenida y activa la garantía.",
+    values: {
+      name: "Bienvenida a nuevos clientes",
+      type: "AUTOMATIC" as const,
+      template:
+        "¡Hola {customerName}! Gracias por confiar en {organizationName}. Tu batería {productName} ya tiene tu garantía activa. Cuidala revisando el voltaje cada 3 meses.",
+    },
+  },
+  {
+    key: "garantia",
+    label: "Recordatorio de garantía",
+    description: "Avisa que la garantía está por vencer.",
+    values: {
+      name: "Recordatorio de garantía",
+      type: "REPURCHASE" as const,
+      template:
+        "Hola {customerName}, tu batería {productName} está por vencer su garantía. Te invitamos a una revisión gratuita en {organizationName}.",
+    },
+  },
+  {
+    key: "reactivacion",
+    label: "Reactivación",
+    description: "Trae de vuelta a clientes inactivos.",
+    values: {
+      name: "Reactivación de clientes",
+      type: "REPURCHASE" as const,
+      template:
+        "Hola {customerName}, en {organizationName} tenemos una oferta especial para renovar tu {productName}. ¡Te esperamos!",
+    },
+  },
+] as const;
+
+export function CreateCampaignSheet({
+  onCreated,
+  autoOpenPreset,
+  onAutoClose,
+}: CreateCampaignSheetProps) {
+  const preset = autoOpenPreset
+    ? PRESETS.find((p) => p.key === autoOpenPreset)
+    : undefined;
+  const [open, setOpen] = useState(() => Boolean(autoOpenPreset));
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [products, setProducts] = useState<ProductItem[] | null>(null);
   const [sequences, setSequences] = useState<FollowUpSequenceItem[] | null>(null);
+
+  const presetDefaults: CampaignFormValues = preset
+    ? {
+        ...EMPTY_FORM,
+        name: preset.values.name,
+        type: preset.values.type,
+        template: preset.values.template,
+      }
+    : EMPTY_FORM;
 
   const {
     register,
@@ -63,11 +117,12 @@ export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
     reset,
     control,
     watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignSchema),
     mode: "onTouched",
-    defaultValues: EMPTY_FORM,
+    defaultValues: presetDefaults,
   });
 
   const followUpSequenceId = watch("followUpSequenceId");
@@ -168,7 +223,15 @@ export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
   }
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) {
+          onAutoClose?.();
+        }
+      }}
+    >
       <SheetTrigger
         render={<Button size="sm" />}
         onClick={() => {
@@ -201,6 +264,31 @@ export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
               {submitError}
             </p>
           )}
+
+          <div className="space-y-2">
+            <Label>Empezá con una plantilla</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {PRESETS.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => {
+                    setValue("name", preset.values.name);
+                    setValue("type", preset.values.type);
+                    setValue("template", preset.values.template);
+                  }}
+                  className="group rounded-lg border border-border/60 p-2 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <p className="text-xs font-semibold group-hover:text-primary">
+                    {preset.label}
+                  </p>
+                  <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">
+                    {preset.description}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="campaign-name">Nombre</Label>
@@ -236,7 +324,12 @@ export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <details className="space-y-3 rounded-lg border border-border/60 p-3">
+            <summary className="cursor-pointer select-none text-sm font-medium text-muted-foreground hover:text-foreground">
+              Opciones avanzadas
+            </summary>
+
+          <div className="mt-3 grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="campaign-type">Tipo</Label>
               <select
@@ -437,6 +530,7 @@ export function CreateCampaignSheet({ onCreated }: CreateCampaignSheetProps) {
               </p>
             )}
           </fieldset>
+          </details>
         </form>
 
         <SheetFooter className="border-t border-border/60">

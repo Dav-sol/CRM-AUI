@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { CampaignsPanel } from "@/components/dashboard/campaigns-panel";
 import { KpiCard } from "@/components/dashboard/kpi-card";
+import { INSIGHTS } from "@/components/campaigns/recommender";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -62,7 +63,7 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 p-6 lg:p-8">
+    <div className="w-full space-y-5 p-4 lg:p-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
@@ -83,8 +84,26 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-4 gap-4 md:grid-cols-8 lg:grid-cols-12">
-        <div className="col-span-2 md:col-span-2 lg:col-span-3">
+      {/* Hallazgos (bento strip) */}
+      <Link
+        href="/campaigns"
+        className="grid grid-cols-2 gap-3 rounded-lg border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-4 lg:grid-cols-4"
+      >
+        {INSIGHTS.map((insight) => (
+          <div key={insight.label} className="flex items-center gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <insight.icon className="size-4" aria-hidden="true" />
+            </span>
+            <div>
+              <p className="text-lg font-semibold leading-tight">{insight.value}</p>
+              <p className="text-xs text-muted-foreground">{insight.label}</p>
+            </div>
+          </div>
+        ))}
+      </Link>
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div>
           {summary ? (
             <KpiCard
               icon={Users}
@@ -96,7 +115,7 @@ export default function DashboardPage() {
             <Skeleton className="h-32 w-full" />
           )}
         </div>
-        <div className="col-span-2 md:col-span-2 lg:col-span-3">
+        <div>
           {summary ? (
             <KpiCard
               icon={ShoppingCart}
@@ -108,7 +127,7 @@ export default function DashboardPage() {
             <Skeleton className="h-32 w-full" />
           )}
         </div>
-        <div className="col-span-2 md:col-span-2 lg:col-span-3">
+        <div>
           {summary ? (
             <KpiCard
               icon={MessageSquareText}
@@ -120,7 +139,7 @@ export default function DashboardPage() {
             <Skeleton className="h-32 w-full" />
           )}
         </div>
-        <div className="col-span-2 md:col-span-2 lg:col-span-3">
+        <div>
           {summary ? (
             <KpiCard
               icon={Workflow}
@@ -134,9 +153,9 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-4 md:grid-cols-8 lg:grid-cols-12">
-        <div className="col-span-4 md:col-span-8 lg:col-span-7">
-          <Card>
+      <div className="grid grid-cols-4 gap-4 lg:grid-cols-12">
+        <div className="col-span-4 lg:col-span-7">
+          <Card className="h-full">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <CalendarClock className="size-4 text-primary" />
@@ -148,8 +167,8 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
-        <div className="col-span-4 md:col-span-8 lg:col-span-5">
-          <Card>
+        <div className="col-span-4 lg:col-span-5">
+          <Card className="h-full">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <CalendarClock className="size-4 text-primary" />

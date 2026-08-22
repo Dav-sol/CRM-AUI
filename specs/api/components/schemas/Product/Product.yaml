@@ -31,6 +31,11 @@ properties:
     nullable: true
     description: Free-text category (no catalog in v1).
 
+  warrantyMonths:
+    type: integer
+    nullable: true
+    description: Warranty duration in months from the product catalog (12, 15, 18 or 24).
+
   status:
     type: string
     enum:

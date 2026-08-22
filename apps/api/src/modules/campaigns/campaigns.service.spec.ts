@@ -41,6 +41,40 @@ function campaignRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function sequenceTransaction(
+  purchase: { id: string; customerId: string; purchaseDate: string },
+  warrantyExpiresAt: Date | null,
+) {
+  return {
+    campaign: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    purchase: {
+      findMany: jest.fn(
+        (args?: { select?: Record<string, unknown> }): Promise<unknown> => {
+          if (args?.select && 'warrantyExpiresAt' in args.select) {
+            return Promise.resolve([{ id: purchase.id, warrantyExpiresAt }]);
+          }
+          return Promise.resolve([
+            {
+              id: purchase.id,
+              customerId: purchase.customerId,
+              purchaseDate: new Date(purchase.purchaseDate),
+            },
+          ]);
+        },
+      ),
+    },
+    commercialCycle: {
+      findMany: jest.fn().mockResolvedValue([]),
+      create: jest.fn().mockResolvedValue({ id: 'cy-1' }),
+      update: jest.fn(),
+    },
+    automation: {
+      createMany: jest.fn(),
+      create: jest.fn().mockResolvedValue({}),
+    },
+  };
+}
+
 describe('CampaignsService', () => {
   let service: CampaignsService;
   let prisma: {
@@ -61,13 +95,13 @@ describe('CampaignsService', () => {
       updateMany: jest.Mock;
     };
     commercialCycle: {
-        findMany: jest.Mock;
-        create: jest.Mock;
-        update: jest.Mock;
-      };
-      purchase: { findMany: jest.Mock };
-      followUpSequence: { findFirst: jest.Mock };
-      $transaction: jest.Mock;
+      findMany: jest.Mock;
+      create: jest.Mock;
+      update: jest.Mock;
+    };
+    purchase: { findMany: jest.Mock };
+    followUpSequence: { findFirst: jest.Mock };
+    $transaction: jest.Mock;
   };
   let auditService: { record: jest.Mock };
   let eventEmitter: { emit: jest.Mock };
@@ -267,7 +301,9 @@ describe('CampaignsService', () => {
         expect.objectContaining({
           where: { uuid: 'cu-1', organizationId: 'org-1', deletedAt: null },
           include: {
-            followUpSequence: expect.objectContaining({ select: expect.objectContaining({ uuid: true }) }),
+            followUpSequence: expect.objectContaining({
+              select: expect.objectContaining({ uuid: true }),
+            }),
           },
         }),
       );
@@ -288,7 +324,12 @@ describe('CampaignsService', () => {
             uuid: 'seq-uuid-1',
             name: 'Secuencia Garantía 12',
             warrantyMonths: 12,
-            stages: [{ id: 'st-1' }, { id: 'st-2' }, { id: 'st-3' }, { id: 'st-4' }],
+            stages: [
+              { id: 'st-1' },
+              { id: 'st-2' },
+              { id: 'st-3' },
+              { id: 'st-4' },
+            ],
           },
         }),
       );
@@ -470,12 +511,14 @@ describe('CampaignsService', () => {
               {
                 uuid: 'st-1',
                 name: 'D-30',
+                anchor: 'WARRANTY_EXPIRY',
                 offsetDays: -30,
                 template: 'Recordatorio {customerName}',
               },
               {
                 uuid: 'st-2',
                 name: 'D0',
+                anchor: 'WARRANTY_EXPIRY',
                 offsetDays: 0,
                 template: 'Vence hoy tu {productName}',
               },
@@ -497,9 +540,9 @@ describe('CampaignsService', () => {
             },
             purchase: {
               findMany: jest.fn(
-                (
-                  args?: { select?: Record<string, unknown> },
-                ): Promise<unknown> => {
+                (args?: {
+                  select?: Record<string, unknown>;
+                }): Promise<unknown> => {
                   if (args?.select && 'warrantyExpiresAt' in args.select) {
                     return Promise.resolve([
                       { id: 'pu-1', warrantyExpiresAt: warrantyExpires },
@@ -579,6 +622,7 @@ describe('CampaignsService', () => {
               {
                 uuid: 'st-1',
                 name: 'D0',
+                anchor: 'WARRANTY_EXPIRY',
                 offsetDays: 0,
                 template: 'Vence hoy',
               },
@@ -595,9 +639,9 @@ describe('CampaignsService', () => {
             },
             purchase: {
               findMany: jest.fn(
-                (
-                  args?: { select?: Record<string, unknown> },
-                ): Promise<unknown> => {
+                (args?: {
+                  select?: Record<string, unknown>;
+                }): Promise<unknown> => {
                   if (args?.select && 'warrantyExpiresAt' in args.select) {
                     return Promise.resolve([
                       { id: 'pu-1', warrantyExpiresAt: null },
@@ -632,6 +676,204 @@ describe('CampaignsService', () => {
 
       expect(result.automationCount).toBe(0);
       expect(txAutomationCreate).not.toHaveBeenCalled();
+    });
+
+    it('generates PURCHASE_DATE stages even when warrantyExpiresAt is null (HG-SEM-05)', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        campaignRow({
+          followUpSequence: {
+            uuid: 'fus-1',
+            warrantyMonths: 12,
+            stages: [
+              {
+                uuid: 'st-1',
+                name: 'W',
+                anchor: 'WARRANTY_EXPIRY',
+                offsetDays: 0,
+                template: 'w',
+              },
+              {
+                uuid: 'st-2',
+                name: 'P',
+                anchor: 'PURCHASE_DATE',
+                offsetDays: 0,
+                template: 'p',
+                templateOnPast: 'pr',
+              },
+            ],
+          },
+        }),
+      );
+      let txAutomationCreate: jest.Mock | undefined;
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = sequenceTransaction(
+            {
+              id: 'pu-1',
+              customerId: 'cu-a',
+              purchaseDate: '2027-01-01T12:00:00.000Z',
+            },
+            null,
+          );
+          txAutomationCreate = tx.automation.create;
+          return fn(tx);
+        },
+      );
+
+      const result = await service.activate(orgUser, 'cu-1');
+
+      expect(result.automationCount).toBe(1);
+      expect(txAutomationCreate).toHaveBeenCalledTimes(1);
+      const [call] = txAutomationCreate!.mock.calls[0] as [
+        { data: { scheduledDate: Date; messageTemplate: string } },
+      ];
+      expect(call.data.messageTemplate).toBe('p');
+      expect(call.data.scheduledDate.getTime()).toBe(
+        new Date('2027-01-01T12:00:00.000Z').getTime(),
+      );
+    });
+
+    it('converts a past stage into an immediate repurchase automation using templateOnPast (HG-SEM-03)', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        campaignRow({
+          followUpSequence: {
+            uuid: 'fus-1',
+            warrantyMonths: 12,
+            stages: [
+              {
+                uuid: 'st-1',
+                name: 'P',
+                anchor: 'PURCHASE_DATE',
+                offsetDays: 0,
+                template: 'original',
+                templateOnPast: 'renovación',
+              },
+            ],
+          },
+        }),
+      );
+      let txAutomationCreate: jest.Mock | undefined;
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = sequenceTransaction(
+            {
+              id: 'pu-1',
+              customerId: 'cu-a',
+              purchaseDate: '2026-01-01T12:00:00.000Z',
+            },
+            null,
+          );
+          txAutomationCreate = tx.automation.create;
+          return fn(tx);
+        },
+      );
+
+      const result = await service.activate(orgUser, 'cu-1');
+
+      expect(result.automationCount).toBe(1);
+      expect(txAutomationCreate).toHaveBeenCalledTimes(1);
+      const [call] = txAutomationCreate!.mock.calls[0] as [
+        { data: { scheduledDate: Date; messageTemplate: string } },
+      ];
+      expect(call.data.messageTemplate).toBe('renovación');
+      expect(call.data.scheduledDate.getTime()).toBeLessThanOrEqual(Date.now());
+    });
+
+    it('falls back to campaign.template when templateOnPast is missing', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        campaignRow({
+          followUpSequence: {
+            uuid: 'fus-1',
+            warrantyMonths: 12,
+            stages: [
+              {
+                uuid: 'st-1',
+                name: 'P',
+                anchor: 'PURCHASE_DATE',
+                offsetDays: 0,
+                template: 'original',
+              },
+            ],
+          },
+        }),
+      );
+      let txAutomationCreate: jest.Mock | undefined;
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = sequenceTransaction(
+            {
+              id: 'pu-1',
+              customerId: 'cu-a',
+              purchaseDate: '2026-01-01T12:00:00.000Z',
+            },
+            null,
+          );
+          txAutomationCreate = tx.automation.create;
+          return fn(tx);
+        },
+      );
+
+      const result = await service.activate(orgUser, 'cu-1');
+
+      expect(result.automationCount).toBe(1);
+      const [call] = txAutomationCreate!.mock.calls[0] as [
+        { data: { messageTemplate: string } },
+      ];
+      expect(call.data.messageTemplate).toBe('Hola {customerName}');
+    });
+
+    it('dedupes multiple past stages into a single repurchase automation per purchase', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        campaignRow({
+          followUpSequence: {
+            uuid: 'fus-1',
+            warrantyMonths: 12,
+            stages: [
+              {
+                uuid: 'st-1',
+                name: 'P0',
+                anchor: 'PURCHASE_DATE',
+                offsetDays: 0,
+                template: 't0',
+                templateOnPast: 'r0',
+              },
+              {
+                uuid: 'st-2',
+                name: 'P10',
+                anchor: 'PURCHASE_DATE',
+                offsetDays: 10,
+                template: 't10',
+                templateOnPast: 'r10',
+              },
+            ],
+          },
+        }),
+      );
+      let txAutomationCreate: jest.Mock | undefined;
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = sequenceTransaction(
+            {
+              id: 'pu-1',
+              customerId: 'cu-a',
+              purchaseDate: '2026-01-01T12:00:00.000Z',
+            },
+            null,
+          );
+          txAutomationCreate = tx.automation.create;
+          return fn(tx);
+        },
+      );
+
+      const result = await service.activate(orgUser, 'cu-1');
+
+      expect(result.automationCount).toBe(1);
+      expect(txAutomationCreate).toHaveBeenCalledTimes(1);
+      const [call] = txAutomationCreate!.mock.calls[0] as [
+        { data: { scheduledDate: Date; messageTemplate: string } },
+      ];
+      expect(call.data.messageTemplate).toBe('r10');
+      expect(call.data.scheduledDate.getTime()).toBeLessThanOrEqual(Date.now());
     });
 
     it('reuses an existing ACTIVE cycle for the purchase', async () => {
@@ -1180,7 +1422,9 @@ describe('CampaignsService', () => {
   describe('segment AND logic — productId + warrantyMonths', () => {
     it('activates successfully when segment has both productId and warrantyMonths', async () => {
       prisma.campaign.findFirst
-        .mockResolvedValueOnce(campaignRow({ followUpSequenceId: null, followUpSequence: null }))
+        .mockResolvedValueOnce(
+          campaignRow({ followUpSequenceId: null, followUpSequence: null }),
+        )
         .mockResolvedValueOnce(null);
       prisma.campaign.updateMany.mockResolvedValue({ count: 1 });
       prisma.purchase.findMany.mockResolvedValue([
@@ -1206,7 +1450,14 @@ describe('CampaignsService', () => {
       ];
       prisma.campaign.findFirst
         .mockResolvedValueOnce(
-          campaignRow({ followUpSequenceId: 'seq-1', followUpSequence: { uuid: 'seq-uuid-1', warrantyMonths: 12, stages } }),
+          campaignRow({
+            followUpSequenceId: 'seq-1',
+            followUpSequence: {
+              uuid: 'seq-uuid-1',
+              warrantyMonths: 12,
+              stages,
+            },
+          }),
         )
         .mockResolvedValueOnce(null);
       prisma.campaign.updateMany.mockResolvedValue({ count: 1 });
@@ -1220,9 +1471,7 @@ describe('CampaignsService', () => {
       prisma.commercialCycle.findMany.mockResolvedValue([]);
       prisma.commercialCycle.create.mockResolvedValue({ id: `cc-${0}` });
 
-      await expect(
-        service.activate(orgUser, 'cu-1'),
-      ).rejects.toMatchObject({
+      await expect(service.activate(orgUser, 'cu-1')).rejects.toMatchObject({
         response: { error: { code: 'SEGMENT_TOO_LARGE' } },
       });
     });

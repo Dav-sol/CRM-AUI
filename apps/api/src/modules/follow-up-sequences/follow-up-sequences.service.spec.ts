@@ -34,9 +34,24 @@ const platformUser: AuthUser = {
 };
 
 const validStages = [
-  { name: 'Día 0', offsetDays: -360, template: 'Hola {customerName}' },
-  { name: 'Mitad', offsetDays: -180, template: 'Chequeo gratuito' },
-  { name: 'Renovación', offsetDays: -30, template: 'Plan Retorno' },
+  {
+    name: 'Día 0',
+    anchor: 'WARRANTY_EXPIRY',
+    offsetDays: -360,
+    template: 'Hola {customerName}',
+  },
+  {
+    name: 'Mitad',
+    anchor: 'WARRANTY_EXPIRY',
+    offsetDays: -180,
+    template: 'Chequeo gratuito',
+  },
+  {
+    name: 'Renovación',
+    anchor: 'WARRANTY_EXPIRY',
+    offsetDays: -30,
+    template: 'Plan Retorno',
+  },
 ];
 
 const validCreateDto = {
@@ -172,7 +187,7 @@ describe('FollowUpSequencesService', () => {
       expect(prisma.followUpSequence.create).not.toHaveBeenCalled();
     });
 
-    it('rejects duplicate offsetDays within the payload', async () => {
+    it('rejects duplicate anchor+offset combinations within the payload', async () => {
       await expect(
         service.create(adminUser, {
           ...validCreateDto,
@@ -185,11 +200,148 @@ describe('FollowUpSequencesService', () => {
         response: {
           error: {
             code: 'VALIDATION_ERROR',
-            message: expect.stringContaining('Duplicate offsetDays: -30'),
+            message: expect.stringContaining('Duplicate stage'),
           },
         },
       });
       expect(prisma.followUpSequence.create).not.toHaveBeenCalled();
+    });
+
+    it('allows the same offsetDays under different anchors', async () => {
+      prisma.followUpSequence.create.mockResolvedValue({
+        uuid: 'fus-1',
+        name: validCreateDto.name,
+        organizationId: 'org-1',
+        createdAt: new Date(),
+        stages: validStages,
+      });
+
+      await expect(
+        service.create(adminUser, {
+          ...validCreateDto,
+          stages: [
+            {
+              name: 'A',
+              anchor: 'PURCHASE_DATE',
+              offsetDays: 30,
+              template: 'x',
+            },
+            {
+              name: 'B',
+              anchor: 'WARRANTY_EXPIRY',
+              offsetDays: 30,
+              template: 'y',
+            },
+          ],
+        }),
+      ).resolves.toBeDefined();
+
+      const [call] = prisma.followUpSequence.create.mock.calls[0] as [
+        { data: { stages: { create: Array<Record<string, unknown>> } } },
+      ];
+      expect(call.data.stages.create.map((s) => s.anchor)).toEqual([
+        'PURCHASE_DATE',
+        'WARRANTY_EXPIRY',
+      ]);
+    });
+
+    it('defaults missing anchor to WARRANTY_EXPIRY and persists templateOnPast', async () => {
+      prisma.followUpSequence.create.mockResolvedValue({
+        uuid: 'fus-1',
+        name: validCreateDto.name,
+        organizationId: 'org-1',
+        createdAt: new Date(),
+        stages: validStages,
+      });
+
+      await service.create(adminUser, {
+        ...validCreateDto,
+        stages: [
+          {
+            name: 'Recompra',
+            offsetDays: -60,
+            template: 'original',
+            templateOnPast: 'renovación',
+          },
+        ],
+      });
+
+      const [call] = prisma.followUpSequence.create.mock.calls[0] as [
+        { data: { stages: { create: Array<Record<string, unknown>> } } },
+      ];
+      expect(call.data.stages.create[0]).toMatchObject({
+        anchor: 'WARRANTY_EXPIRY',
+        templateOnPast: 'renovación',
+      });
+    });
+
+    it('rejects negative offsetDays for PURCHASE_DATE anchors', async () => {
+      await expect(
+        service.create(adminUser, {
+          ...validCreateDto,
+          stages: [
+            {
+              name: 'A',
+              anchor: 'PURCHASE_DATE',
+              offsetDays: -1,
+              template: 'x',
+            },
+          ],
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: expect.stringContaining('PURCHASE_DATE'),
+          },
+        },
+      });
+      expect(prisma.followUpSequence.create).not.toHaveBeenCalled();
+    });
+
+    it('accepts WARRANTY_EXPIRY offsets beyond 365 and rejects above 730', async () => {
+      prisma.followUpSequence.create.mockResolvedValue({
+        uuid: 'fus-1',
+        name: validCreateDto.name,
+        organizationId: 'org-1',
+        createdAt: new Date(),
+        stages: validStages,
+      });
+
+      await expect(
+        service.create(adminUser, {
+          ...validCreateDto,
+          stages: [
+            {
+              name: 'A',
+              anchor: 'WARRANTY_EXPIRY',
+              offsetDays: 400,
+              template: 'x',
+            },
+          ],
+        }),
+      ).resolves.toBeDefined();
+
+      await expect(
+        service.create(adminUser, {
+          ...validCreateDto,
+          stages: [
+            {
+              name: 'A',
+              anchor: 'WARRANTY_EXPIRY',
+              offsetDays: 731,
+              template: 'x',
+            },
+          ],
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: expect.stringContaining('between -365 and 730'),
+          },
+        },
+      });
     });
 
     it('accepts every catalog warrantyMonths value and rejects values outside it', async () => {
@@ -318,7 +470,7 @@ describe('FollowUpSequencesService', () => {
   });
 
   describe('detail', () => {
-    it('returns the sequence with stages ordered by offsetDays asc', async () => {
+    it('returns the sequence with stages ordered by (anchor, offsetDays) asc', async () => {
       prisma.followUpSequence.findFirst.mockResolvedValue({
         uuid: 'fus-1',
         name: 'A',
@@ -330,6 +482,7 @@ describe('FollowUpSequencesService', () => {
           {
             uuid: 'st-3',
             name: 'Renovación',
+            anchor: 'WARRANTY_EXPIRY',
             offsetDays: -30,
             template: 't3',
             createdAt: new Date(),
@@ -337,6 +490,7 @@ describe('FollowUpSequencesService', () => {
           {
             uuid: 'st-1',
             name: 'Día 0',
+            anchor: 'WARRANTY_EXPIRY',
             offsetDays: -360,
             template: 't1',
             createdAt: new Date(),
@@ -351,7 +505,7 @@ describe('FollowUpSequencesService', () => {
         include: {
           stages: {
             where: { deletedAt: null },
-            orderBy: { offsetDays: 'asc' },
+            orderBy: [{ anchor: 'asc' }, { offsetDays: 'asc' }],
           },
         },
       });
@@ -432,15 +586,19 @@ describe('FollowUpSequencesService', () => {
           {
             sequenceId: 'row-1',
             name: 'Nueva A',
+            anchor: 'WARRANTY_EXPIRY',
             offsetDays: -100,
             template: 'ta',
+            templateOnPast: undefined,
             createdBy: 'u-1',
           },
           {
             sequenceId: 'row-1',
             name: 'Nueva B',
+            anchor: 'WARRANTY_EXPIRY',
             offsetDays: -50,
             template: 'tb',
+            templateOnPast: undefined,
             createdBy: 'u-1',
           },
         ],
@@ -478,7 +636,7 @@ describe('FollowUpSequencesService', () => {
       expect(tx.followUpSequence.update).toHaveBeenCalled();
     });
 
-    it('rejects duplicate offsets and incomplete stages during replacement', async () => {
+    it('rejects duplicate anchor+offset and incomplete stages during replacement', async () => {
       arrangeFoundSequence();
 
       await expect(
@@ -491,7 +649,7 @@ describe('FollowUpSequencesService', () => {
       ).rejects.toMatchObject({
         response: {
           error: {
-            message: expect.stringContaining('Duplicate offsetDays: -10'),
+            message: expect.stringContaining('Duplicate stage'),
           },
         },
       });

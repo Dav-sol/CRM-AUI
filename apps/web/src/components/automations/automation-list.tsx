@@ -115,39 +115,54 @@ export function AutomationList({ items, error, onChanged, onSelect }: Automation
   }
 
   return (
-    <ul className="divide-y divide-border/60" aria-label="Lista de automatizaciones">
+    <div
+      className="grid gap-2 p-3 sm:grid-cols-2"
+      aria-label="Lista de automatizaciones"
+    >
       {items.map((automation) => (
-        <li
+        <button
           key={automation.uuid}
-          className="flex items-center gap-4 px-4 py-3"
+          type="button"
           role="button"
-          tabIndex={0}
           aria-label="Ver detalle de la automatización"
           onClick={() => onSelect(automation)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              onSelect(automation);
-            }
-          }}
+          className="flex flex-col gap-3 rounded-lg border border-border/60 p-3 text-left transition-colors hover:border-primary/40 hover:bg-muted/40"
         >
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">
-              Programada {formatDateTime(automation.scheduledDate)}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <Workflow className="size-4" aria-hidden="true" />
+              </span>
+              <span className="text-xs font-medium text-muted-foreground">
+                Seguimiento post-venta
+              </span>
+            </div>
+            <AutomationStatusBadge status={automation.status} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold">
+              Programada para {formatDateTime(automation.scheduledDate)}
             </p>
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">
-              {automation.commercialCycleId
-                ? `Ciclo comercial ${automation.commercialCycleId.slice(0, 8)} · `
-                : "Sin ciclo comercial · "}
+            <p className="mt-0.5 text-xs text-muted-foreground">
               {automation.executedDate
-                ? `ejecutada ${formatDateTime(automation.executedDate)}`
-                : `creada ${formatDateTime(automation.createdAt)}`}
+                ? `Ejecutada ${formatDateTime(automation.executedDate)}`
+                : `Creada ${formatDateTime(automation.createdAt)}`}
             </p>
           </div>
-          <AutomationStatusBadge status={automation.status} />
-          <AutomationActions uuid={automation.uuid} status={automation.status} onChanged={onChanged} />
-        </li>
+          <div className="flex items-center justify-between gap-2 border-t border-border/40 pt-2">
+            <span className="text-[11px] text-muted-foreground">
+              {automation.commercialCycleId
+                ? `Ciclo · ${automation.commercialCycleId.slice(0, 8)}`
+                : "Sin ciclo comercial"}
+            </span>
+            <AutomationActions
+              uuid={automation.uuid}
+              status={automation.status}
+              onChanged={onChanged}
+            />
+          </div>
+        </button>
       ))}
-    </ul>
+    </div>
   );
 }
