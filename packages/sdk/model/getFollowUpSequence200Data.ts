@@ -20,13 +20,16 @@ export type GetFollowUpSequence200Data = ({
   /** Number of stages in the sequence. */
   stageCount: number;
   createdAt: string;
-}) & {
-  stages: {
+}) & ({
+  stages: ({
   uuid: string;
   name: string;
+  anchor: 'PURCHASE_DATE' | 'WARRANTY_EXPIRY';
   offsetDays: number;
   template: string;
+  /** @nullable */
+  templateOnPast?: string | null;
   createdAt: string;
-}[];
+})[];
   updatedAt: string;
-};
+});

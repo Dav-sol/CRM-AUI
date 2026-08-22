@@ -18,6 +18,7 @@ import { PurchasesService } from './purchases.service';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { UpdatePurchaseDto } from './dto/update-purchase.dto';
 import { QueryPurchasesDto } from './dto/query-purchases.dto';
+import { QueryPurchaseStatsDto } from './dto/query-purchase-stats.dto';
 
 @Controller('purchases')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -30,6 +31,14 @@ export class PurchasesController {
     @Query() query: QueryPurchasesDto,
   ) {
     return this.purchasesService.findAll(user, query);
+  }
+
+  @Get('stats')
+  async stats(
+    @CurrentUser() user: AuthUser,
+    @Query() query: QueryPurchaseStatsDto,
+  ) {
+    return { data: await this.purchasesService.stats(user, query) };
   }
 
   @Get(':id')

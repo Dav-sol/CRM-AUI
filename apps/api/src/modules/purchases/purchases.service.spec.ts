@@ -40,6 +40,7 @@ describe('PurchasesService', () => {
       findFirst: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
+      aggregate: jest.Mock;
     };
     customer: { findFirst: jest.Mock };
     product: { findFirst: jest.Mock };
@@ -55,6 +56,7 @@ describe('PurchasesService', () => {
         findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+        aggregate: jest.fn(),
       },
       customer: { findFirst: jest.fn() },
       product: { findFirst: jest.fn() },
@@ -719,6 +721,100 @@ describe('PurchasesService', () => {
       await expect(
         service.create(orgUser, { ...baseDto, warrantyMonths: 13 }),
       ).rejects.toThrow();
+    });
+  });
+
+  describe('stats (P5)', () => {
+    it('returns global aggregates scoped to the organization', async () => {
+      prisma.purchase.aggregate.mockResolvedValue({
+        _count: { _all: 10 },
+        _sum: { value: new Prisma.Decimal(1250.5), quantity: 24 },
+      });
+      prisma.purchase.count.mockResolvedValue(3);
+      prisma.purchase.findMany.mockResolvedValue([
+        { customerId: 'c-1' },
+        { customerId: 'c-2' },
+        { customerId: 'c-3' },
+      ]);
+
+      const result = await service.stats(orgUser, {});
+
+      expect(prisma.purchase.aggregate).toHaveBeenCalledWith({
+        where: { deletedAt: null, organizationId: 'org-1' },
+        _count: { _all: true },
+        _sum: { value: true, quantity: true },
+      });
+      expect(prisma.purchase.count).toHaveBeenCalledWith({
+        where: {
+          deletedAt: null,
+          organizationId: 'org-1',
+          warrantyExpiresAt: { gte: expect.any(Date) as unknown },
+        },
+      });
+      expect(result).toEqual({
+        total: 10,
+        totalValue: new Prisma.Decimal(1250.5),
+        units: 24,
+        activeWarranties: 3,
+        customers: 3,
+      });
+    });
+
+    it('applies date range and status filters to every aggregate', async () => {
+      prisma.purchase.aggregate.mockResolvedValue({
+        _count: { _all: 4 },
+        _sum: { value: new Prisma.Decimal(500), quantity: 8 },
+      });
+      prisma.purchase.count.mockResolvedValue(1);
+      prisma.purchase.findMany.mockResolvedValue([{ customerId: 'c-1' }]);
+
+      await service.stats(orgUser, {
+        dateFrom: '2026-08-01',
+        dateTo: '2026-08-31',
+        status: 'COMPLETED',
+      });
+
+      const expectedWhere = {
+        deletedAt: null,
+        organizationId: 'org-1',
+        status: 'COMPLETED',
+        purchaseDate: {
+          gte: new Date('2026-08-01T00:00:00.000Z'),
+          lte: new Date('2026-08-31T23:59:59.999Z'),
+        },
+      };
+      expect(prisma.purchase.aggregate).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expectedWhere }),
+      );
+      expect(prisma.purchase.count).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ status: 'COMPLETED' }),
+        }),
+      );
+      expect(prisma.purchase.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expectedWhere,
+          distinct: ['customerId'],
+        }),
+      );
+    });
+
+    it('lets PLATFORM_OWNER aggregate without org scope', async () => {
+      prisma.purchase.aggregate.mockResolvedValue({
+        _count: { _all: 0 },
+        _sum: { value: new Prisma.Decimal(0), quantity: 0 },
+      });
+      prisma.purchase.count.mockResolvedValue(0);
+      prisma.purchase.findMany.mockResolvedValue([]);
+
+      const result = await service.stats(platformUser, {});
+
+      expect(prisma.purchase.aggregate).toHaveBeenCalledWith({
+        where: { deletedAt: null },
+        _count: { _all: true },
+        _sum: { value: true, quantity: true },
+      });
+      expect(result.total).toBe(0);
     });
   });
 });

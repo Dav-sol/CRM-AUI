@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, Layers, Megaphone, Workflow } from "lucide-react";
+import { CalendarClock, Info, Layers, MailOpen, Megaphone, Workflow } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { CampaignActions } from "@/components/campaigns/campaign-actions";
@@ -35,6 +35,13 @@ function AutomationStatusBadge({ status }: { status: Automation["status"] }) {
           ? "outline"
           : "secondary";
   return <Badge variant={variant}>{AUTOMATION_STATUS_LABELS[status]}</Badge>;
+}
+
+function renderPreview(template: string): string {
+  return template
+    .replaceAll("{customerName}", "Carlos Mendoza")
+    .replaceAll("{productName}", "Batería Extrema 850")
+    .replaceAll("{organizationName}", "Baterías del Caribe");
 }
 
 export function CampaignDetailView({ uuid }: { uuid: string }) {
@@ -175,6 +182,47 @@ export function CampaignDetailView({ uuid }: { uuid: string }) {
           </div>
         </CardContent>
       </Card>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        {/* Qué hace */}
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <Info className="size-4" aria-hidden="true" />
+              </span>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold">¿Qué hace esta campaña?</p>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  {campaign.followUpSequence
+                    ? "Por cada compra del segmento genera un mensaje automático por cada etapa de la secuencia, programado en la fecha de vencimiento de la garantía del cliente."
+                    : "Envía un mensaje de seguimiento a los clientes del segmento para incentivar la recompra y el cuidado post-venta."}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Mensaje que se envía */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <MailOpen className="size-4 text-primary" /> Mensaje que se envía
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-lg border border-border/60 bg-muted/40 p-4">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                {renderPreview(campaign.template)}
+              </p>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Ejemplo con datos de muestra. Los placeholders se reemplazan con el cliente,
+              producto y organización reales.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
         {/* Sequence */}

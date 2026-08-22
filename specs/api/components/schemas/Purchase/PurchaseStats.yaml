@@ -1,0 +1,32 @@
+type: object
+
+description: Global purchase statistics for the organization, optionally filtered by date range and status.
+
+required:
+  - total
+  - totalValue
+  - units
+  - activeWarranties
+  - customers
+
+properties:
+
+  total:
+    type: integer
+    description: Total purchases matching the filters.
+
+  totalValue:
+    type: string
+    description: Sum of purchase values as a string.
+
+  units:
+    type: integer
+    description: Sum of purchased units.
+
+  activeWarranties:
+    type: integer
+    description: Purchases whose warranty expiration is today or later.
+
+  customers:
+    type: integer
+    description: Distinct customers with at least one matching purchase.

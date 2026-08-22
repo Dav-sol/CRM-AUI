@@ -403,6 +403,74 @@
                     message:
                       type: string
 
+/purchases/stats:
+  get:
+    tags:
+      - Purchases
+
+    summary: Global purchase statistics
+
+    description: |
+      Returns global aggregates (total, total value, units, active warranties and
+      distinct customers) for the organization. Optionally filtered by purchase
+      date range and status. Not paginated: metrics cover the whole matching set.
+
+    operationId: getPurchaseStats
+
+    security:
+      - bearerAuth: []
+
+    parameters:
+
+      - name: dateFrom
+        in: query
+        required: false
+        description: |
+          Lower bound on purchaseDate. Date-only (`YYYY-MM-DD`) includes the
+          whole requested day.
+        schema:
+          type: string
+          format: date-time
+
+      - name: dateTo
+        in: query
+        required: false
+        description: |
+          Upper bound on purchaseDate. Date-only (`YYYY-MM-DD`) includes the
+          whole requested day.
+        schema:
+          type: string
+          format: date-time
+
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+            - COMPLETED
+            - CANCELLED
+            - REFUNDED
+
+    responses:
+
+      "200":
+        description: Purchase statistics
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - data
+              properties:
+                data:
+                  $ref: "../components/schemas/Purchase/PurchaseStats.yaml"
+
+      "401":
+        description: Unauthorized
+      "403":
+        description: Forbidden
+
 /purchases/{id}:
   parameters:
 

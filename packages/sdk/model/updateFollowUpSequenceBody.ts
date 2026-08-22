@@ -28,7 +28,7 @@ export type UpdateFollowUpSequenceBody = {
   warrantyMonths?: UpdateFollowUpSequenceBodyWarrantyMonths;
   /**
      * Complete replacement of stages. Cannot be changed if sequence is used by campaigns.
-     * Each stage must have unique offsetDays.
+     * Each stage must have a unique anchor+offsetDays combination.
      * @minItems 1
      */
   stages?: UpdateFollowUpSequenceBodyStagesItem[];

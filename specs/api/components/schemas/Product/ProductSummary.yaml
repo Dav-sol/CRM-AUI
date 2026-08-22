@@ -29,6 +29,11 @@ properties:
     type: string
     nullable: true
 
+  warrantyMonths:
+    type: integer
+    nullable: true
+    description: Warranty duration in months from the product catalog (12, 15, 18 or 24).
+
   status:
     type: string
     enum:

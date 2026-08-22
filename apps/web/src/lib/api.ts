@@ -26,6 +26,7 @@ import {
   getFollowUpSequence,
   getImportJob,
   getPurchase,
+  getPurchaseStats,
   listAutomations,
   listCampaigns,
   listCommercialCycles,
@@ -208,6 +209,13 @@ export async function apiGetPurchase(
 ): Promise<SdkData<typeof getPurchase>> {
   const res = await call((options) => getPurchase(uuid, options));
   return unwrap(getPurchase, res);
+}
+
+export async function apiPurchaseStats(
+  params?: Parameters<typeof getPurchaseStats>[0],
+): Promise<SdkData<typeof getPurchaseStats>> {
+  const res = await call((options) => getPurchaseStats(params, options));
+  return unwrap(getPurchaseStats, res);
 }
 
 export async function apiReplyConversation(

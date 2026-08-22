@@ -22,6 +22,11 @@ export type ListProducts200DataItem = {
   name: string;
   /** @nullable */
   category?: string | null;
+  /**
+     * Warranty duration in months from the product catalog (12, 15, 18 or 24).
+     * @nullable
+     */
+  warrantyMonths?: number | null;
   status: ListProducts200DataItemStatus;
   createdAt: string;
   updatedAt: string;

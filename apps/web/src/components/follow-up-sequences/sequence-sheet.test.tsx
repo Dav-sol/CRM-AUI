@@ -37,8 +37,24 @@ const detail = {
   createdAt: "2026-08-13T10:00:00.000Z",
   updatedAt: "2026-08-14T10:00:00.000Z",
   stages: [
-    { uuid: "st-1", name: "Día 0", offsetDays: -360, template: "Hola", createdAt: "2026-08-13T10:00:00.000Z" },
-    { uuid: "st-2", name: "Renovación", offsetDays: -30, template: "Plan Retorno", createdAt: "2026-08-13T10:00:00.000Z" },
+    {
+      uuid: "st-1",
+      name: "Día 0",
+      anchor: "WARRANTY_EXPIRY",
+      offsetDays: -360,
+      template: "Hola",
+      templateOnPast: null,
+      createdAt: "2026-08-13T10:00:00.000Z",
+    },
+    {
+      uuid: "st-2",
+      name: "Renovación",
+      anchor: "WARRANTY_EXPIRY",
+      offsetDays: -30,
+      template: "Plan Retorno",
+      templateOnPast: "Oferta de recompra",
+      createdAt: "2026-08-13T10:00:00.000Z",
+    },
   ],
 };
 
@@ -50,11 +66,17 @@ describe("CreateSequenceSheet", () => {
   it("valida campos requeridos y no llama a la API", async () => {
     render(<CreateSequenceSheet />);
 
-    await userEvent.click(screen.getByRole("button", { name: /Nueva secuencia/ }));
-    await userEvent.click(screen.getByRole("button", { name: "Crear secuencia" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Nueva secuencia/ }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Crear secuencia" }),
+    );
 
     await waitFor(() =>
-      expect(screen.getAllByText(/Ingresá el nombre/).length).toBeGreaterThan(0),
+      expect(screen.getAllByText(/Ingresá el nombre/).length).toBeGreaterThan(
+        0,
+      ),
     );
     expect(apiCreateFollowUpSequence).not.toHaveBeenCalled();
   });
@@ -69,44 +91,84 @@ describe("CreateSequenceSheet", () => {
     } as never);
 
     render(<CreateSequenceSheet onCreated={onCreated} />);
-    await userEvent.click(screen.getByRole("button", { name: /Nueva secuencia/ }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Nueva secuencia/ }),
+    );
 
     // Placeholder único para el nombre de la secuencia
-    await userEvent.type(screen.getByPlaceholderText("Seguimiento garantía 12 meses"), "Nueva");
+    await userEvent.type(
+      screen.getByPlaceholderText("Seguimiento garantía 12 meses"),
+      "Nueva",
+    );
     // getAllByLabelText("Nombre")[1] selecciona el input de la etapa 1 (el [0] es el nombre principal)
-    await userEvent.type(screen.getAllByLabelText("Nombre", { exact: true })[1], "Día 0");
+    await userEvent.type(
+      screen.getAllByLabelText("Nombre", { exact: true })[1],
+      "Día 0",
+    );
     // getAllByLabelText("Mensaje")[0] selecciona la plantilla de la etapa 1
-    const templateInput = screen.getAllByLabelText("Mensaje", { exact: true })[0];
-    fireEvent.change(templateInput, { target: { value: "Hola {customerName}" } });
-
-    await userEvent.click(screen.getByRole("button", { name: "Crear secuencia" }));
-
-    await waitFor(() => expect(apiCreateFollowUpSequence).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(apiCreateFollowUpSequence).mock.calls[0][0]).toMatchObject({
-      name: "Nueva",
-      warrantyMonths: 12,
-      stages: [{ name: "Día 0", offsetDays: -30, template: "Hola {customerName}" }],
+    const templateInput = screen.getAllByLabelText("Mensaje", {
+      exact: true,
+    })[0];
+    fireEvent.change(templateInput, {
+      target: { value: "Hola {customerName}" },
     });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Crear secuencia" }),
+    );
+
+    await waitFor(() =>
+      expect(apiCreateFollowUpSequence).toHaveBeenCalledTimes(1),
+    );
+    expect(vi.mocked(apiCreateFollowUpSequence).mock.calls[0][0]).toMatchObject(
+      {
+        name: "Nueva",
+        warrantyMonths: 12,
+        stages: [
+          {
+            name: "Día 0",
+            anchor: "PURCHASE_DATE",
+            offsetDays: 0,
+            template: "Hola {customerName}",
+          },
+        ],
+      },
+    );
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
-    expect(toast.success).toHaveBeenCalledWith("Secuencia creada correctamente");
+    expect(toast.success).toHaveBeenCalledWith(
+      "Secuencia creada correctamente",
+    );
   });
 
   it("error de API muestra el mensaje del servidor", async () => {
     vi.mocked(apiCreateFollowUpSequence).mockRejectedValue(
       new ApiError(400, "VALIDATION_ERROR", "Duplicate offsetDays: -30"),
     );
-render(<CreateSequenceSheet />);
+    render(<CreateSequenceSheet />);
 
-    await userEvent.click(screen.getByRole("button", { name: /Nueva secuencia/ }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /Nueva secuencia/ }),
+    );
 
     // Usar placeholder único para el nombre de la secuencia
-    await userEvent.type(screen.getByPlaceholderText("Seguimiento garantía 12 meses"), "X");
+    await userEvent.type(
+      screen.getByPlaceholderText("Seguimiento garantía 12 meses"),
+      "X",
+    );
     // getAllByLabelText("Nombre")[1] selecciona el input de la etapa 1 (el [0] es el nombre principal)
-    await userEvent.type(screen.getAllByLabelText("Nombre", { exact: true })[1], "A");
+    await userEvent.type(
+      screen.getAllByLabelText("Nombre", { exact: true })[1],
+      "A",
+    );
     // getAllByLabelText("Mensaje")[0] selecciona la plantilla de la etapa 1
-    await userEvent.type(screen.getAllByLabelText("Mensaje", { exact: true })[0], "t");
+    await userEvent.type(
+      screen.getAllByLabelText("Mensaje", { exact: true })[0],
+      "t",
+    );
 
-    await userEvent.click(screen.getByRole("button", { name: "Crear secuencia" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Crear secuencia" }),
+    );
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
     expect(screen.getByRole("alert")).toHaveTextContent(/Duplicate offsetDays/);
@@ -120,7 +182,7 @@ describe("EditSequenceSheet", () => {
     vi.mocked(apiUpdateFollowUpSequence).mockReset();
   });
 
-it("precarga los datos de la secuencia y guarda el reemplazo completo", async () => {
+  it("precarga los datos de la secuencia y guarda el reemplazo completo", async () => {
     vi.mocked(apiGetFollowUpSequence).mockResolvedValue(detail as never);
     vi.mocked(apiUpdateFollowUpSequence).mockResolvedValue({
       uuid: "fus-1",
@@ -129,30 +191,51 @@ it("precarga los datos de la secuencia y guarda el reemplazo completo", async ()
     const onClose = vi.fn();
     const onSaved = vi.fn();
 
-    render(<EditSequenceSheet uuid="fus-1" onClose={onClose} onSaved={onSaved} />);
+    render(
+      <EditSequenceSheet uuid="fus-1" onClose={onClose} onSaved={onSaved} />,
+    );
 
     // Esperar a que desaparezca el estado de carga
-    await waitFor(() => expect(screen.queryByText("Cargando…")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByText("Cargando…")).not.toBeInTheDocument(),
+    );
 
     // Precarga: buscar el input por placeholder (más robusto que label en portal Radix)
-    const nameInput = await screen.findByPlaceholderText("Seguimiento garantía 12 meses");
+    const nameInput = await screen.findByPlaceholderText(
+      "Seguimiento garantía 12 meses",
+    );
     await waitFor(() => expect(nameInput).toHaveValue("Garantía 12 meses"));
     expect(apiGetFollowUpSequence).toHaveBeenCalledWith("fus-1");
 
     await userEvent.clear(nameInput);
     await userEvent.type(nameInput, "Garantía 12 meses v2");
 
-    await userEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Guardar cambios" }),
+    );
 
-    await waitFor(() => expect(apiUpdateFollowUpSequence).toHaveBeenCalledTimes(1));
-    const [calledUuid, body] = vi.mocked(apiUpdateFollowUpSequence).mock.calls[0];
+    await waitFor(() =>
+      expect(apiUpdateFollowUpSequence).toHaveBeenCalledTimes(1),
+    );
+    const [calledUuid, body] = vi.mocked(apiUpdateFollowUpSequence).mock
+      .calls[0];
     expect(calledUuid).toBe("fus-1");
     expect(body).toMatchObject({
       name: "Garantía 12 meses v2",
       warrantyMonths: 12,
       stages: [
-        { name: "Día 0", offsetDays: -360, template: "Hola" },
-        { name: "Renovación", offsetDays: -30, template: "Plan Retorno" },
+        {
+          name: "Día 0",
+          anchor: "WARRANTY_EXPIRY",
+          offsetDays: -360,
+          template: "Hola",
+        },
+        {
+          name: "Renovación",
+          anchor: "WARRANTY_EXPIRY",
+          offsetDays: -30,
+          template: "Plan Retorno",
+        },
       ],
     });
     await waitFor(() => {
@@ -167,7 +250,9 @@ it("precarga los datos de la secuencia y guarda el reemplazo completo", async ()
     render(<EditSequenceSheet uuid="fus-x" onClose={() => {}} />);
 
     await waitFor(() =>
-      expect(screen.getByText("No se pudo cargar la secuencia.")).toBeInTheDocument(),
+      expect(
+        screen.getByText("No se pudo cargar la secuencia."),
+      ).toBeInTheDocument(),
     );
   });
 

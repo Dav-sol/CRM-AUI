@@ -166,6 +166,8 @@ import type {
   GetPurchase401,
   GetPurchase404,
   GetPurchase500,
+  GetPurchaseStats200,
+  GetPurchaseStatsParams,
   ListAutomations200,
   ListAutomations401,
   ListAutomationsParams,
@@ -970,7 +972,7 @@ export const getGetCustomerUrl = (id: string,) => {
  * Returns the customer only if it belongs to the caller organization
  * (PLATFORM_OWNER may read any). Unknown, cross-tenant or soft-deleted
  * customers return 404 CUSTOMER_NOT_FOUND.
- * @summary Get a customer by id
+ * @summary Get a customer by id or uuid
  */
 export const getCustomer = async (id: string, options?: RequestInit): Promise<getCustomerResponse> => {
 
@@ -1263,6 +1265,71 @@ export const createPurchase = async (createPurchaseBody: CreatePurchaseBody, opt
 
   const data: createPurchaseResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as createPurchaseResponse
+}
+
+
+
+export type getPurchaseStatsResponse200 = {
+  data: GetPurchaseStats200
+  status: 200
+}
+
+export type getPurchaseStatsResponse401 = {
+  data: void
+  status: 401
+}
+
+export type getPurchaseStatsResponse403 = {
+  data: void
+  status: 403
+}
+
+export type getPurchaseStatsResponseSuccess = (getPurchaseStatsResponse200) & {
+  headers: Headers;
+};
+export type getPurchaseStatsResponseError = (getPurchaseStatsResponse401 | getPurchaseStatsResponse403) & {
+  headers: Headers;
+};
+
+export type getPurchaseStatsResponse = (getPurchaseStatsResponseSuccess | getPurchaseStatsResponseError)
+
+export const getGetPurchaseStatsUrl = (params?: GetPurchaseStatsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/purchases/stats?${stringifiedParams}` : `/api/v1/purchases/stats`
+}
+
+/**
+ * Returns global aggregates (total, total value, units, active warranties and
+ * distinct customers) for the organization. Optionally filtered by purchase
+ * date range and status. Not paginated: metrics cover the whole matching set.
+ * @summary Global purchase statistics
+ */
+export const getPurchaseStats = async (params?: GetPurchaseStatsParams, options?: RequestInit): Promise<getPurchaseStatsResponse> => {
+
+  const res = await fetch(getGetPurchaseStatsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: getPurchaseStatsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getPurchaseStatsResponse
 }
 
 

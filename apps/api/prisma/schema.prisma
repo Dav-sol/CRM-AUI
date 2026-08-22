@@ -249,16 +249,23 @@ model FollowUpSequence {
 }
 
 model FollowUpSequenceStage {
-  id                  String   @id @default(cuid())
-  uuid                String   @unique @default(uuid())
-  sequenceId          String   @map("sequence_id")
+  id                  String               @id @default(cuid())
+  uuid                String               @unique @default(uuid())
+  sequenceId          String               @map("sequence_id")
   name                String
-  offsetDays          Int      @map("offset_days")
+  // Temporal reference for offsetDays:
+  // PURCHASE_DATE = offset measured from purchaseDate;
+  // WARRANTY_EXPIRY = offset measured from warrantyExpiresAt.
+  anchor              FollowUpStageAnchor  @default(WARRANTY_EXPIRY)
+  offsetDays          Int                  @map("offset_days")
   template            String
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
-  deletedAt           DateTime? @map("deleted_at")
-  deletedBy           String?  @map("deleted_by")
+  // Repurchase/renovation message used when the stage date already passed at
+  // campaign activation time (HG-SEM-03). Falls back to campaign.template.
+  templateOnPast      String?              @map("template_on_past")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  deletedAt           DateTime?            @map("deleted_at")
+  deletedBy           String?              @map("deleted_by")
 
   sequence FollowUpSequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
 
@@ -635,6 +642,11 @@ enum AutomationStatus {
   CANCELLED
   ERROR
   PAUSED
+}
+
+enum FollowUpStageAnchor {
+  PURCHASE_DATE
+  WARRANTY_EXPIRY
 }
 
 enum ChannelType {

@@ -20,6 +20,7 @@ describe('PurchasesController', () => {
     findById: jest.Mock;
     create: jest.Mock;
     update: jest.Mock;
+    stats: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -28,6 +29,7 @@ describe('PurchasesController', () => {
       findById: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      stats: jest.fn(),
     };
     const module: TestingModule = await Test.createTestingModule({
       controllers: [PurchasesController],
@@ -59,6 +61,31 @@ describe('PurchasesController', () => {
 
     expect(service.findById).toHaveBeenCalledWith(user, 'p-1');
     expect(result).toEqual({ data: { id: 'p-1' } });
+  });
+
+  it('returns global purchase stats in the data envelope (P5)', async () => {
+    service.stats.mockResolvedValue({
+      total: 100,
+      totalValue: '12500.00',
+      units: 240,
+      activeWarranties: 12,
+      customers: 80,
+    });
+
+    const result = await controller.stats(user, { dateFrom: '2026-08-01' });
+
+    expect(service.stats).toHaveBeenCalledWith(user, {
+      dateFrom: '2026-08-01',
+    });
+    expect(result).toEqual({
+      data: {
+        total: 100,
+        totalValue: '12500.00',
+        units: 240,
+        activeWarranties: 12,
+        customers: 80,
+      },
+    });
   });
 
   it('throws PURCHASE_NOT_FOUND when the purchase does not exist', async () => {

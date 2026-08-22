@@ -12,6 +12,7 @@ import { AuditIdentityService } from '../auth/audit.identity.service';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { UpdatePurchaseDto } from './dto/update-purchase.dto';
 import { QueryPurchasesDto } from './dto/query-purchases.dto';
+import { QueryPurchaseStatsDto } from './dto/query-purchase-stats.dto';
 
 export interface PurchaseListItem {
   id: string;
@@ -299,6 +300,61 @@ export class PurchasesService {
       description: `purchase updated invoice=${purchase.invoiceNumber}`,
     });
     return updated;
+  }
+
+  async stats(
+    user: AuthUser,
+    query: QueryPurchaseStatsDto,
+  ): Promise<{
+    total: number;
+    totalValue: Prisma.Decimal;
+    units: number;
+    activeWarranties: number;
+    customers: number;
+  }> {
+    const where: Prisma.PurchaseWhereInput = { deletedAt: null };
+    if (user.accountType === 'ORGANIZATION') {
+      where.organizationId = user.organizationId ?? undefined;
+    }
+    if (query.status) {
+      where.status = query.status;
+    }
+    if (query.dateFrom || query.dateTo) {
+      where.purchaseDate = {};
+      if (query.dateFrom) {
+        where.purchaseDate.gte = this.resolveDateBoundary(
+          query.dateFrom,
+          false,
+        );
+      }
+      if (query.dateTo) {
+        where.purchaseDate.lte = this.resolveDateBoundary(query.dateTo, true);
+      }
+    }
+
+    const [agg, activeWarranties, customers] = await Promise.all([
+      this.prisma.purchase.aggregate({
+        where,
+        _count: { _all: true },
+        _sum: { value: true, quantity: true },
+      }),
+      this.prisma.purchase.count({
+        where: { ...where, warrantyExpiresAt: { gte: new Date() } },
+      }),
+      this.prisma.purchase.findMany({
+        where,
+        distinct: ['customerId'],
+        select: { customerId: true },
+      }),
+    ]);
+
+    return {
+      total: agg._count._all,
+      totalValue: agg._sum.value ?? new Prisma.Decimal(0),
+      units: agg._sum.quantity ?? 0,
+      activeWarranties,
+      customers: customers.length,
+    };
   }
 
   private findScoped(

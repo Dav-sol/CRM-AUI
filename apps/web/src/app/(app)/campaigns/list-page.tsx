@@ -1,9 +1,11 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 import { CreateCampaignSheet } from "@/components/campaigns/create-campaign-sheet";
+import { FollowUpRecommendations } from "@/components/campaigns/recommender";
 import {
   CampaignList,
   useCampaigns,
@@ -23,6 +25,9 @@ const STATUS_TABS: { label: string; value: CampaignFilters["status"] }[] = [
 ];
 
 export function CampaignsIndexPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const autoOpenPreset = searchParams.get("preset");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<CampaignFilters["status"]>(undefined);
@@ -39,23 +44,32 @@ export function CampaignsIndexPage() {
   }
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-6xl flex-col p-6 lg:p-8">
+    <div className="flex h-full w-full flex-col p-4 lg:p-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Campañas</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Seguimientos</h1>
           <p className="text-sm text-muted-foreground">
-            {meta ? `${meta.total} campañas` : "Seguimiento post-venta y recompra."}
+            {meta
+              ? `${meta.total} seguimientos`
+              : "Automatiza el contacto post-venta por garantía y recompra."}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => setRefreshKey((k) => k + 1)}>
             Actualizar
           </Button>
-          <CreateCampaignSheet onCreated={() => setRefreshKey((k) => k + 1)} />
+          <CreateCampaignSheet
+            key={autoOpenPreset ?? "manual"}
+            autoOpenPreset={autoOpenPreset}
+            onAutoClose={() => router.replace("/campaigns")}
+            onCreated={() => setRefreshKey((k) => k + 1)}
+          />
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
+      <FollowUpRecommendations />
+
+      <div className="mt-6 flex flex-wrap items-center gap-3">
         <form onSubmit={applySearch} className="relative w-full max-w-xs">
           <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input

@@ -2,7 +2,7 @@
 
 import { ArrowLeft, PanelRight } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -40,16 +40,12 @@ const POLL_INTERVAL_MS = 15_000;
 export default function ConversationDetailPage() {
   const params = useParams<{ uuid: string }>();
   const uuid = params.uuid;
+  const router = useRouter();
 
   const [conversation, setConversation] = useState<Awaited<ReturnType<typeof apiGetConversation>> | null>(null);
   const [allTags, setAllTags] = useState<Awaited<ReturnType<typeof apiListConversationTags>>>([]);
   const [loading, setLoading] = useState(true);
-  const [activeUuid, setActiveUuid] = useState(uuid);
 
-  if (activeUuid !== uuid) {
-    setActiveUuid(uuid);
-    setConversation(null);
-  }
   const { items: listItems, error: listError } = useConversations({}, 0);
 
   const refresh = useCallback(async () => {
@@ -189,6 +185,7 @@ export default function ConversationDetailPage() {
           error={listError}
           selectedUuid={uuid}
           compact
+          onSelect={(nextUuid) => router.push(`/conversations/${nextUuid}`)}
         />
       </aside>
 

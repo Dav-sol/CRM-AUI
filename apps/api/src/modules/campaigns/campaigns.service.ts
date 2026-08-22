@@ -7,7 +7,11 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
-import { CampaignStatus, CampaignType } from '@prisma/client';
+import {
+  CampaignStatus,
+  CampaignType,
+  FollowUpStageAnchor,
+} from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
@@ -99,8 +103,10 @@ interface CampaignRow {
     stages: Array<{
       uuid: string;
       name: string;
+      anchor: FollowUpStageAnchor;
       offsetDays: number;
       template: string;
+      templateOnPast: string | null;
     }>;
   } | null;
   createdAt: Date;
@@ -133,11 +139,10 @@ export class CampaignsService {
   }> {
     const organizationId = this.requireOrg(user);
 
-    const followUpSequenceInternalId =
-      await this.resolveFollowUpSequenceId(
-        dto.followUpSequenceId,
-        organizationId,
-      );
+    const followUpSequenceInternalId = await this.resolveFollowUpSequenceId(
+      dto.followUpSequenceId,
+      organizationId,
+    );
 
     const created = await this.prisma.campaign.create({
       data: {
@@ -376,8 +381,10 @@ export class CampaignsService {
       stages: Array<{
         uuid: string;
         name: string;
+        anchor: FollowUpStageAnchor;
         offsetDays: number;
         template: string;
+        templateOnPast: string | null;
       }>;
     } | null;
 
@@ -422,7 +429,8 @@ export class CampaignsService {
         segment,
       );
       const totalAutomations =
-        rows.length * (useFollowUpSequence ? followUpSequence.stages.length : 1);
+        rows.length *
+        (useFollowUpSequence ? followUpSequence.stages.length : 1);
       if (totalAutomations > MAX_AUTOMATIONS_PER_CAMPAIGN) {
         throw new BadRequestException({
           error: {
@@ -434,13 +442,15 @@ export class CampaignsService {
 
       if (useFollowUpSequence) {
         // Generate one automation per stage per qualifying purchase
-        // scheduledDate = purchase.warrantyExpiresAt + stage.offsetDays
+        // scheduledDate = base(anchor) + stage.offsetDays
         automationCount = await this.generateAutomationsFromSequence(
           tx,
           campaign.id,
           organizationId,
           rows,
           followUpSequence.stages,
+          campaign.template,
+          now,
         );
       } else {
         // Original single-template logic
@@ -874,7 +884,7 @@ export class CampaignsService {
           include: {
             stages: {
               where: { deletedAt: null },
-              orderBy: { offsetDays: 'asc' },
+              orderBy: [{ anchor: 'asc' }, { offsetDays: 'asc' }],
             },
           },
         },
@@ -923,9 +933,13 @@ export class CampaignsService {
     stages: Array<{
       uuid: string;
       name: string;
+      anchor: FollowUpStageAnchor;
       offsetDays: number;
       template: string;
+      templateOnPast: string | null;
     }>,
+    campaignTemplate: string,
+    now: Date,
   ): Promise<number> {
     let automationCount = 0;
 
@@ -954,10 +968,6 @@ export class CampaignsService {
 
       for (const row of batch) {
         const warrantyExpiresAt = purchaseWarrantyMap.get(row.purchaseId);
-        if (!warrantyExpiresAt) {
-          // Skip if no warranty expiration date
-          continue;
-        }
 
         const existing = cycleByPurchase.get(row.purchaseId);
         let cycleId: string;
@@ -985,10 +995,44 @@ export class CampaignsService {
           cycleId = existing.id;
         }
 
+        // HG-SEM-03: stages whose computed date already passed are converted
+        // into a single immediate repurchase automation (per purchase).
+        let repurchaseStage: {
+          stage: (typeof stages)[number];
+          computed: Date;
+        } | null = null;
+
         // Create one automation per stage
         for (const stage of stages) {
-          const scheduledDate = new Date(warrantyExpiresAt);
-          scheduledDate.setDate(scheduledDate.getDate() + stage.offsetDays);
+          // HG-SEM-05: WARRANTY_EXPIRY stages require a warranty expiration;
+          // PURCHASE_DATE stages always generate.
+          if (
+            stage.anchor === FollowUpStageAnchor.WARRANTY_EXPIRY &&
+            !warrantyExpiresAt
+          ) {
+            continue;
+          }
+
+          const base =
+            stage.anchor === FollowUpStageAnchor.PURCHASE_DATE
+              ? row.purchaseDate
+              : (warrantyExpiresAt as Date);
+          const computed = new Date(base);
+          computed.setDate(computed.getDate() + stage.offsetDays);
+
+          if (computed.getTime() < now.getTime()) {
+            // Stage date already passed at activation: keep the most advanced
+            // past stage as the repurchase candidate for this purchase.
+            if (
+              !repurchaseStage ||
+              computed.getTime() > repurchaseStage.computed.getTime() ||
+              (computed.getTime() === repurchaseStage.computed.getTime() &&
+                stage.offsetDays > repurchaseStage.stage.offsetDays)
+            ) {
+              repurchaseStage = { stage, computed };
+            }
+            continue;
+          }
 
           await tx.automation.create({
             data: {
@@ -996,13 +1040,30 @@ export class CampaignsService {
               purchaseId: row.purchaseId,
               campaignId,
               commercialCycleId: cycleId,
-              scheduledDate,
+              scheduledDate: computed,
               status: 'SCHEDULED',
               priority: 0,
               // Snapshot (HG-FUS-02 option A): the automation is
               // self-sufficient — later sequence edits do not affect
               // already generated campaigns/automations.
               messageTemplate: stage.template,
+            },
+          });
+          automationCount++;
+        }
+
+        if (repurchaseStage) {
+          const { stage } = repurchaseStage;
+          await tx.automation.create({
+            data: {
+              organizationId,
+              purchaseId: row.purchaseId,
+              campaignId,
+              commercialCycleId: cycleId,
+              scheduledDate: now,
+              status: 'SCHEDULED',
+              priority: 0,
+              messageTemplate: stage.templateOnPast ?? campaignTemplate,
             },
           });
           automationCount++;
@@ -1068,9 +1129,7 @@ export class CampaignsService {
           : {}),
         ...(segment?.customerStatus ? { status: segment.customerStatus } : {}),
       },
-      ...(segment?.productId
-        ? { product: { uuid: segment.productId } }
-        : {}),
+      ...(segment?.productId ? { product: { uuid: segment.productId } } : {}),
       ...(segment?.purchaseFrom || segment?.purchaseTo
         ? {
             purchaseDate: {

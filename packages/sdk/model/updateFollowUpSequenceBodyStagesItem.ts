@@ -10,6 +10,7 @@
  *
  * OpenAPI spec version: 1.0.0
  */
+import type { UpdateFollowUpSequenceBodyStagesItemAnchor } from './updateFollowUpSequenceBodyStagesItemAnchor';
 
 /**
  * A stage in a follow-up sequence.
@@ -21,10 +22,20 @@ export type UpdateFollowUpSequenceBodyStagesItem = {
      */
   name: string;
   /**
-     * Offset in days from warranty expiration date.
-     * Negative = before expiration, 0 = day of expiration, positive = after expiration.
+     * Temporal reference for offsetDays.
+     * PURCHASE_DATE = offset measured from the purchase date;
+     * WARRANTY_EXPIRY = offset measured from the warranty expiration date.
+     * Defaults to WARRANTY_EXPIRY when omitted (preserves legacy behavior).
+     */
+  anchor?: UpdateFollowUpSequenceBodyStagesItemAnchor;
+  /**
+     * Offset in days from the stage anchor.
+     * Per-anchor bounds:
+     * - PURCHASE_DATE: 0..365 (negative offsets rejected).
+     * - WARRANTY_EXPIRY: -365..730 (negative = before expiration, 0 = day of
+     *   expiration, positive = after expiration).
      * @minimum -365
-     * @maximum 365
+     * @maximum 730
      */
   offsetDays: number;
   /**
@@ -33,4 +44,11 @@ export type UpdateFollowUpSequenceBodyStagesItem = {
      * @maxLength 4096
      */
   template: string;
+  /**
+     * Optional repurchase/renovation message used when the stage date already
+     * passed at campaign activation time (HG-SEM-03). Falls back to the
+     * campaign base template when absent.
+     * @maxLength 4096
+     */
+  templateOnPast?: string;
 };
