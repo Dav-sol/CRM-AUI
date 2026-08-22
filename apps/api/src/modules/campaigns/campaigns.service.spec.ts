@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
@@ -61,12 +61,13 @@ describe('CampaignsService', () => {
       updateMany: jest.Mock;
     };
     commercialCycle: {
-      findMany: jest.Mock;
-      create: jest.Mock;
-      update: jest.Mock;
-    };
-    purchase: { findMany: jest.Mock };
-    $transaction: jest.Mock;
+        findMany: jest.Mock;
+        create: jest.Mock;
+        update: jest.Mock;
+      };
+      purchase: { findMany: jest.Mock };
+      followUpSequence: { findFirst: jest.Mock };
+      $transaction: jest.Mock;
   };
   let auditService: { record: jest.Mock };
   let eventEmitter: { emit: jest.Mock };
@@ -95,7 +96,13 @@ describe('CampaignsService', () => {
         update: jest.fn(),
       },
       purchase: { findMany: jest.fn() },
-      $transaction: jest.fn(),
+      followUpSequence: { findFirst: jest.fn() },
+      $transaction: jest.fn(async (fns: unknown) => {
+        if (typeof fns === 'function') return fns(prisma);
+        if (Array.isArray(fns)) {
+          for (const fn of fns) await fn;
+        }
+      }),
     };
     auditService = { record: jest.fn().mockResolvedValue(undefined) };
     eventEmitter = { emit: jest.fn() };
@@ -114,6 +121,7 @@ describe('CampaignsService', () => {
 
   describe('create (US1, FR-001)', () => {
     it('creates a DRAFT campaign, audits and emits CampaignCreated', async () => {
+      prisma.followUpSequence.findFirst.mockResolvedValue(null);
       prisma.campaign.create.mockResolvedValue({
         ...campaignRow(),
         name: 'Mi campaña',
@@ -137,6 +145,7 @@ describe('CampaignsService', () => {
           templateD365: undefined,
           segment: undefined,
           startAt: undefined,
+          followUpSequenceId: null,
           status: 'DRAFT',
         },
       });
@@ -1036,6 +1045,155 @@ describe('CampaignsService', () => {
 
       expect(loggerError).toHaveBeenCalled();
       loggerError.mockRestore();
+    });
+  });
+
+  describe('create — followUpSequenceId persistence', () => {
+    it('persists followUpSequenceId when sequence belongs to same org', async () => {
+      prisma.followUpSequence.findFirst.mockResolvedValue({ id: 'seq-1' });
+      prisma.campaign.create.mockResolvedValue({
+        ...campaignRow(),
+        followUpSequenceId: 'seq-1',
+      });
+
+      await service.create(orgUser, {
+        name: 'Con secuencia',
+        template: 'base',
+        type: 'AUTOMATIC',
+        followUpSequenceId: 'seq-uuid-1',
+      });
+
+      expect(prisma.followUpSequence.findFirst).toHaveBeenCalledWith({
+        where: {
+          uuid: 'seq-uuid-1',
+          organizationId: 'org-1',
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      expect(prisma.campaign.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ followUpSequenceId: 'seq-1' }),
+        }),
+      );
+    });
+
+    it('rejects followUpSequenceId from different organization', async () => {
+      prisma.followUpSequence.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.create(orgUser, {
+          name: 'Bad seq',
+          template: 't',
+          type: 'AUTOMATIC',
+          followUpSequenceId: 'foreign-seq',
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('persists null followUpSequenceId when not provided', async () => {
+      prisma.followUpSequence.findFirst.mockResolvedValue(null);
+      prisma.campaign.create.mockResolvedValue(campaignRow());
+
+      await service.create(orgUser, {
+        name: 'Sin secuencia',
+        template: 't',
+        type: 'MANUAL',
+      });
+
+      expect(prisma.campaign.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ followUpSequenceId: null }),
+        }),
+      );
+    });
+  });
+
+  describe('update — followUpSequenceId persistence', () => {
+    it('updates followUpSequenceId on existing campaign', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(campaignRow());
+      prisma.followUpSequence.findFirst.mockResolvedValue({ id: 'seq-2' });
+      prisma.campaign.update.mockResolvedValue({
+        ...campaignRow(),
+        followUpSequenceId: 'seq-2',
+      });
+
+      const result = await service.update(orgUser, 'cu-1', {
+        followUpSequenceId: 'seq-uuid-2',
+      });
+
+      expect(prisma.campaign.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ followUpSequenceId: 'seq-2' }),
+        }),
+      );
+    });
+
+    it('allows removing followUpSequenceId by sending empty string', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(campaignRow());
+      prisma.followUpSequence.findFirst.mockResolvedValue(null);
+      prisma.campaign.update.mockResolvedValue(campaignRow());
+
+      await service.update(orgUser, 'cu-1', {
+        followUpSequenceId: '',
+      });
+
+      expect(prisma.campaign.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ followUpSequenceId: null }),
+        }),
+      );
+    });
+  });
+
+  describe('segment AND logic — productId + warrantyMonths', () => {
+    it('activates successfully when segment has both productId and warrantyMonths', async () => {
+      prisma.campaign.findFirst
+        .mockResolvedValueOnce(campaignRow({ followUpSequenceId: null, followUpSequence: null }))
+        .mockResolvedValueOnce(null);
+      prisma.campaign.updateMany.mockResolvedValue({ count: 1 });
+      prisma.purchase.findMany.mockResolvedValue([
+        { id: 'pu-1', customerId: 'cust-1', purchaseDate: new Date() },
+      ]);
+      prisma.commercialCycle.findMany.mockResolvedValue([]);
+      prisma.commercialCycle.create.mockResolvedValue({ id: 'cc-1' });
+      prisma.automation.createMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.activate(orgUser, 'cu-1');
+
+      expect(result.automationCount).toBe(1);
+      expect(result.status).toBe('ACTIVE');
+    });
+  });
+
+  describe('stage-aware limit calculation', () => {
+    it('counts total as customers × stages, not just customers', async () => {
+      const stages = [
+        { uuid: 's1', name: '3d', offsetDays: 3, template: 't1' },
+        { uuid: 's2', name: '6m', offsetDays: 180, template: 't2' },
+        { uuid: 's3', name: '12m', offsetDays: 365, template: 't3' },
+      ];
+      prisma.campaign.findFirst
+        .mockResolvedValueOnce(
+          campaignRow({ followUpSequenceId: 'seq-1', followUpSequence: { uuid: 'seq-uuid-1', warrantyMonths: 12, stages } }),
+        )
+        .mockResolvedValueOnce(null);
+      prisma.campaign.updateMany.mockResolvedValue({ count: 1 });
+
+      const customers = Array.from({ length: 1700 }, (_, i) => ({
+        id: `pu-${i}`,
+        customerId: `cust-${i}`,
+        purchaseDate: new Date(),
+      }));
+      prisma.purchase.findMany.mockResolvedValue(customers);
+      prisma.commercialCycle.findMany.mockResolvedValue([]);
+      prisma.commercialCycle.create.mockResolvedValue({ id: `cc-${0}` });
+
+      await expect(
+        service.activate(orgUser, 'cu-1'),
+      ).rejects.toMatchObject({
+        response: { error: { code: 'SEGMENT_TOO_LARGE' } },
+      });
     });
   });
 });

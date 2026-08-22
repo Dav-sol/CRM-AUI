@@ -646,4 +646,79 @@ describe('PurchasesService', () => {
       ).resolves.toEqual({ id: 'p-1' });
     });
   });
+
+  describe('warrantyMonths override (HG-01)', () => {
+    const baseDto = {
+      customerId: 'c-1',
+      productId: 'p-1',
+      invoiceNumber: 'INV-0002',
+      purchaseDate: '2026-08-01T00:00:00Z',
+      quantity: 1,
+      value: '100.00',
+    };
+
+    beforeEach(() => {
+      prisma.customer.findFirst.mockResolvedValue({ id: 'c-1' });
+      prisma.product.findFirst.mockResolvedValue({
+        id: 'p-1',
+        warrantyMonths: 12,
+      });
+      prisma.purchase.findFirst.mockResolvedValue(null);
+    });
+
+    it('inherits Product.warrantyMonths when no override provided', async () => {
+      prisma.purchase.create.mockResolvedValue({ id: 'p-1' });
+
+      await service.create(orgUser, baseDto);
+
+      expect(prisma.purchase.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            warrantyMonths: 12,
+            warrantyExpiresAt: new Date('2027-08-01T00:00:00.000Z'),
+          }),
+        }),
+      );
+    });
+
+    it('persists explicit warrantyMonths override and uses it for expiration', async () => {
+      prisma.purchase.create.mockResolvedValue({ id: 'p-1' });
+
+      await service.create(orgUser, { ...baseDto, warrantyMonths: 24 });
+
+      expect(prisma.purchase.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            warrantyMonths: 24,
+            warrantyExpiresAt: new Date('2028-08-01T00:00:00.000Z'),
+          }),
+        }),
+      );
+    });
+
+    it('uses override even when Product.warrantyMonths is null', async () => {
+      prisma.product.findFirst.mockResolvedValue({
+        id: 'p-1',
+        warrantyMonths: null,
+      });
+      prisma.purchase.create.mockResolvedValue({ id: 'p-1' });
+
+      await service.create(orgUser, { ...baseDto, warrantyMonths: 15 });
+
+      expect(prisma.purchase.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            warrantyMonths: 15,
+            warrantyExpiresAt: new Date('2027-11-01T00:00:00.000Z'),
+          }),
+        }),
+      );
+    });
+
+    it('rejects invalid warrantyMonths values via DTO validation', async () => {
+      await expect(
+        service.create(orgUser, { ...baseDto, warrantyMonths: 13 }),
+      ).rejects.toThrow();
+    });
+  });
 });

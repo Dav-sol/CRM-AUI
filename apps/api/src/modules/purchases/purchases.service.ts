@@ -162,7 +162,7 @@ export class PurchasesService {
       },
     });
 
-    const warrantyMonths = product.warrantyMonths ?? null;
+    const warrantyMonths = dto.warrantyMonths ?? product.warrantyMonths ?? null;
     const warrantyExpiresAt = warrantyMonths
       ? addMonths(purchaseDate, warrantyMonths)
       : null;
