@@ -126,6 +126,13 @@ export class CampaignsService {
     createdAt: Date;
   }> {
     const organizationId = this.requireOrg(user);
+
+    const followUpSequenceInternalId =
+      await this.resolveFollowUpSequenceId(
+        dto.followUpSequenceId,
+        organizationId,
+      );
+
     const created = await this.prisma.campaign.create({
       data: {
         organizationId,
@@ -140,6 +147,7 @@ export class CampaignsService {
           ? (dto.segment as Prisma.InputJsonValue)
           : undefined,
         startAt: dto.startAt ? new Date(dto.startAt) : undefined,
+        followUpSequenceId: followUpSequenceInternalId,
         status: 'DRAFT',
       },
     });
@@ -272,6 +280,13 @@ export class CampaignsService {
           ? (dto.segment as Prisma.InputJsonValue)
           : undefined,
         startAt: dto.startAt ? new Date(dto.startAt) : undefined,
+        followUpSequenceId:
+          dto.followUpSequenceId !== undefined
+            ? await this.resolveFollowUpSequenceId(
+                dto.followUpSequenceId,
+                organizationId,
+              )
+            : undefined,
       },
     });
 
@@ -379,7 +394,9 @@ export class CampaignsService {
         organizationId,
         segment,
       );
-      if (rows.length > MAX_AUTOMATIONS_PER_CAMPAIGN) {
+      const totalAutomations =
+        rows.length * (useFollowUpSequence ? followUpSequence.stages.length : 1);
+      if (totalAutomations > MAX_AUTOMATIONS_PER_CAMPAIGN) {
         throw new BadRequestException({
           error: {
             code: 'SEGMENT_TOO_LARGE',
@@ -845,6 +862,32 @@ export class CampaignsService {
     });
   }
 
+  private async resolveFollowUpSequenceId(
+    uuid: string | undefined,
+    organizationId: string,
+  ): Promise<string | null> {
+    if (!uuid) {
+      return null;
+    }
+    const sequence = await this.prisma.followUpSequence.findFirst({
+      where: {
+        uuid,
+        organizationId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (!sequence) {
+      throw new NotFoundException({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'FollowUpSequence not found in this organization',
+        },
+      });
+    }
+    return sequence.id;
+  }
+
   private async generateAutomationsFromSequence(
     tx: Prisma.TransactionClient,
     campaignId: string,
@@ -998,7 +1041,9 @@ export class CampaignsService {
           : {}),
         ...(segment?.customerStatus ? { status: segment.customerStatus } : {}),
       },
-      ...(segment?.productId ? { product: { uuid: segment.productId } } : {}),
+      ...(segment?.productId
+        ? { product: { uuid: segment.productId } }
+        : {}),
       ...(segment?.purchaseFrom || segment?.purchaseTo
         ? {
             purchaseDate: {
@@ -1036,7 +1081,7 @@ export class CampaignsService {
           }
         : {}),
       ...(segment?.warrantyMonths
-        ? { product: { warrantyMonths: segment.warrantyMonths } }
+        ? { warrantyMonths: segment.warrantyMonths }
         : {}),
     };
 
