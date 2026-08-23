@@ -20,7 +20,11 @@ export type CustomerFilters = {
 
 export function useCustomers(filters: CustomerFilters) {
   const [items, setItems] = useState<CustomerItem[] | null>(null);
-  const [meta, setMeta] = useState<{ page: number; pages: number; total: number } | null>(null);
+  const [meta, setMeta] = useState<{
+    page: number;
+    pages: number;
+    total: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -61,14 +65,28 @@ export function useCustomers(filters: CustomerFilters) {
   return { items, meta, error };
 }
 
-export function CustomerStatusBadge({ status }: { status: CustomerItem["status"] }) {
-  return (
-    <Badge
-      variant={status === "ACTIVE" ? "default" : status === "INACTIVE" ? "secondary" : "destructive"}
-    >
-      {status === "ACTIVE" ? "Activo" : status === "INACTIVE" ? "Inactivo" : "Bloqueado"}
-    </Badge>
-  );
+export function CustomerStatusBadge({
+  status,
+}: {
+  status: CustomerItem["status"];
+}) {
+  const variant =
+    status === "ACTIVE"
+      ? "default"
+      : status === "PENDING"
+        ? "secondary"
+        : status === "INACTIVE"
+          ? "secondary"
+          : "destructive";
+  const label =
+    status === "ACTIVE"
+      ? "Activo"
+      : status === "PENDING"
+        ? "Pendiente de vinculación"
+        : status === "INACTIVE"
+          ? "Inactivo"
+          : "Bloqueado";
+  return <Badge variant={variant}>{label}</Badge>;
 }
 
 type CustomerListProps = {
@@ -137,7 +155,8 @@ export function CustomerList({ items, error }: CustomerListProps) {
                 </span>
               </p>
               <p className="truncate text-xs text-muted-foreground">
-                {[customer.phone, customer.email].filter(Boolean).join(" · ") || "Sin contacto"}
+                {[customer.phone, customer.email].filter(Boolean).join(" · ") ||
+                  "Sin contacto"}
                 {customer.city ? ` · ${customer.city}` : ""}
               </p>
             </div>

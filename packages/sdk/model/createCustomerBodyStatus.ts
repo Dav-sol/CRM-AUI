@@ -21,4 +21,5 @@ export const CreateCustomerBodyStatus = {
   ACTIVE: 'ACTIVE',
   INACTIVE: 'INACTIVE',
   BLOCKED: 'BLOCKED',
+  PENDING: 'PENDING',
 } as const;

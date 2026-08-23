@@ -84,6 +84,7 @@ export interface ConversationSummary {
   channel: ChannelType;
   status: ConversationStatus;
   customerId: string | null;
+  customer: { uuid: string; name: string; status: CustomerStatus } | null;
   advisorId: string | null;
   advisor: AdvisorRef | null;
   tags: ConversationTagRef[];
@@ -127,6 +128,7 @@ const CONVERSATION_LIST_INCLUDE = {
     where: { deletedAt: null },
     orderBy: { createdAt: 'asc' as const },
   },
+  customer: { select: { uuid: true, name: true, status: true } },
   advisor: { select: { uuid: true, firstName: true, lastName: true } },
   tagAssignments: {
     where: { deletedAt: null },
@@ -744,30 +746,27 @@ export class WhatsappService {
       return;
     }
 
-    const customer = await this.findCustomerByPhone(organizationId, phone);
+    const customer = await this.findOrCreateInboundCustomer(
+      organizationId,
+      phone,
+    );
     let conversation: { id: string; uuid: string; alreadyOpen: boolean };
 
     try {
       conversation = await this.prisma.$transaction(async (tx) => {
-        const existingConversation = customer
-          ? await this.findOpenCustomerConversation(
-              tx,
-              organizationId,
-              customer.id,
-              ChannelType.WHATSAPP_CLIENTS,
-            )
-          : await this.findOpenPendingConversation(
-              tx,
-              organizationId,
-              message.providerConversationId,
-            );
+        const existingConversation = await this.findOpenCustomerConversation(
+          tx,
+          organizationId,
+          customer.id,
+          ChannelType.WHATSAPP_CLIENTS,
+        );
         if (existingConversation) {
           return { ...existingConversation, alreadyOpen: true };
         }
         const created = await tx.conversation.create({
           data: {
             organizationId,
-            customerId: customer?.id ?? null,
+            customerId: customer.id,
             channel: ChannelType.WHATSAPP_CLIENTS,
             status: ConversationStatus.OPEN,
           },
@@ -830,14 +829,14 @@ export class WhatsappService {
         description: `conversation opened from=${phone}`,
         metadata: {
           conversationId: conversation.uuid,
-          customerId: customer?.uuid ?? null,
+          customerId: customer.uuid,
         },
       });
       this.emit('ConversationOpened', null, organizationId, {
         conversationId: conversation.uuid,
         organizationId,
         channel: ChannelType.WHATSAPP_CLIENTS,
-        customerId: customer?.uuid ?? null,
+        customerId: customer.uuid,
         openedAt: new Date().toISOString(),
         firstMessageId: created.uuid,
       } satisfies ConversationOpenedPayload);
@@ -995,28 +994,77 @@ export class WhatsappService {
     );
   }
 
-  private async findCustomerByPhone(
+  // Decisión 4: an inbound message from an unrecognized number auto-creates a
+  // minimal PENDING contact (codcli W{phone}) linked to the conversation, so the
+  // asesor can reply and later enrich/verify it. This never creates a purchase
+  // nor triggers AU-001 (the cycle starts only with a valid purchase).
+  private async findOrCreateInboundCustomer(
     organizationId: string,
     phone: string,
-  ): Promise<{ id: string; uuid: string; organizationId: string } | null> {
+  ): Promise<{ id: string; uuid: string }> {
     const normalized = normalizePhone(phone);
-    const customers = await this.prisma.customer.findMany({
+    const existing = await this.prisma.customer.findMany({
       where: {
         organizationId,
-        status: CustomerStatus.ACTIVE,
         deletedAt: null,
         phone: { not: null },
       },
-      select: { id: true, uuid: true, organizationId: true, phone: true },
+      select: { id: true, uuid: true, phone: true },
       take: 20,
     });
-    const match = customers.find(
+    const match = existing.find(
       (customer) =>
         customer.phone && normalizePhone(customer.phone) === normalized,
     );
-    return match
-      ? { id: match.id, uuid: match.uuid, organizationId: match.organizationId }
-      : null;
+    if (match) {
+      return { id: match.id, uuid: match.uuid };
+    }
+
+    const baseCodcli = `W${normalized}`;
+    const placeholderName = `Contacto WhatsApp +${phone}`;
+    const createPending = (codcli: string) =>
+      this.prisma.customer.create({
+        data: {
+          organizationId,
+          codcli,
+          name: placeholderName,
+          phone,
+          status: CustomerStatus.PENDING,
+          createdBy: null,
+        },
+        select: { id: true, uuid: true },
+      });
+    try {
+      return await createPending(baseCodcli);
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        // A concurrent webhook likely created the same contact: reuse it
+        // before falling back to a suffixed codcli.
+        const again = await this.prisma.customer.findMany({
+          where: {
+            organizationId,
+            deletedAt: null,
+            phone: { not: null },
+          },
+          select: { id: true, uuid: true, phone: true },
+          take: 20,
+        });
+        const raceMatch = again.find(
+          (customer) =>
+            customer.phone && normalizePhone(customer.phone) === normalized,
+        );
+        if (raceMatch) {
+          return { id: raceMatch.id, uuid: raceMatch.uuid };
+        }
+        return await createPending(
+          `${baseCodcli}-${Math.random().toString(36).slice(2, 8)}`,
+        );
+      }
+      throw error;
+    }
   }
 
   private async findScopedCustomer(
@@ -1082,34 +1130,6 @@ export class WhatsappService {
         channel,
         status: ConversationStatus.OPEN,
         deletedAt: null,
-      },
-      select: { id: true, uuid: true },
-    });
-  }
-
-  private findOpenPendingConversation(
-    tx: PrismaClient,
-    organizationId: string,
-    providerConversationId: string | null,
-  ): Promise<{ id: string; uuid: string } | null> {
-    return tx.conversation.findFirst({
-      where: {
-        organizationId,
-        customerId: null,
-        channel: ChannelType.WHATSAPP_CLIENTS,
-        status: ConversationStatus.OPEN,
-        deletedAt: null,
-        ...(providerConversationId
-          ? {
-              messages: {
-                some: {
-                  providerConversationId,
-                  direction: MessageDirection.INBOUND,
-                  deletedAt: null,
-                },
-              },
-            }
-          : {}),
       },
       select: { id: true, uuid: true },
     });
@@ -1492,6 +1512,13 @@ function toConversationSummary(
     channel: conversation.channel,
     status: conversation.status,
     customerId: conversation.customerId,
+    customer: conversation.customer
+      ? {
+          uuid: conversation.customer.uuid,
+          name: conversation.customer.name,
+          status: conversation.customer.status,
+        }
+      : null,
     advisorId: conversation.advisorId,
     advisor: conversation.advisor ?? null,
     tags: (conversation.tagAssignments ?? []).map((assignment) => ({

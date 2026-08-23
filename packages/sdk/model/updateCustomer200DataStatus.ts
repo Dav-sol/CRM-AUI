@@ -21,4 +21,5 @@ export const UpdateCustomer200DataStatus = {
   ACTIVE: 'ACTIVE',
   INACTIVE: 'INACTIVE',
   BLOCKED: 'BLOCKED',
+  PENDING: 'PENDING',
 } as const;

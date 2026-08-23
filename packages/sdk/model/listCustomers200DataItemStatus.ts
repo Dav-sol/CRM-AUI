@@ -18,4 +18,5 @@ export const ListCustomers200DataItemStatus = {
   ACTIVE: 'ACTIVE',
   INACTIVE: 'INACTIVE',
   BLOCKED: 'BLOCKED',
+  PENDING: 'PENDING',
 } as const;

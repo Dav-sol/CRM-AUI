@@ -95,7 +95,7 @@ describe('CustomersController', () => {
     });
   });
 
-  it('restricts write handlers with the write roles', () => {
+  it('restricts create/remove with the write roles; update is role-open (PENDING-gated in the service)', () => {
     const proto = CustomersController.prototype as unknown as Record<
       string,
       (this: void) => unknown
@@ -111,8 +111,10 @@ describe('CustomersController', () => {
     const readRoles: unknown = Reflect.getMetadata(ROLES_KEY, readHandler);
 
     expect(createRoles).toEqual(['PLATFORM_OWNER', 'ADMINISTRADOR', 'GERENTE']);
-    expect(updateRoles).toEqual(['PLATFORM_OWNER', 'ADMINISTRADOR', 'GERENTE']);
     expect(removeRoles).toEqual(['PLATFORM_OWNER', 'ADMINISTRADOR', 'GERENTE']);
     expect(readRoles).toBeUndefined();
+    // Decisión 4: PATCH is open to any authenticated role; the service enforces
+    // that only PENDING contacts can be edited by non-privileged roles.
+    expect(updateRoles).toBeUndefined();
   });
 });

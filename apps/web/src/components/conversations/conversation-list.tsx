@@ -1,6 +1,9 @@
 "use client";
 
-import type { ConversationListItem, ConversationListParams } from "@/lib/sdk-types";
+import type {
+  ConversationListItem,
+  ConversationListParams,
+} from "@/lib/sdk-types";
 import { MessagesSquare } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -16,7 +19,10 @@ export type ConversationFilters = {
   assigned?: boolean;
 };
 
-export function useConversations(filters: ConversationFilters, refreshKey: number) {
+export function useConversations(
+  filters: ConversationFilters,
+  refreshKey: number,
+) {
   const [items, setItems] = useState<ConversationListItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -125,12 +131,24 @@ export function ConversationList({
           )}
           aria-hidden="true"
         >
-          {item.customerId ? item.customerId.slice(0, 2).toUpperCase() : "?"}
+          {item.customer?.name
+            ? item.customer.name.charAt(0).toUpperCase()
+            : item.customerId
+              ? item.customerId.slice(0, 2).toUpperCase()
+              : "?"}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-2">
             <p className="truncate text-sm font-medium">
-              {item.customerId ? `Cliente #${item.customerId.slice(0, 8)}` : "Cliente sin vincular"}
+              {item.customer?.name ??
+                (item.customerId
+                  ? `Cliente #${item.customerId.slice(0, 8)}`
+                  : "Cliente sin vincular")}
+              {item.customer?.status === "PENDING" && (
+                <span className="ml-1.5 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-600">
+                  Pendiente de vinculación
+                </span>
+              )}
             </p>
             {item.lastMessageAt && (
               <span className="shrink-0 text-[11px] text-muted-foreground">

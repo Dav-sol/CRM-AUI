@@ -52,6 +52,7 @@ import {
   retryImportJob,
   transferConversation,
   updateFollowUpSequence,
+  updateCustomer,
   updateProduct,
   deleteProduct,
 } from "@automatize-it/sdk";
@@ -79,6 +80,7 @@ import type {
   PurchaseListParams,
   ReplyBody,
   UpdateFollowUpSequenceBody,
+  UpdateCustomerBody,
   UpdateProductBody,
 } from "./sdk-types";
 
@@ -95,7 +97,11 @@ export class ApiError extends Error {
 
 export class SessionExpiredError extends ApiError {
   constructor() {
-    super(401, "SESSION_EXPIRED", "Tu sesión ha expirado. Inicia sesión nuevamente.");
+    super(
+      401,
+      "SESSION_EXPIRED",
+      "Tu sesión ha expirado. Inicia sesión nuevamente.",
+    );
     this.name = "SessionExpiredError";
   }
 }
@@ -135,9 +141,13 @@ async function call<T extends SdkResult>(
   return retry;
 }
 
-function unwrap<T extends SdkFn>(fn: T, res: Awaited<ReturnType<T>>): SdkData<T> {
+function unwrap<T extends SdkFn>(
+  fn: T,
+  res: Awaited<ReturnType<T>>,
+): SdkData<T> {
   if (res.status >= 200 && res.status < 300) {
-    return ((res.data as { data?: unknown } | null)?.data ?? res.data) as SdkData<T>;
+    return ((res.data as { data?: unknown } | null)?.data ??
+      res.data) as SdkData<T>;
   }
   const error = (res.data ?? {}) as { code?: string; message?: string };
   throw new ApiError(
@@ -154,7 +164,9 @@ type ListSdkFn = (...args: never[]) => Promise<{
 
 async function callList<T extends ListSdkFn>(
   run: (options: RequestInit) => Promise<Awaited<ReturnType<T>>>,
-): Promise<NonNullable<Extract<Awaited<ReturnType<T>>, { status: 200 | 201 }>["data"]>> {
+): Promise<
+  NonNullable<Extract<Awaited<ReturnType<T>>, { status: 200 | 201 }>["data"]>
+> {
   const res = await call(run);
   if (res.status >= 200 && res.status < 300) {
     return res.data as NonNullable<
@@ -169,7 +181,9 @@ async function callList<T extends ListSdkFn>(
   );
 }
 
-export async function apiLogin(body: Parameters<typeof login>[0]): Promise<LoginData> {
+export async function apiLogin(
+  body: Parameters<typeof login>[0],
+): Promise<LoginData> {
   const res = await login(body, { credentials: "include" });
   return unwrap(login, res);
 }
@@ -238,7 +252,9 @@ export async function apiTransferConversation(
   uuid: string,
   body: Parameters<typeof transferConversation>[1],
 ): Promise<SdkData<typeof transferConversation>> {
-  const res = await call((options) => transferConversation(uuid, body, options));
+  const res = await call((options) =>
+    transferConversation(uuid, body, options),
+  );
   return unwrap(transferConversation, res);
 }
 
@@ -266,7 +282,9 @@ export async function apiReopenConversation(
 export async function apiListMessages(
   conversationId: string,
 ): Promise<SdkData<typeof listMessages>> {
-  const res = await call((options) => listMessages({ conversationId }, options));
+  const res = await call((options) =>
+    listMessages({ conversationId }, options),
+  );
   return unwrap(listMessages, res);
 }
 
@@ -281,11 +299,15 @@ export async function apiCreateConversationNote(
   uuid: string,
   body: CreateNoteBody,
 ): Promise<SdkData<typeof createConversationNote>> {
-  const res = await call((options) => createConversationNote(uuid, body, options));
+  const res = await call((options) =>
+    createConversationNote(uuid, body, options),
+  );
   return unwrap(createConversationNote, res);
 }
 
-export async function apiListConversationTags(): Promise<SdkData<typeof listConversationTags>> {
+export async function apiListConversationTags(): Promise<
+  SdkData<typeof listConversationTags>
+> {
   const res = await call((options) => listConversationTags({}, options));
   return unwrap(listConversationTags, res);
 }
@@ -294,7 +316,9 @@ export async function apiAssignConversationTag(
   uuid: string,
   tagId: AssignTagArgs[1],
 ): Promise<SdkData<typeof assignConversationTag>> {
-  const res = await call((options) => assignConversationTag(uuid, tagId, options));
+  const res = await call((options) =>
+    assignConversationTag(uuid, tagId, options),
+  );
   return unwrap(assignConversationTag, res);
 }
 
@@ -302,33 +326,47 @@ export async function apiRemoveConversationTag(
   uuid: string,
   tagId: string,
 ): Promise<SdkData<typeof removeConversationTag>> {
-  const res = await call((options) => removeConversationTag(uuid, tagId, options));
+  const res = await call((options) =>
+    removeConversationTag(uuid, tagId, options),
+  );
   return unwrap(removeConversationTag, res);
 }
 
-export async function apiListQuickReplies(): Promise<SdkData<typeof listQuickReplies>> {
+export async function apiListQuickReplies(): Promise<
+  SdkData<typeof listQuickReplies>
+> {
   const res = await call((options) => listQuickReplies({}, options));
   return unwrap(listQuickReplies, res);
 }
 
-export async function apiDashboardSummary(): Promise<SdkData<typeof getDashboardSummary>> {
+export async function apiDashboardSummary(): Promise<
+  SdkData<typeof getDashboardSummary>
+> {
   const res = await call((options) => getDashboardSummary(options));
   return unwrap(getDashboardSummary, res);
 }
 
-export async function apiDashboardCampaigns(): Promise<SdkData<typeof getDashboardCampaigns>> {
+export async function apiDashboardCampaigns(): Promise<
+  SdkData<typeof getDashboardCampaigns>
+> {
   const res = await call((options) => getDashboardCampaigns(options));
   return unwrap(getDashboardCampaigns, res);
 }
 
-export async function apiDashboardActivity(): Promise<SdkData<typeof getDashboardActivity>> {
+export async function apiDashboardActivity(): Promise<
+  SdkData<typeof getDashboardActivity>
+> {
   const res = await call((options) => getDashboardActivity(options));
   return unwrap(getDashboardActivity, res);
 }
 
 export async function apiListCustomers(
   params?: CustomerListParams,
-): Promise<NonNullable<Extract<Awaited<ReturnType<typeof listCustomers>>, { status: 200 }>["data"]>> {
+): Promise<
+  NonNullable<
+    Extract<Awaited<ReturnType<typeof listCustomers>>, { status: 200 }>["data"]
+  >
+> {
   return callList((options) => listCustomers(params, options));
 }
 
@@ -339,9 +377,21 @@ export async function apiCreateCustomer(
   return unwrap(createCustomer, res);
 }
 
+export async function apiUpdateCustomer(
+  id: string,
+  body: UpdateCustomerBody,
+): Promise<SdkData<typeof updateCustomer>> {
+  const res = await call((options) => updateCustomer(id, body, options));
+  return unwrap(updateCustomer, res);
+}
+
 export async function apiListProducts(
   params?: ProductListParams,
-): Promise<NonNullable<Extract<Awaited<ReturnType<typeof listProducts>>, { status: 200 }>["data"]>> {
+): Promise<
+  NonNullable<
+    Extract<Awaited<ReturnType<typeof listProducts>>, { status: 200 }>["data"]
+  >
+> {
   return callList((options) => listProducts(params, options));
 }
 
@@ -360,14 +410,20 @@ export async function apiUpdateProduct(
   return unwrap(updateProduct, res);
 }
 
-export async function apiDeleteProduct(id: string): Promise<SdkData<typeof deleteProduct>> {
+export async function apiDeleteProduct(
+  id: string,
+): Promise<SdkData<typeof deleteProduct>> {
   const res = await call((options) => deleteProduct(id, options));
   return unwrap(deleteProduct, res);
 }
 
 export async function apiListPurchases(
   params?: PurchaseListParams,
-): Promise<NonNullable<Extract<Awaited<ReturnType<typeof listPurchases>>, { status: 200 }>["data"]>> {
+): Promise<
+  NonNullable<
+    Extract<Awaited<ReturnType<typeof listPurchases>>, { status: 200 }>["data"]
+  >
+> {
   return callList((options) => listPurchases(params, options));
 }
 
@@ -380,7 +436,11 @@ export async function apiCreatePurchase(
 
 export async function apiListCampaigns(
   params?: CampaignListParams,
-): Promise<NonNullable<Extract<Awaited<ReturnType<typeof listCampaigns>>, { status: 200 }>["data"]>> {
+): Promise<
+  NonNullable<
+    Extract<Awaited<ReturnType<typeof listCampaigns>>, { status: 200 }>["data"]
+  >
+> {
   return callList((options) => listCampaigns(params, options));
 }
 
@@ -430,13 +490,22 @@ export async function apiPreviewCampaignSegment(
   uuid: string,
   segment?: Record<string, unknown>,
 ): Promise<{ count: number }> {
-  const res = await call((options) => previewCampaignSegment(uuid, segment, options));
+  const res = await call((options) =>
+    previewCampaignSegment(uuid, segment, options),
+  );
   return unwrap(previewCampaignSegment, res);
 }
 
 export async function apiListAutomations(
   params?: AutomationListParams,
-): Promise<NonNullable<Extract<Awaited<ReturnType<typeof listAutomations>>, { status: 200 }>["data"]>> {
+): Promise<
+  NonNullable<
+    Extract<
+      Awaited<ReturnType<typeof listAutomations>>,
+      { status: 200 }
+    >["data"]
+  >
+> {
   return callList((options) => listAutomations(params, options));
 }
 
@@ -456,7 +525,14 @@ export async function apiCancelAutomation(
 
 export async function apiListCommercialCycles(
   params?: CommercialCycleListParams,
-): Promise<NonNullable<Extract<Awaited<ReturnType<typeof listCommercialCycles>>, { status: 200 }>["data"]>> {
+): Promise<
+  NonNullable<
+    Extract<
+      Awaited<ReturnType<typeof listCommercialCycles>>,
+      { status: 200 }
+    >["data"]
+  >
+> {
   return callList((options) => listCommercialCycles(params, options));
 }
 
@@ -469,7 +545,11 @@ export async function apiGetCommercialCycle(
 
 export async function apiListImportJobs(
   params?: ImportJobListParams,
-): Promise<NonNullable<Extract<Awaited<ReturnType<typeof listImportJobs>>, { status: 200 }>["data"]>> {
+): Promise<
+  NonNullable<
+    Extract<Awaited<ReturnType<typeof listImportJobs>>, { status: 200 }>["data"]
+  >
+> {
   return callList((options) => listImportJobs(params, options));
 }
 
@@ -480,24 +560,37 @@ export async function apiCreateImportJob(
   return unwrap(createImportJob, res);
 }
 
-export async function apiGetImportJob(uuid: string): Promise<SdkData<typeof getImportJob>> {
+export async function apiGetImportJob(
+  uuid: string,
+): Promise<SdkData<typeof getImportJob>> {
   const res = await call((options) => getImportJob(uuid, options));
   return unwrap(getImportJob, res);
 }
 
-export async function apiCancelImportJob(uuid: string): Promise<SdkData<typeof cancelImportJob>> {
+export async function apiCancelImportJob(
+  uuid: string,
+): Promise<SdkData<typeof cancelImportJob>> {
   const res = await call((options) => cancelImportJob(uuid, options));
   return unwrap(cancelImportJob, res);
 }
 
-export async function apiRetryImportJob(uuid: string): Promise<SdkData<typeof retryImportJob>> {
+export async function apiRetryImportJob(
+  uuid: string,
+): Promise<SdkData<typeof retryImportJob>> {
   const res = await call((options) => retryImportJob(uuid, options));
   return unwrap(retryImportJob, res);
 }
 
 export async function apiListFollowUpSequences(
   params?: FollowUpSequenceListParams,
-): Promise<NonNullable<Extract<Awaited<ReturnType<typeof listFollowUpSequences>>, { status: 200 }>["data"]>> {
+): Promise<
+  NonNullable<
+    Extract<
+      Awaited<ReturnType<typeof listFollowUpSequences>>,
+      { status: 200 }
+    >["data"]
+  >
+> {
   return callList((options) => listFollowUpSequences(params, options));
 }
 
@@ -519,7 +612,9 @@ export async function apiUpdateFollowUpSequence(
   uuid: string,
   body: UpdateFollowUpSequenceBody,
 ): Promise<SdkData<typeof updateFollowUpSequence>> {
-  const res = await call((options) => updateFollowUpSequence(uuid, body, options));
+  const res = await call((options) =>
+    updateFollowUpSequence(uuid, body, options),
+  );
   return unwrap(updateFollowUpSequence, res);
 }
 

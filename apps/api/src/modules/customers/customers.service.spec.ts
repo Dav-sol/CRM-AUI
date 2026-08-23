@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -24,6 +25,14 @@ const platformUser: AuthUser = {
   accountType: 'PLATFORM',
   organizationId: null,
   role: 'PLATFORM_OWNER',
+};
+
+const operadorUser: AuthUser = {
+  id: 'u-3',
+  uuid: 'uu-3',
+  accountType: 'ORGANIZATION',
+  organizationId: 'org-1',
+  role: 'OPERADOR',
 };
 
 describe('CustomersService', () => {
@@ -424,7 +433,62 @@ describe('CustomersService', () => {
         userId: 'u-1',
         organizationId: 'org-1',
         metadata: { reason: 'not_found' },
+      } as never);
+    });
+
+    it('allows OPERADOR to complete a PENDING contact (Decisión 4)', async () => {
+      prisma.customer.findFirst.mockResolvedValue({
+        id: 'c-1',
+        codcli: 'W573000000000',
+        organizationId: 'org-1',
+        status: 'PENDING',
       });
+      prisma.customer.update.mockResolvedValue({ id: 'c-1', name: 'Ana' });
+
+      const result = await service.update(operadorUser, 'c-1', {
+        name: 'Ana',
+        status: 'ACTIVE',
+      });
+
+      expect(prisma.customer.update).toHaveBeenCalledWith({
+        where: { id: 'c-1' },
+        data: expect.objectContaining({
+          name: 'Ana',
+          status: 'ACTIVE',
+        }) as object,
+      });
+      expect(result).toEqual({ id: 'c-1', name: 'Ana' });
+    });
+
+    it('forbids OPERADOR from editing a non-PENDING customer', async () => {
+      prisma.customer.findFirst.mockResolvedValue({
+        id: 'c-1',
+        codcli: 'C-1',
+        organizationId: 'org-1',
+        status: 'ACTIVE',
+      });
+
+      await expect(
+        service.update(operadorUser, 'c-1', { name: 'X' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.customer.update).not.toHaveBeenCalled();
+    });
+
+    it('forbids OPERADOR from blocking/inactivating a PENDING contact (transition to ACTIVE is controlled)', async () => {
+      prisma.customer.findFirst.mockResolvedValue({
+        id: 'c-1',
+        codcli: 'W573000000000',
+        organizationId: 'org-1',
+        status: 'PENDING',
+      });
+
+      await expect(
+        service.update(operadorUser, 'c-1', { name: 'Ana', status: 'BLOCKED' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(
+        service.update(operadorUser, 'c-1', { status: 'INACTIVE' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.customer.update).not.toHaveBeenCalled();
     });
   });
 

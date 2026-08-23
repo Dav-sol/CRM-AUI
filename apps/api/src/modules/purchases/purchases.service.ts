@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuthUser } from '../../core/decorators/current-user.decorator';
@@ -73,6 +74,7 @@ export class PurchasesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditIdentityService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async findAll(
@@ -209,6 +211,15 @@ export class PurchasesService {
         userId: user.id,
         organizationId,
         description: `purchase created invoice=${purchase.invoiceNumber}`,
+      });
+      // Same post-sale domain as imported purchases (Decisión 1): a manual
+      // purchase starts the AU-001 cycle (+3d/+6m/+12m). The consumer is
+      // idempotent on purchaseId, so replays never duplicate the cycle.
+      this.eventEmitter.emit('PurchaseImported', {
+        payload: {
+          purchaseId: purchase.id,
+          invoiceNumber: purchase.invoiceNumber,
+        },
       });
       return purchase;
     } catch (error) {

@@ -1,11 +1,12 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Customer, Prisma } from '@prisma/client';
+import { Customer, CustomerStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
@@ -155,6 +156,40 @@ export class CustomersService {
       });
     }
 
+    // Decisión 4: any authenticated role may complete a PENDING contact
+    // (auto-created from an inbound WhatsApp message). Editing master data
+    // (ACTIVE/INACTIVE/BLOCKED customers) stays restricted to
+    // PLATFORM_OWNER / ADMINISTRADOR / GERENTE.
+    const isPrivileged =
+      user.accountType === 'PLATFORM' ||
+      user.role === 'ADMINISTRADOR' ||
+      user.role === 'GERENTE';
+    if (customer.status !== CustomerStatus.PENDING && !isPrivileged) {
+      throw new ForbiddenException({
+        error: {
+          code: 'FORBIDDEN',
+          message:
+            'Only PENDING contacts can be edited by this role. Contact an administrator to edit this customer.',
+        },
+      });
+    }
+
+    // The enrichment transition is controlled: a PENDING contact can only
+    // become ACTIVE (or stay PENDING). OPERADOR cannot block/inactivate it.
+    if (
+      !isPrivileged &&
+      dto.status !== undefined &&
+      dto.status !== CustomerStatus.ACTIVE
+    ) {
+      throw new ForbiddenException({
+        error: {
+          code: 'FORBIDDEN',
+          message:
+            'A PENDING contact can only be transitioned to ACTIVE. Blocking or inactivating requires an administrator.',
+        },
+      });
+    }
+
     const updated = await this.prisma.customer.update({
       where: { id: customer.id },
       data: {
@@ -211,7 +246,10 @@ export class CustomersService {
     return deleted;
   }
 
-  private findScoped(user: AuthUser, identifier: string): Promise<Customer | null> {
+  private findScoped(
+    user: AuthUser,
+    identifier: string,
+  ): Promise<Customer | null> {
     const scopedWhere: Prisma.CustomerWhereInput = {
       OR: [{ id: identifier }, { uuid: identifier }],
       deletedAt: null,

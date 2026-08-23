@@ -1039,6 +1039,10 @@ export const getUpdateCustomerUrl = (id: string,) => {
 /**
  * Updates mutable contact fields. codcli is immutable; sending it returns 400.
  * Unknown, cross-tenant or soft-deleted customers return 404.
+ * Any authenticated role may update a PENDING contact (auto-created from an
+ * inbound WhatsApp message) to complete its data; editing ACTIVE/INACTIVE/
+ * BLOCKED customers is restricted to PLATFORM_OWNER/ADMINISTRADOR/GERENTE
+ * and returns 403 otherwise (Decisión 4).
  * @summary Update a customer
  */
 export const updateCustomer = async (id: string,

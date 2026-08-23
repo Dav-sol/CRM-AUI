@@ -58,6 +58,7 @@ properties:
       - ACTIVE
       - INACTIVE
       - BLOCKED
+      - PENDING
     description: BLOCKED is reserved and inert in v1.
 
   createdAt:

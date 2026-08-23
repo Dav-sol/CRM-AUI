@@ -52,7 +52,6 @@ export class CustomersController {
   }
 
   @Patch(':id')
-  @Roles('PLATFORM_OWNER', 'ADMINISTRADOR', 'GERENTE')
   async update(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,

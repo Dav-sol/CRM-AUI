@@ -50,7 +50,7 @@ describe('WhatsappService', () => {
       count: jest.Mock;
       findMany: jest.Mock;
     };
-    customer: { findMany: jest.Mock; findFirst: jest.Mock };
+    customer: { findMany: jest.Mock; findFirst: jest.Mock; create: jest.Mock };
     $transaction: jest.Mock;
   };
   let auditService: { record: jest.Mock };
@@ -78,7 +78,13 @@ describe('WhatsappService', () => {
         count: jest.fn(),
         findMany: jest.fn(),
       },
-      customer: { findMany: jest.fn(), findFirst: jest.fn() },
+      customer: {
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+        create: jest
+          .fn()
+          .mockResolvedValue({ id: 'cu-auto', uuid: 'cuu-auto' }),
+      },
       $transaction: jest.fn(),
     };
     auditService = { record: jest.fn().mockResolvedValue(undefined) };
@@ -1088,9 +1094,13 @@ describe('WhatsappService', () => {
       expect(events).toContain('MessageReceived');
     });
 
-    it('opens a conversation with customerId null for an unknown number (HG-8)', async () => {
+    it('auto-creates a PENDING customer and links the conversation for an unknown number (Decisión 4)', async () => {
       prisma.message.findFirst.mockResolvedValue(null);
       prisma.customer.findMany.mockResolvedValue([]);
+      prisma.customer.create.mockResolvedValue({
+        id: 'cu-auto',
+        uuid: 'cuu-auto',
+      });
       prisma.$transaction.mockImplementation(
         async (fn: (tx: unknown) => Promise<unknown>) =>
           fn({
@@ -1116,18 +1126,35 @@ describe('WhatsappService', () => {
         providerConversationId: null,
       });
 
+      expect(prisma.customer.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            codcli: 'W579999999999',
+            name: 'Contacto WhatsApp +579999999999',
+            phone: '579999999999',
+            status: 'PENDING',
+          }) as object,
+        }),
+      );
       const txCalls = prisma.$transaction.mock.calls as unknown[][];
       const createCall = txCalls[0][0] as (tx: unknown) => Promise<unknown>;
-      const conversationCreate = (await createCall({
+      const conversationCreate = jest.fn().mockResolvedValue({
+        id: 'conv-1',
+        uuid: 'conv-uuid-1',
+      });
+      await createCall({
         conversation: {
           findFirst: jest.fn().mockResolvedValue(null),
-          create: jest.fn().mockResolvedValue({
-            id: 'conv-1',
-            uuid: 'conv-uuid-1',
-          }),
+          create: conversationCreate,
         },
-      })) as { conversation: unknown };
-      expect(conversationCreate).toBeDefined();
+      });
+      expect(conversationCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ customerId: 'cu-auto' }) as object,
+        }),
+      );
+      // Decisión 4: inbound never creates a purchase nor triggers AU-001.
+      expect(emittedNames()).not.toContain('PurchaseImported');
     });
 
     it('is a no-op for a replayed providerMessageId (idempotency, HG-13)', async () => {

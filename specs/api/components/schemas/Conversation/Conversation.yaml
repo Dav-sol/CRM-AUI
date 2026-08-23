@@ -44,6 +44,29 @@ properties:
       be matched (HG-8). Conversations opened by outbound sends always link
       the customer (R-010).
 
+  customer:
+    type: object
+    nullable: true
+    description: |
+      Linked customer context for the inbox. Auto-created contacts from an
+      inbound number are PENDING until enriched (Decisión 4).
+    required:
+      - uuid
+      - name
+      - status
+    properties:
+      uuid:
+        type: string
+      name:
+        type: string
+      status:
+        type: string
+        enum:
+          - ACTIVE
+          - INACTIVE
+          - BLOCKED
+          - PENDING
+
   advisorId:
     type: string
     nullable: true

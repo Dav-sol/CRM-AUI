@@ -15,11 +15,7 @@ import { ReplyBox } from "@/components/conversations/reply-box";
 import { StatusBadge } from "@/components/conversations/status-badge";
 import { Thread } from "@/components/conversations/thread";
 import { Button, buttonVariants } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ApiError,
@@ -42,8 +38,12 @@ export default function ConversationDetailPage() {
   const uuid = params.uuid;
   const router = useRouter();
 
-  const [conversation, setConversation] = useState<Awaited<ReturnType<typeof apiGetConversation>> | null>(null);
-  const [allTags, setAllTags] = useState<Awaited<ReturnType<typeof apiListConversationTags>>>([]);
+  const [conversation, setConversation] = useState<Awaited<
+    ReturnType<typeof apiGetConversation>
+  > | null>(null);
+  const [allTags, setAllTags] = useState<
+    Awaited<ReturnType<typeof apiListConversationTags>>
+  >([]);
   const [loading, setLoading] = useState(true);
 
   const { items: listItems, error: listError } = useConversations({}, 0);
@@ -172,7 +172,9 @@ export default function ConversationDetailPage() {
   if (!conversation) {
     return (
       <div className="flex h-full items-center justify-center p-6">
-        <p className="text-sm text-muted-foreground">La conversación no existe o fue eliminada.</p>
+        <p className="text-sm text-muted-foreground">
+          La conversación no existe o fue eliminada.
+        </p>
       </div>
     );
   }
@@ -204,9 +206,10 @@ export default function ConversationDetailPage() {
             </Link>
             <div className="min-w-0">
               <h2 className="truncate text-sm font-semibold">
-                {conversation.customerId
-                  ? `Cliente #${conversation.customerId.slice(0, 8)}`
-                  : "Cliente sin vincular"}
+                {conversation.customer?.name ??
+                  (conversation.customerId
+                    ? `Cliente #${conversation.customerId.slice(0, 8)}`
+                    : "Cliente sin vincular")}
               </h2>
               <p className="text-xs text-muted-foreground">
                 {conversation.messageCount} mensajes
@@ -227,6 +230,9 @@ export default function ConversationDetailPage() {
                 <ConversationInfoPanel
                   status={conversation.status}
                   customerId={conversation.customerId}
+                  customerUuid={conversation.customer?.uuid ?? null}
+                  customerName={conversation.customer?.name ?? null}
+                  customerStatus={conversation.customer?.status ?? null}
                   advisorName={
                     conversation.advisor
                       ? `${conversation.advisor.firstName} ${conversation.advisor.lastName}`
@@ -247,10 +253,7 @@ export default function ConversationDetailPage() {
           </div>
         </div>
 
-        <Thread
-          messages={conversation.messages}
-          loading={loading}
-        />
+        <Thread messages={conversation.messages} loading={loading} />
 
         <ReplyBox onSend={handleReply} />
       </div>
@@ -259,6 +262,9 @@ export default function ConversationDetailPage() {
         <ConversationInfoPanel
           status={conversation.status}
           customerId={conversation.customerId}
+          customerUuid={conversation.customer?.uuid ?? null}
+          customerName={conversation.customer?.name ?? null}
+          customerStatus={conversation.customer?.status ?? null}
           advisorName={
             conversation.advisor
               ? `${conversation.advisor.firstName} ${conversation.advisor.lastName}`

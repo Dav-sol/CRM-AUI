@@ -3,6 +3,7 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
@@ -47,6 +48,7 @@ describe('PurchasesService', () => {
     organization: { findUnique: jest.Mock };
   };
   let auditService: { record: jest.Mock };
+  let eventEmitter: { emit: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -63,12 +65,14 @@ describe('PurchasesService', () => {
       organization: { findUnique: jest.fn() },
     };
     auditService = { record: jest.fn().mockResolvedValue(undefined) };
+    eventEmitter = { emit: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PurchasesService,
         { provide: PrismaService, useValue: prisma },
         { provide: AuditIdentityService, useValue: auditService },
+        { provide: EventEmitter2, useValue: eventEmitter },
       ],
     }).compile();
 
@@ -374,6 +378,10 @@ describe('PurchasesService', () => {
         organizationId: 'org-1',
         description: 'purchase created invoice=INV-0001',
       });
+      // Decisión 1: a manual purchase starts the same AU-001 cycle as an import.
+      expect(eventEmitter.emit).toHaveBeenCalledWith('PurchaseImported', {
+        payload: { purchaseId: 'p-1', invoiceNumber: 'INV-0001' },
+      });
       expect(result).toEqual({ id: 'p-1', invoiceNumber: 'INV-0001' });
     });
 
@@ -612,6 +620,7 @@ describe('PurchasesService', () => {
               prismaWithFailingAudit as unknown as PrismaService,
             ),
           },
+          { provide: EventEmitter2, useValue: eventEmitter },
         ],
       }).compile();
       return module.get<PurchasesService>(PurchasesService);

@@ -601,6 +601,9 @@ enum CustomerStatus {
   ACTIVE
   INACTIVE
   BLOCKED
+  // Contact auto-created from an inbound WhatsApp message, awaiting
+  // enrichment/verification (HG-AUD: Decisión 4).
+  PENDING
 }
 
 enum ProductStatus {

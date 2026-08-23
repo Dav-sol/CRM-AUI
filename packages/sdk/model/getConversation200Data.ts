@@ -36,6 +36,16 @@ export type GetConversation200Data = (({
      */
   customerId: string | null;
   /**
+     * Linked customer context for the inbox. Auto-created contacts from an
+     * inbound number are PENDING until enriched (Decisión 4).
+     * @nullable
+     */
+  customer?: {
+  uuid: string;
+  name: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED' | 'PENDING';
+} | null;
+  /**
      * Internal advisor user id; the public advisor reference is `advisor.uuid`.
      * @nullable
      */
