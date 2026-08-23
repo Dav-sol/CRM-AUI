@@ -16,6 +16,23 @@ import {
 
 const MODULE = 'imports';
 
+function addMonths(date: Date, months: number): Date {
+  const result = new Date(date);
+  result.setMonth(result.getMonth() + months);
+  return result;
+}
+
+function toWarrantyMonths(cells: Record<string, string>): number | null {
+  const raw = cells['warrantyMonths'] ?? '';
+  if (!raw) {
+    return null;
+  }
+  const months = Number(raw);
+  return Number.isInteger(months) && months >= 1 && months <= 24
+    ? months
+    : null;
+}
+
 function toErrorsJson(
   issues: RowIssue[],
 ): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput {
@@ -317,7 +334,10 @@ export class ImportsProcessor {
 
   private async createRowState(job: Import): Promise<{
     customers: Map<string, { id: string; deletedAt: Date | null }>;
-    products: Map<string, { id: string; deletedAt: Date | null }>;
+    products: Map<
+      string,
+      { id: string; deletedAt: Date | null; warrantyMonths: number | null }
+    >;
   }> {
     const [customers, products] = await Promise.all([
       this.prisma.customer.findMany({
@@ -326,7 +346,7 @@ export class ImportsProcessor {
       }),
       this.prisma.product.findMany({
         where: { organizationId: job.organizationId },
-        select: { id: true, code: true, deletedAt: true },
+        select: { id: true, code: true, warrantyMonths: true, deletedAt: true },
       }),
     ]);
 
@@ -340,7 +360,10 @@ export class ImportsProcessor {
     job: Import,
     state: {
       customers: Map<string, { id: string; deletedAt: Date | null }>;
-      products: Map<string, { id: string; deletedAt: Date | null }>;
+      products: Map<
+        string,
+        { id: string; deletedAt: Date | null; warrantyMonths: number | null }
+      >;
     },
     row: ParsedRow,
   ): Promise<void> {
@@ -389,6 +412,7 @@ export class ImportsProcessor {
     if (job.type === 'PRODUCTS') {
       const code = cells['code'] ?? '';
       const existing = state.products.get(code);
+      const warrantyMonths = toWarrantyMonths(cells);
       let product: Product;
       if (existing) {
         product = await this.prisma.product.update({
@@ -396,6 +420,7 @@ export class ImportsProcessor {
           data: {
             name: cells['name'] ?? '',
             category: cells['category'] ?? null,
+            warrantyMonths: warrantyMonths ?? undefined,
             status: cells['status']
               ? (cells['status'].toUpperCase() as Product['status'])
               : undefined,
@@ -410,13 +435,18 @@ export class ImportsProcessor {
             code,
             name: cells['name'] ?? '',
             category: cells['category'] ?? null,
+            warrantyMonths: warrantyMonths ?? undefined,
             status: cells['status']
               ? (cells['status'].toUpperCase() as Product['status'])
               : undefined,
             createdBy: job.userId,
           },
         });
-        state.products.set(code, { id: product.id, deletedAt: null });
+        state.products.set(code, {
+          id: product.id,
+          deletedAt: null,
+          warrantyMonths: product.warrantyMonths,
+        });
       }
       this.emit('ProductImported', 'PROCESSING', job, {
         importId: job.uuid,
@@ -439,6 +469,14 @@ export class ImportsProcessor {
         productId: product.id,
         invoiceNumber: cells['invoiceNumber'] ?? '',
         purchaseDate: new Date(cells['purchaseDate'] ?? ''),
+        warrantyMonths: toWarrantyMonths(cells) ?? product.warrantyMonths,
+        warrantyExpiresAt: (() => {
+          const months = toWarrantyMonths(cells) ?? product.warrantyMonths;
+          if (!months || months < 1) {
+            return null;
+          }
+          return addMonths(new Date(cells['purchaseDate'] ?? ''), months);
+        })(),
         quantity: Number(cells['quantity'] ?? '0'),
         value: new Prisma.Decimal(cells['value'] ?? '0'),
         status: cells['status']

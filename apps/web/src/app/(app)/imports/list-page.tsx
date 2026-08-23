@@ -36,7 +36,7 @@ export function ImportsIndexPage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Importaciones</h1>
           <p className="text-sm text-muted-foreground">
-            {meta ? `${meta.total} importaciones` : "Subí tus archivos de clientes, productos y compras."}
+            {meta ? `${meta.total} importaciones` : "Sube tus archivos de clientes, productos y compras."}
           </p>
         </div>
         <div className="flex items-center gap-2">

@@ -136,7 +136,7 @@ export function PurchaseList({ items, error }: PurchaseListProps) {
       <EmptyState
         icon={ShoppingCart}
         title="Sin compras"
-        description="Cuando cargues compras de tus clientes, las vas a ver acá."
+        description="Cuando cargues compras de tus clientes, las vas a ver aquí."
         className="py-8"
       />
     );

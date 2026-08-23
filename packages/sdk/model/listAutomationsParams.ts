@@ -49,7 +49,7 @@ scheduledFrom?: string;
  */
 scheduledTo?: string;
 /**
- * Field sorted by; "-" prefix means descending. Defaults to -scheduledDate.
+ * Field sorted by; "-" prefix means descending. Defaults to -createdAt.
  * @pattern ^-?(scheduledDate|createdAt|updatedAt|status)$
  */
 sort?: string;

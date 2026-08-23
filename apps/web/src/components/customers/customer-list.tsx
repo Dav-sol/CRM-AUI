@@ -109,7 +109,7 @@ export function CustomerList({ items, error }: CustomerListProps) {
       <EmptyState
         icon={Users}
         title="Sin clientes"
-        description="Cuando cargues clientes, los vas a ver acá. Usá el botón Nuevo cliente para crear uno."
+        description="Cuando cargues clientes, los vas a ver aquí. Usa el botón Nuevo cliente para crear uno."
         className="py-8"
       />
     );

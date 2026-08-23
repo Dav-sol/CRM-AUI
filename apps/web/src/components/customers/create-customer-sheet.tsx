@@ -81,7 +81,7 @@ export function CreateCustomerSheet({ onCreated }: CreateCustomerSheetProps) {
         <SheetHeader className="border-b border-border/60">
           <SheetTitle>Nuevo cliente</SheetTitle>
           <SheetDescription>
-            Cargá los datos de contacto del cliente. El código es único e inmutable.
+            Carga los datos de contacto del cliente. El código es único e inmutable.
           </SheetDescription>
         </SheetHeader>
 

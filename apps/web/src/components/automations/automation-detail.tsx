@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 
 import { AutomationStatusBadge } from "@/components/automations/automation-list";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { ApiError, apiGetAutomation } from "@/lib/api";
 import { formatDateTime, formatPhone } from "@/lib/format";
 import type { AutomationDetail } from "@/lib/sdk-types";
@@ -17,7 +22,10 @@ type LoadedState =
   | { uuid: string; detail: AutomationDetail; error: null }
   | { uuid: string; detail: null; error: string };
 
-export function AutomationDetailSheet({ uuid, onClose }: AutomationDetailSheetProps) {
+export function AutomationDetailSheet({
+  uuid,
+  onClose,
+}: AutomationDetailSheetProps) {
   const [loaded, setLoaded] = useState<LoadedState | null>(null);
 
   useEffect(() => {
@@ -39,7 +47,11 @@ export function AutomationDetailSheet({ uuid, onClose }: AutomationDetailSheetPr
         if (caught instanceof ApiError && caught.status === 401) {
           return;
         }
-        setLoaded({ uuid, detail: null, error: "No se pudo cargar el detalle de la automatización." });
+        setLoaded({
+          uuid,
+          detail: null,
+          error: "No se pudo cargar el detalle de la automatización.",
+        });
       });
 
     return () => {
@@ -79,28 +91,43 @@ function AutomationDetailContent({ detail }: { detail: AutomationDetail }) {
       <div className="space-y-1">
         <span className="text-muted-foreground">Cliente</span>
         <p className="font-medium">{detail.customer.name}</p>
-        <p className="text-xs text-muted-foreground">{formatPhone(detail.customer.phone)}</p>
+        <p className="text-xs text-muted-foreground">
+          {formatPhone(detail.customer.phone)}
+        </p>
       </div>
       <div className="space-y-1">
         <span className="text-muted-foreground">Compra</span>
         <p className="font-medium">
-          Factura {detail.purchase.invoiceNumber} · {detail.purchase.productName}
+          Factura {detail.purchase.invoiceNumber} ·{" "}
+          {detail.purchase.productName}
         </p>
-        <p className="text-xs text-muted-foreground">{formatDateTime(detail.purchase.purchaseDate)}</p>
+        <p className="text-xs text-muted-foreground">
+          {formatDateTime(detail.purchase.purchaseDate)}
+        </p>
       </div>
       <div className="space-y-1">
         <span className="text-muted-foreground">Fechas</span>
-        <p className="font-medium">Programada {formatDateTime(detail.scheduledDate)}</p>
+        <p className="font-medium">
+          Programada {formatDateTime(detail.scheduledDate)}
+        </p>
         {detail.executedDate && (
           <p className="text-xs text-muted-foreground">
             Ejecutada {formatDateTime(detail.executedDate)}
           </p>
         )}
       </div>
-      {detail.campaignId && (
+      {detail.campaign && (
         <div className="space-y-1">
           <span className="text-muted-foreground">Campaña</span>
-          <p className="font-medium">{detail.campaignId.slice(0, 8)}</p>
+          <p className="font-medium">{detail.campaign.name}</p>
+        </div>
+      )}
+      {detail.messageTemplate && (
+        <div className="space-y-1">
+          <span className="text-muted-foreground">Mensaje a enviar</span>
+          <p className="rounded-lg border border-border/60 bg-muted/30 p-3 text-xs whitespace-pre-wrap">
+            {detail.messageTemplate}
+          </p>
         </div>
       )}
     </div>

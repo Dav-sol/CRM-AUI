@@ -20,6 +20,9 @@ import {
 } from "@/components/ui/sheet";
 import { ApiError, apiCreateProduct, apiUpdateProduct } from "@/lib/api";
 import type { ProductItem } from "@/lib/sdk-types";
+import type { CreateProductBodyWarrantyMonths } from "@automatize-it/sdk/model/createProductBodyWarrantyMonths";
+import type { CreateProductBody } from "@automatize-it/sdk/model/createProductBody";
+import type { UpdateProductBody } from "@automatize-it/sdk/model/updateProductBody";
 import { cn } from "@/lib/utils";
 import { productSchema, type ProductFormValues } from "@/lib/validators";
 
@@ -52,14 +55,16 @@ export function ProductFormSheet({
   const setOpen = onOpenChange ?? setInternalOpen;
   const [submitError, setSubmitError] = useState<string | null>(null);
   const formKey = `${open}-${product?.uuid ?? "new"}`;
-  const defaultValues: ProductFormValues = isEdit && product
-    ? {
-        code: product.code,
-        name: product.name,
-        category: product.category ?? "",
-        status: product.status,
-      }
-    : EMPTY_FORM;
+  const defaultValues: ProductFormValues =
+    isEdit && product
+      ? {
+          code: product.code,
+          name: product.name,
+          category: product.category ?? "",
+          warrantyMonths: product.warrantyMonths ?? undefined,
+          status: product.status,
+        }
+      : EMPTY_FORM;
 
   const {
     register,
@@ -76,14 +81,19 @@ export function ProductFormSheet({
     const body = {
       name: values.name,
       category: values.category || undefined,
+      warrantyMonths: values.warrantyMonths as
+        CreateProductBodyWarrantyMonths | undefined,
       status: values.status,
     };
     try {
       if (isEdit && product) {
-        await apiUpdateProduct(product.id, body);
+        await apiUpdateProduct(product.id, body as UpdateProductBody);
         toast.success("Producto actualizado");
       } else {
-        await apiCreateProduct({ code: values.code, ...body });
+        await apiCreateProduct({
+          code: values.code,
+          ...body,
+        } as CreateProductBody);
         toast.success("Producto creado");
       }
       setOpen(false);
@@ -96,18 +106,22 @@ export function ProductFormSheet({
           setSubmitError(error.message);
         }
       } else {
-        setSubmitError("No se pudo conectar con el servidor. Inténtalo nuevamente.");
+        setSubmitError(
+          "No se pudo conectar con el servidor. Inténtalo nuevamente.",
+        );
       }
-      toast.error(isEdit ? "No se pudo actualizar el producto" : "No se pudo crear el producto");
+      toast.error(
+        isEdit
+          ? "No se pudo actualizar el producto"
+          : "No se pudo crear el producto",
+      );
     }
   }
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       {!isEdit && (
-        <SheetTrigger
-          render={<Button size="sm" />}
-        >
+        <SheetTrigger render={<Button size="sm" />}>
           <Package />
           Nuevo producto
         </SheetTrigger>
@@ -115,7 +129,9 @@ export function ProductFormSheet({
       <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-lg">
         <div key={formKey} className="flex min-h-0 flex-1 flex-col">
           <SheetHeader className="border-b border-border/60">
-            <SheetTitle>{isEdit ? "Editar producto" : "Nuevo producto"}</SheetTitle>
+            <SheetTitle>
+              {isEdit ? "Editar producto" : "Nuevo producto"}
+            </SheetTitle>
             <SheetDescription>
               {isEdit
                 ? "El código no se puede modificar después de la creación."
@@ -198,11 +214,45 @@ export function ProductFormSheet({
                 </select>
               </div>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="product-warranty-months">
+                Garantía{" "}
+                <span className="text-xs text-muted-foreground">
+                  (opcional)
+                </span>
+              </Label>
+              <select
+                id="product-warranty-months"
+                className={cn(selectClass, "appearance-none")}
+                aria-invalid={!!errors.warrantyMonths}
+                {...register("warrantyMonths", {
+                  setValueAs: (value) =>
+                    value === "" ? undefined : Number(value),
+                })}
+              >
+                <option value="">Sin garantía definida</option>
+                <option value={12}>12 meses</option>
+                <option value={15}>15 meses</option>
+                <option value={18}>18 meses</option>
+                <option value={24}>24 meses</option>
+              </select>
+              {errors.warrantyMonths && (
+                <p className="text-xs text-destructive" role="alert">
+                  {errors.warrantyMonths.message}
+                </p>
+              )}
+            </div>
           </form>
 
           <SheetFooter className="border-t border-border/60">
-            <Button type="submit" disabled={isSubmitting} onClick={handleSubmit(onSubmit)}>
-              {isSubmitting && <Loader2 className="animate-spin" aria-hidden="true" />}
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              onClick={handleSubmit(onSubmit)}
+            >
+              {isSubmitting && (
+                <Loader2 className="animate-spin" aria-hidden="true" />
+              )}
               {isSubmitting
                 ? isEdit
                   ? "Guardando…"

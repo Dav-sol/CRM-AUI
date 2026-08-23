@@ -1,8 +1,12 @@
 import {
   IsEnum,
+  IsIn,
+  IsInt,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
+  Min,
   Validate,
   ValidateIf,
   ValidatorConstraint,
@@ -35,6 +39,13 @@ export class UpdateProductDto {
   @IsString()
   @MaxLength(100)
   category?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(24)
+  @IsIn([12, 15, 18, 24])
+  warrantyMonths?: number;
 
   @IsOptional()
   @IsEnum(ProductStatus)

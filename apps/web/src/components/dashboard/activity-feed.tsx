@@ -33,7 +33,7 @@ export function ActivityFeed({ items }: ActivityFeedProps) {
       <EmptyState
         icon={History}
         title="Sin actividad todavía"
-        description="Cuando el sistema registre eventos, los vas a ver acá."
+        description="Cuando el sistema registre eventos, los vas a ver aquí."
       />
     );
   }

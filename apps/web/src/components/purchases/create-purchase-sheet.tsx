@@ -18,11 +18,22 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { ApiError, apiCreatePurchase, apiListCustomers, apiListProducts } from "@/lib/api";
+import {
+  ApiError,
+  apiCreatePurchase,
+  apiListCustomers,
+  apiListProducts,
+} from "@/lib/api";
 import type { CustomerItem, ProductItem } from "@/lib/sdk-types";
 import { cn } from "@/lib/utils";
-import { purchaseSchema, type PurchaseFormInput, type PurchaseFormValues } from "@/lib/validators";
+import {
+  purchaseSchema,
+  type PurchaseFormInput,
+  type PurchaseFormValues,
+} from "@/lib/validators";
 import { formatDate } from "@/lib/format";
+
+import type { CreatePurchaseBodyWarrantyMonths } from "@automatize-it/sdk/model/createPurchaseBodyWarrantyMonths";
 
 type CreatePurchaseSheetProps = {
   onCreated?: () => void;
@@ -58,14 +69,17 @@ export function CreatePurchaseSheet({ onCreated }: CreatePurchaseSheetProps) {
   const selectedPurchaseDate = useWatch({ control, name: "purchaseDate" });
 
   const selectedProduct = products?.find((p) => p.id === selectedProductId);
-  const warrantyMonths = (selectedProduct as unknown as { warrantyMonths?: number })?.warrantyMonths;
-  const warrantyExpiresAt = warrantyMonths && selectedPurchaseDate
-    ? (() => {
-        const d = new Date(selectedPurchaseDate);
-        d.setMonth(d.getMonth() + warrantyMonths);
-        return d;
-      })()
-    : null;
+  const warrantyMonths = (
+    selectedProduct as unknown as { warrantyMonths?: number }
+  )?.warrantyMonths;
+  const warrantyExpiresAt =
+    warrantyMonths && selectedPurchaseDate
+      ? (() => {
+          const d = new Date(selectedPurchaseDate);
+          d.setMonth(d.getMonth() + warrantyMonths);
+          return d;
+        })()
+      : null;
 
   useEffect(() => {
     if (!open) {
@@ -114,7 +128,8 @@ export function CreatePurchaseSheet({ onCreated }: CreatePurchaseSheetProps) {
         quantity: values.quantity,
         value: values.value.replace(",", "."),
         status: values.status,
-        warrantyMonths: values.warrantyMonths,
+        warrantyMonths: values.warrantyMonths as
+          CreatePurchaseBodyWarrantyMonths | undefined,
       });
       toast.success("Compra registrada correctamente");
       setOpen(false);
@@ -124,7 +139,9 @@ export function CreatePurchaseSheet({ onCreated }: CreatePurchaseSheetProps) {
       if (error instanceof ApiError) {
         setSubmitError(error.message);
       } else {
-        setSubmitError("No se pudo conectar con el servidor. Inténtalo nuevamente.");
+        setSubmitError(
+          "No se pudo conectar con el servidor. Inténtalo nuevamente.",
+        );
       }
       toast.error("No se pudo registrar la compra");
     }
@@ -150,7 +167,8 @@ export function CreatePurchaseSheet({ onCreated }: CreatePurchaseSheetProps) {
         <SheetHeader className="border-b border-border/60">
           <SheetTitle>Nueva compra</SheetTitle>
           <SheetDescription>
-            Registrá una compra de un cliente. Cliente, producto y factura quedan fijos al crear.
+            Registra una compra de un cliente. Cliente, producto y factura
+            quedan fijos al crear.
           </SheetDescription>
         </SheetHeader>
 
@@ -239,17 +257,31 @@ export function CreatePurchaseSheet({ onCreated }: CreatePurchaseSheetProps) {
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="purchase-warranty-months">Duración garantía (meses) <span className="text-xs text-muted-foreground">(opcional, sobrescribe la del producto)</span></Label>
-              <Input
+              <Label htmlFor="purchase-warranty-months">
+                Duración garantía{" "}
+                <span className="text-xs text-muted-foreground">
+                  (opcional, sobrescribe la del producto)
+                </span>
+              </Label>
+              <select
                 id="purchase-warranty-months"
-                type="number"
-                min={1}
-                max={24}
-                step={1}
-                placeholder={warrantyMonths ? `${warrantyMonths} (producto)` : "Usa la del producto"}
+                className={cn(selectClass, "appearance-none")}
                 aria-invalid={!!errors.warrantyMonths}
-                {...register("warrantyMonths", { valueAsNumber: true })}
-              />
+                {...register("warrantyMonths", {
+                  setValueAs: (value) =>
+                    value === "" ? undefined : Number(value),
+                })}
+              >
+                <option value="">
+                  {warrantyMonths
+                    ? `${warrantyMonths} meses (producto)`
+                    : "Usa la del producto"}
+                </option>
+                <option value={12}>12 meses</option>
+                <option value={15}>15 meses</option>
+                <option value={18}>18 meses</option>
+                <option value={24}>24 meses</option>
+              </select>
               {errors.warrantyMonths && (
                 <p className="text-xs text-destructive" role="alert">
                   {errors.warrantyMonths.message}
@@ -339,14 +371,20 @@ export function CreatePurchaseSheet({ onCreated }: CreatePurchaseSheetProps) {
           </div>
 
           <p className="text-xs text-muted-foreground">
-            El valor usa punto decimal (ej: 125.50). El número de factura debe ser único por
-            cliente, producto y fecha.
+            El valor usa punto decimal (ej: 125.50). El número de factura debe
+            ser único por cliente, producto y fecha.
           </p>
         </form>
 
         <SheetFooter className="border-t border-border/60">
-          <Button type="submit" disabled={isSubmitting} onClick={handleSubmit(onSubmit)}>
-            {isSubmitting && <Loader2 className="animate-spin" aria-hidden="true" />}
+          <Button
+            type="submit"
+            disabled={isSubmitting}
+            onClick={handleSubmit(onSubmit)}
+          >
+            {isSubmitting && (
+              <Loader2 className="animate-spin" aria-hidden="true" />
+            )}
             {isSubmitting ? "Registrando…" : "Registrar compra"}
           </Button>
         </SheetFooter>

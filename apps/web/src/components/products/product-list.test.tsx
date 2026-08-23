@@ -30,13 +30,22 @@ describe("useProducts: búsqueda, estado y paginación", () => {
     vi.mocked(apiListProducts).mockReset();
   });
 
-  it("sin filtros → page 1 y limit 20, sin search", async () => {
+  it("sin filtros → carga todo el catálogo (modo agrupado) recorriendo las páginas", async () => {
     vi.mocked(apiListProducts).mockResolvedValue(payload as never);
 
     renderHook(() => useProducts({}));
 
-    await waitFor(() => expect(apiListProducts).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(apiListProducts).mock.calls[0][0]).toEqual({ page: 1, limit: 20 });
+    await waitFor(() =>
+      expect(vi.mocked(apiListProducts).mock.calls.length).toBe(3),
+    );
+    expect(vi.mocked(apiListProducts).mock.calls[0][0]).toEqual({
+      page: 1,
+      limit: 100,
+    });
+    expect(vi.mocked(apiListProducts).mock.calls[1][0]).toEqual({
+      page: 2,
+      limit: 100,
+    });
   });
 
   it("con search → se envía el término recortado", async () => {
@@ -52,14 +61,16 @@ describe("useProducts: búsqueda, estado y paginación", () => {
     });
   });
 
-  it("search vacío → NO se envía el parámetro search", async () => {
+  it("search vacío → NO se envía el parámetro search (modo agrupado)", async () => {
     vi.mocked(apiListProducts).mockResolvedValue(payload as never);
 
     renderHook(() => useProducts({ search: "   " }));
 
-    await waitFor(() => expect(apiListProducts).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(vi.mocked(apiListProducts).mock.calls.length).toBe(3),
+    );
     const params = vi.mocked(apiListProducts).mock.calls[0][0];
-    expect(params).toEqual({ page: 1, limit: 20 });
+    expect(params).toEqual({ page: 1, limit: 100 });
     expect(params).not.toHaveProperty("search");
   });
 
@@ -82,8 +93,8 @@ describe("useProducts: búsqueda, estado y paginación", () => {
     const { result } = renderHook(() => useProducts({}));
 
     await waitFor(() => expect(result.current.items).not.toBeNull());
-    expect(result.current.items).toHaveLength(1);
-    expect(result.current.meta).toEqual({ page: 1, limit: 20, pages: 3, total: 42 });
+    expect(result.current.items).toHaveLength(3);
+    expect(result.current.meta).toEqual({ page: 1, pages: 1, total: 3 });
     expect(result.current.error).toBeNull();
   });
 

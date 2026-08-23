@@ -463,6 +463,17 @@ describe('AutomationsService', () => {
   });
 
   describe('listAutomations (US4)', () => {
+    it('orders by -createdAt by default (most recent first)', async () => {
+      prisma.automation.count.mockResolvedValue(0);
+      prisma.automation.findMany.mockResolvedValue([]);
+
+      await service.listAutomations(orgUser, {});
+
+      expect(prisma.automation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { createdAt: 'desc' } }),
+      );
+    });
+
     it('scopes by organizationId and applies filters', async () => {
       prisma.automation.count.mockResolvedValue(1);
       prisma.automation.findMany.mockResolvedValue([

@@ -539,6 +539,20 @@ describe('FollowUpSequencesService', () => {
       });
     }
 
+    it('rejects an empty body (at least one field required)', async () => {
+      await expect(
+        service.update(adminUser, 'fus-1', {} as never),
+      ).rejects.toMatchObject({
+        response: {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: expect.stringContaining('At least one field'),
+          },
+        },
+      });
+      expect(tx.followUpSequence.update).not.toHaveBeenCalled();
+    });
+
     it('renames without touching stages and audits the change', async () => {
       arrangeFoundSequence();
 

@@ -211,6 +211,20 @@ export class FollowUpSequencesService {
   ): Promise<{ uuid: string; name: string }> {
     const organizationId = this.requireOrg(user);
 
+    const hasChanges =
+      dto.name !== undefined ||
+      dto.description !== undefined ||
+      dto.warrantyMonths !== undefined ||
+      dto.stages !== undefined;
+    if (!hasChanges) {
+      throw new BadRequestException({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'At least one field must be provided',
+        },
+      });
+    }
+
     const updated = await this.prisma.$transaction(async (tx) => {
       // Serialize concurrent writers on this sequence row before reading any
       // state. The lock targets only the live row; a missing/soft-deleted row

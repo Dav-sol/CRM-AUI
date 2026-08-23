@@ -20,7 +20,11 @@ export type AutomationFilters = {
 
 export function useAutomations(filters: AutomationFilters) {
   const [items, setItems] = useState<AutomationItem[] | null>(null);
-  const [meta, setMeta] = useState<{ page: number; pages: number; total: number } | null>(null);
+  const [meta, setMeta] = useState<{
+    page: number;
+    pages: number;
+    total: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,7 +32,10 @@ export function useAutomations(filters: AutomationFilters) {
 
     async function load() {
       setError(null);
-      const params: AutomationListParams = { page: filters.page ?? 1, limit: 20 };
+      const params: AutomationListParams = {
+        page: filters.page ?? 1,
+        limit: 20,
+      };
       if (filters.status) {
         params.status = filters.status;
       }
@@ -61,7 +68,53 @@ export function useAutomations(filters: AutomationFilters) {
   return { items, meta, error };
 }
 
-export function AutomationStatusBadge({ status }: { status: AutomationItem["status"] }) {
+export function useUpcomingAutomations(refreshKey: number) {
+  const [items, setItems] = useState<AutomationItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setError(null);
+      try {
+        const data = await apiListAutomations({
+          page: 1,
+          limit: 4,
+          status: "SCHEDULED",
+          scheduledFrom: new Date().toISOString(),
+          sort: "scheduledDate",
+        });
+        if (!cancelled) {
+          setItems(data.data);
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        if (error instanceof ApiError && error.status === 401) {
+          return;
+        }
+        setItems([]);
+        setError("No se pudieron cargar las próximas automatizaciones.");
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+
+  return { items, error };
+}
+
+export function AutomationStatusBadge({
+  status,
+}: {
+  status: AutomationItem["status"];
+}) {
   const variant =
     status === "EXECUTED"
       ? "default"
@@ -80,7 +133,12 @@ type AutomationListProps = {
   onSelect: (automation: AutomationItem) => void;
 };
 
-export function AutomationList({ items, error, onChanged, onSelect }: AutomationListProps) {
+export function AutomationList({
+  items,
+  error,
+  onChanged,
+  onSelect,
+}: AutomationListProps) {
   if (items === null) {
     return (
       <div className="space-y-2" aria-label="Cargando automatizaciones">
@@ -99,7 +157,12 @@ export function AutomationList({ items, error, onChanged, onSelect }: Automation
 
   if (error) {
     return (
-      <EmptyState icon={Workflow} title="Error al cargar" description={error} className="py-8" />
+      <EmptyState
+        icon={Workflow}
+        title="Error al cargar"
+        description={error}
+        className="py-8"
+      />
     );
   }
 
@@ -108,7 +171,7 @@ export function AutomationList({ items, error, onChanged, onSelect }: Automation
       <EmptyState
         icon={Workflow}
         title="Sin automatizaciones"
-        description="Las campañas generan automatizaciones al activarse. Van a aparecer acá."
+        description="Las campañas generan automatizaciones al activarse. Van a aparecer aquí."
         className="py-8"
       />
     );
@@ -129,18 +192,26 @@ export function AutomationList({ items, error, onChanged, onSelect }: Automation
           className="flex flex-col gap-3 rounded-lg border border-border/60 p-3 text-left transition-colors hover:border-primary/40 hover:bg-muted/40"
         >
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
                 <Workflow className="size-4" aria-hidden="true" />
               </span>
-              <span className="text-xs font-medium text-muted-foreground">
-                Seguimiento post-venta
-              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">
+                  {automation.customer?.name ?? "Cliente"}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {automation.productName}
+                  {automation.campaign?.name
+                    ? ` · ${automation.campaign.name}`
+                    : ""}
+                </p>
+              </div>
             </div>
             <AutomationStatusBadge status={automation.status} />
           </div>
           <div>
-            <p className="text-sm font-semibold">
+            <p className="text-sm font-medium">
               Programada para {formatDateTime(automation.scheduledDate)}
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
@@ -148,12 +219,17 @@ export function AutomationList({ items, error, onChanged, onSelect }: Automation
                 ? `Ejecutada ${formatDateTime(automation.executedDate)}`
                 : `Creada ${formatDateTime(automation.createdAt)}`}
             </p>
+            {automation.messageTemplate && (
+              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                {automation.messageTemplate}
+              </p>
+            )}
           </div>
           <div className="flex items-center justify-between gap-2 border-t border-border/40 pt-2">
             <span className="text-[11px] text-muted-foreground">
-              {automation.commercialCycleId
-                ? `Ciclo · ${automation.commercialCycleId.slice(0, 8)}`
-                : "Sin ciclo comercial"}
+              {automation.status === "SCHEDULED"
+                ? "Programada"
+                : automation.status}
             </span>
             <AutomationActions
               uuid={automation.uuid}

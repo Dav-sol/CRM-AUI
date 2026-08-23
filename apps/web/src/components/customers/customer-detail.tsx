@@ -24,27 +24,48 @@ import {
   apiListConversations,
   apiListPurchases,
 } from "@/lib/api";
-import { formatDate, formatDateTime, formatNumber, formatPhone } from "@/lib/format";
+import {
+  formatDate,
+  formatDateTime,
+  formatNumber,
+  formatPhone,
+} from "@/lib/format";
 import { AUTOMATION_STATUS_LABELS } from "@/lib/validators";
 
 type Customer = Awaited<ReturnType<typeof apiGetCustomer>>;
 type Purchase = Awaited<ReturnType<typeof apiListPurchases>>["data"][number];
-type Automation = Awaited<ReturnType<typeof apiListAutomations>>["data"][number];
+type Automation = Awaited<
+  ReturnType<typeof apiListAutomations>
+>["data"][number];
 type Conversation = Awaited<ReturnType<typeof apiListConversations>>[number];
 
-function WarrantyBadge({ months, expiresAt }: { months: number | null | undefined; expiresAt: string | null | undefined }) {
+function WarrantyBadge({
+  months,
+  expiresAt,
+}: {
+  months: number | null | undefined;
+  expiresAt: string | null | undefined;
+}) {
   const [now] = useState(() => Date.now());
   if (!months || !expiresAt) {
     return <Badge variant="outline">Sin garantía</Badge>;
   }
   const days = Math.ceil((new Date(expiresAt).getTime() - now) / 86_400_000);
   if (days < 0) {
-    return <Badge variant="destructive">Vencida · {formatDate(expiresAt)}</Badge>;
+    return (
+      <Badge variant="destructive">Vencida · {formatDate(expiresAt)}</Badge>
+    );
   }
   if (days <= 30) {
-    return <Badge variant="secondary">Vence pronto · {formatDate(expiresAt)}</Badge>;
+    return (
+      <Badge variant="secondary">Vence pronto · {formatDate(expiresAt)}</Badge>
+    );
   }
-  return <Badge variant="default">{months} meses · vence {formatDate(expiresAt)}</Badge>;
+  return (
+    <Badge variant="default">
+      {months} meses · vence {formatDate(expiresAt)}
+    </Badge>
+  );
 }
 
 function AutomationStatusBadge({ status }: { status: Automation["status"] }) {
@@ -63,9 +84,12 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [purchases, setPurchases] = useState<Purchase[] | null>(null);
   const [automations, setAutomations] = useState<Automation[] | null>(null);
-  const [conversations, setConversations] = useState<Conversation[] | null>(null);
+  const [conversations, setConversations] = useState<Conversation[] | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [now] = useState(() => Date.now());
 
   useEffect(() => {
     let cancelled = false;
@@ -74,11 +98,12 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
         const customerData = await apiGetCustomer(uuid);
         if (cancelled) return;
         setCustomer(customerData);
-        const [purchasesData, automationsData, conversationsData] = await Promise.all([
-          apiListPurchases({ customerId: customerData.id, limit: 100 }),
-          apiListAutomations({ customerId: customerData.uuid, limit: 50 }),
-          apiListConversations({ customerId: customerData.uuid, limit: 50 }),
-        ]);
+        const [purchasesData, automationsData, conversationsData] =
+          await Promise.all([
+            apiListPurchases({ customerId: customerData.id, limit: 100 }),
+            apiListAutomations({ customerId: customerData.uuid, limit: 50 }),
+            apiListConversations({ customerId: customerData.uuid, limit: 50 }),
+          ]);
         if (cancelled) return;
         setPurchases(purchasesData.data);
         setAutomations(automationsData.data);
@@ -122,7 +147,26 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
   }
 
   const totalPurchases = purchases?.length ?? 0;
-  const totalSpent = purchases?.reduce((acc, p) => acc + Number(p.value), 0) ?? 0;
+  const totalSpent =
+    purchases?.reduce((acc, p) => acc + Number(p.value), 0) ?? 0;
+
+  const orderedAutomations = automations
+    ? [...automations].sort((a, b) => {
+        const aUpcoming =
+          a.status === "SCHEDULED" &&
+          new Date(a.scheduledDate).getTime() >= now;
+        const bUpcoming =
+          b.status === "SCHEDULED" &&
+          new Date(b.scheduledDate).getTime() >= now;
+        if (aUpcoming !== bUpcoming) {
+          return aUpcoming ? -1 : 1;
+        }
+        return (
+          new Date(b.scheduledDate).getTime() -
+          new Date(a.scheduledDate).getTime()
+        );
+      })
+    : null;
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-5 p-6 lg:p-8">
@@ -135,10 +179,14 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-lg font-semibold tracking-tight">{customer.name}</h1>
+                <h1 className="text-lg font-semibold tracking-tight">
+                  {customer.name}
+                </h1>
                 <CustomerStatusBadge status={customer.status} />
               </div>
-              <p className="text-sm text-muted-foreground">Código: {customer.codcli}</p>
+              <p className="text-sm text-muted-foreground">
+                Código: {customer.codcli}
+              </p>
             </div>
             <div className="grid shrink-0 gap-1 text-sm">
               {customer.phone && (
@@ -167,7 +215,9 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <ShoppingCart className="size-4" /> Compras
             </div>
-            <p className="mt-1 text-2xl font-semibold">{formatNumber(totalPurchases)}</p>
+            <p className="mt-1 text-2xl font-semibold">
+              {formatNumber(totalPurchases)}
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -175,7 +225,9 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <User className="size-4" /> Total invertido
             </div>
-            <p className="mt-1 text-2xl font-semibold">${formatNumber(totalSpent)}</p>
+            <p className="mt-1 text-2xl font-semibold">
+              ${formatNumber(totalSpent)}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -184,14 +236,20 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <ShoppingCart className="size-4 text-primary" /> Compras e historial de garantía
+            <ShoppingCart className="size-4 text-primary" /> Compras e historial
+            de garantía
           </CardTitle>
         </CardHeader>
         <CardContent>
           {purchases === null ? (
             <Skeleton className="h-32 w-full" />
           ) : purchases.length === 0 ? (
-            <EmptyState icon={ShoppingCart} title="Sin compras" description="Este cliente no tiene compras registradas." className="py-6" />
+            <EmptyState
+              icon={ShoppingCart}
+              title="Sin compras"
+              description="Este cliente no tiene compras registradas."
+              className="py-6"
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -208,13 +266,20 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
                 <tbody className="divide-y">
                   {purchases.map((purchase) => (
                     <tr key={purchase.uuid}>
-                      <td className="py-2 pr-4 whitespace-nowrap">{formatDate(purchase.purchaseDate)}</td>
-                      <td className="max-w-[180px] truncate py-2 pr-4">{purchase.product.name}</td>
+                      <td className="py-2 pr-4 whitespace-nowrap">
+                        {formatDate(purchase.purchaseDate)}
+                      </td>
+                      <td className="max-w-[180px] truncate py-2 pr-4">
+                        {purchase.product.name}
+                      </td>
                       <td className="py-2 pr-4">{purchase.invoiceNumber}</td>
                       <td className="py-2 pr-4">{purchase.quantity}</td>
                       <td className="py-2 pr-4">${purchase.value}</td>
                       <td className="py-2">
-                        <WarrantyBadge months={purchase.warrantyMonths} expiresAt={purchase.warrantyExpiresAt} />
+                        <WarrantyBadge
+                          months={purchase.warrantyMonths}
+                          expiresAt={purchase.warrantyExpiresAt}
+                        />
                       </td>
                     </tr>
                   ))}
@@ -234,20 +299,30 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {automations === null ? (
+            {orderedAutomations === null ? (
               <Skeleton className="h-32 w-full" />
-            ) : automations.length === 0 ? (
-              <EmptyState icon={Workflow} title="Sin automatizaciones" description="Este cliente no tiene seguimiento programado." className="py-6" />
+            ) : orderedAutomations.length === 0 ? (
+              <EmptyState
+                icon={Workflow}
+                title="Sin automatizaciones"
+                description="Este cliente no tiene seguimiento programado."
+                className="py-6"
+              />
             ) : (
               <ul className="space-y-3">
-                {automations.slice(0, 8).map((automation) => (
-                  <li key={automation.uuid} className="flex items-center justify-between gap-3">
+                {orderedAutomations.slice(0, 8).map((automation) => (
+                  <li
+                    key={automation.uuid}
+                    className="flex items-center justify-between gap-3"
+                  >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">
                         {formatDateTime(automation.scheduledDate)}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {automation.executedDate ? `Ejecutada ${formatDateTime(automation.executedDate)}` : "Programada"}
+                        {automation.executedDate
+                          ? `Ejecutada ${formatDateTime(automation.executedDate)}`
+                          : "Programada"}
                       </p>
                     </div>
                     <AutomationStatusBadge status={automation.status} />
@@ -262,14 +337,20 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <MessageSquareText className="size-4 text-primary" /> Conversaciones
+              <MessageSquareText className="size-4 text-primary" />{" "}
+              Conversaciones
             </CardTitle>
           </CardHeader>
           <CardContent>
             {conversations === null ? (
               <Skeleton className="h-32 w-full" />
             ) : conversations.length === 0 ? (
-              <EmptyState icon={MessageSquareText} title="Sin conversaciones" description="Este cliente no tiene conversaciones." className="py-6" />
+              <EmptyState
+                icon={MessageSquareText}
+                title="Sin conversaciones"
+                description="Este cliente no tiene conversaciones."
+                className="py-6"
+              />
             ) : (
               <ul className="space-y-3">
                 {conversations.slice(0, 8).map((conversation) => (
@@ -279,7 +360,9 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
                       className="flex items-center justify-between gap-3 rounded-md p-2 hover:bg-muted"
                     >
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{formatDateTime(conversation.createdAt)}</p>
+                        <p className="truncate text-sm font-medium">
+                          {formatDateTime(conversation.createdAt)}
+                        </p>
                         <p className="text-xs text-muted-foreground">
                           {conversation.messageCount} mensajes
                         </p>

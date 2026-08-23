@@ -11,6 +11,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { CreateProductBodyStatus } from './createProductBodyStatus';
+import type { CreateProductBodyWarrantyMonths } from './createProductBodyWarrantyMonths';
 
 /**
  * Request body to create a product.
@@ -28,6 +29,8 @@ export type CreateProductBody = {
      * @maxLength 100
      */
   category?: string;
+  /** Warranty duration in months (catalog values). Defaults to the product catalog when absent. */
+  warrantyMonths?: CreateProductBodyWarrantyMonths;
   /** Defaults to ACTIVE. */
   status?: CreateProductBodyStatus;
   /** Only accepted for PLATFORM_OWNER; required for them. Organization users must not send it (400 VALIDATION_ERROR). */

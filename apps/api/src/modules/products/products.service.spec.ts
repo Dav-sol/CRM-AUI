@@ -324,6 +324,25 @@ describe('ProductsService', () => {
       });
     });
 
+    it('persists warrantyMonths on create', async () => {
+      prisma.product.findFirst.mockResolvedValue(null);
+      prisma.product.create.mockResolvedValue({ id: 'pr-1' });
+
+      await service.create(orgUser, { ...validDto, warrantyMonths: 15 });
+
+      expect(prisma.product.create).toHaveBeenCalledWith({
+        data: {
+          organizationId: 'org-1',
+          code: 'P-100',
+          name: 'Batería X',
+          category: null,
+          warrantyMonths: 15,
+          status: undefined,
+          createdBy: 'u-1',
+        },
+      });
+    });
+
     it('returns 409 CONFLICT for a duplicate code (schema.prisma:128)', async () => {
       prisma.product.findFirst.mockResolvedValue({ id: 'pr-old' });
 
@@ -471,6 +490,28 @@ describe('ProductsService', () => {
         description: 'product updated code=P-100',
       });
       expect(result).toEqual({ id: 'pr-1', status: 'INACTIVE' });
+    });
+
+    it('persists warrantyMonths on update', async () => {
+      prisma.product.findFirst.mockResolvedValue({
+        id: 'pr-1',
+        code: 'P-100',
+        organizationId: 'org-1',
+      });
+      prisma.product.update.mockResolvedValue({ id: 'pr-1' });
+
+      await service.update(orgUser, 'pr-1', { warrantyMonths: 24 });
+
+      expect(prisma.product.update).toHaveBeenCalledWith({
+        where: { id: 'pr-1' },
+        data: {
+          name: undefined,
+          category: undefined,
+          warrantyMonths: 24,
+          status: undefined,
+          updatedBy: 'u-1',
+        },
+      });
     });
 
     it('returns 404 for cross-tenant, missing, or soft-deleted products', async () => {

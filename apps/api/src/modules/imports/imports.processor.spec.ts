@@ -300,6 +300,62 @@ describe('ImportsProcessor', () => {
       );
     });
 
+    it('inherits product warranty and computes warrantyExpiresAt for imported purchases', async () => {
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from(
+          'invoiceNumber,codcli,code,purchaseDate,quantity,value\nF-2,C1,P1,2026-08-01,1,300.00\n',
+        ),
+      );
+      prisma.customer.findMany.mockResolvedValue([
+        { id: 'c-1', codcli: 'C1', deletedAt: null },
+      ]);
+      prisma.product.findMany.mockResolvedValue([
+        { id: 'p-1', code: 'P1', warrantyMonths: 15, deletedAt: null },
+      ]);
+      prisma.purchase.create.mockResolvedValue({ id: 'pu-2' });
+
+      await processor.process(csvJob('PURCHASES', 'uploads/x.csv'));
+
+      const expected = new Date('2026-08-01T00:00:00.000Z');
+      expected.setMonth(expected.getMonth() + 15);
+      expect(prisma.purchase.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            warrantyMonths: 15,
+            warrantyExpiresAt: expected,
+          }) as object,
+        }),
+      );
+    });
+
+    it('honors an explicit warranty column over the product default', async () => {
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from(
+          'invoiceNumber,codcli,code,purchaseDate,quantity,value,warrantyMonths\nF-3,C1,P1,2026-08-01,1,300.00,18\n',
+        ),
+      );
+      prisma.customer.findMany.mockResolvedValue([
+        { id: 'c-1', codcli: 'C1', deletedAt: null },
+      ]);
+      prisma.product.findMany.mockResolvedValue([
+        { id: 'p-1', code: 'P1', warrantyMonths: 15, deletedAt: null },
+      ]);
+      prisma.purchase.create.mockResolvedValue({ id: 'pu-3' });
+
+      await processor.process(csvJob('PURCHASES', 'uploads/x.csv'));
+
+      const expected = new Date('2026-08-01T00:00:00.000Z');
+      expected.setMonth(expected.getMonth() + 18);
+      expect(prisma.purchase.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            warrantyMonths: 18,
+            warrantyExpiresAt: expected,
+          }) as object,
+        }),
+      );
+    });
+
     it('skips duplicate tuples via P2002 and still completes (CP-005)', async () => {
       (readFile as jest.Mock).mockResolvedValue(
         Buffer.from(

@@ -69,6 +69,10 @@ export interface AutomationSummary {
   purchaseId: string;
   commercialCycleId: string;
   createdAt: Date;
+  campaign: { uuid: string; name: string } | null;
+  customer: { name: string; phone: string | null } | null;
+  productName: string;
+  messageTemplate: string | null;
 }
 
 export interface AutomationDetail extends AutomationSummary {
@@ -103,11 +107,19 @@ const AUTOMATION_INCLUDE = {
     },
   },
   commercialCycle: { select: { uuid: true } },
+  campaign: { select: { uuid: true, name: true } },
 } as const;
 
 const AUTOMATION_INCLUDE_SUMMARY = {
-  purchase: { select: { uuid: true } },
+  purchase: {
+    select: {
+      uuid: true,
+      product: { select: { name: true } },
+      customer: { select: { name: true, phone: true } },
+    },
+  },
   commercialCycle: { select: { uuid: true } },
+  campaign: { select: { uuid: true, name: true } },
 } as const;
 
 const CYCLE_INCLUDE_SUMMARY = {
@@ -170,6 +182,17 @@ function toAutomationSummary(
     commercialCycleId:
       automation.commercialCycle?.uuid ?? automation.commercialCycleId ?? '',
     createdAt: automation.createdAt,
+    campaign: automation.campaign
+      ? { uuid: automation.campaign.uuid, name: automation.campaign.name }
+      : null,
+    customer: automation.purchase?.customer
+      ? {
+          name: automation.purchase.customer.name,
+          phone: automation.purchase.customer.phone,
+        }
+      : null,
+    productName: automation.purchase?.product?.name ?? '',
+    messageTemplate: automation.messageTemplate,
   };
 }
 
@@ -491,7 +514,7 @@ export class AutomationsService {
         orderBy: this.buildSort(
           query.sort,
           AUTOMATION_SORT_FIELDS,
-          '-scheduledDate',
+          '-createdAt',
         ),
         skip: (page - 1) * limit,
         take: limit,

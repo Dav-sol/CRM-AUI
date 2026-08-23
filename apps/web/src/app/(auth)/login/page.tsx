@@ -75,7 +75,7 @@ export default function LoginPage() {
         <Card className="border-border/70 shadow-sm">
           <CardHeader>
             <CardTitle className="text-base">Iniciá sesión</CardTitle>
-            <CardDescription>Ingresá tus credenciales para continuar.</CardDescription>
+            <CardDescription>Ingresa tus credenciales para continuar.</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>

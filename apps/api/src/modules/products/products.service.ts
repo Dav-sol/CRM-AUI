@@ -98,6 +98,7 @@ export class ProductsService {
           code: dto.code,
           name: dto.name,
           category: dto.category ?? null,
+          warrantyMonths: dto.warrantyMonths,
           status: dto.status ?? undefined,
           createdBy: user.id,
         },
@@ -160,6 +161,7 @@ export class ProductsService {
       data: {
         name: dto.name ?? undefined,
         category: dto.category ?? undefined,
+        warrantyMonths: dto.warrantyMonths ?? undefined,
         status: dto.status ?? undefined,
         updatedBy: user.id,
       },

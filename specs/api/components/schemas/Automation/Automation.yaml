@@ -52,6 +52,40 @@ properties:
     type: string
     description: uuid of the owning commercial cycle.
 
+  campaign:
+    type: object
+    nullable: true
+    required:
+      - uuid
+      - name
+    properties:
+      uuid:
+        type: string
+      name:
+        type: string
+    description: Campaign that generated this automation, when applicable.
+
+  customer:
+    type: object
+    nullable: true
+    required:
+      - name
+    properties:
+      name:
+        type: string
+      phone:
+        type: string
+        nullable: true
+
+  productName:
+    type: string
+    description: Name of the purchased product (list context).
+
+  messageTemplate:
+    type: string
+    nullable: true
+    description: Snapshot of the message template used at execution time.
+
   createdAt:
     type: string
     format: date-time

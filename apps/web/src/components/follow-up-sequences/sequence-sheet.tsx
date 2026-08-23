@@ -219,7 +219,7 @@ function SequenceFormFields({
         </p>
         {fields.length === 0 && (
           <p className="text-xs text-muted-foreground">
-            Agregá al menos una etapa.
+            Agrega al menos una etapa.
           </p>
         )}
         <div className="space-y-2">
@@ -385,7 +385,7 @@ function SequenceFormFields({
                 )}
                 <p className="text-xs text-muted-foreground">
                   Se usa cuando esta etapa ya venció al activar la campaña. Si
-                  lo dejás vacío, se usa el mensaje base de la campaña.
+                  lo dejas vacío, se usa el mensaje base de la campaña.
                 </p>
               </div>
             </div>
@@ -479,7 +479,7 @@ export function CreateSequenceSheet({ onCreated }: { onCreated?: () => void }) {
         <SheetHeader className="border-b border-border/60">
           <SheetTitle>Nueva secuencia</SheetTitle>
           <SheetDescription>
-            La secuencia se crea con sus etapas. Definí la duración de garantía
+            La secuencia se crea con sus etapas. Define la duración de garantía
             y el momento de cada etapa: después de la compra o respecto al
             vencimiento.
           </SheetDescription>

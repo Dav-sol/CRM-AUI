@@ -349,6 +349,22 @@ describe('CampaignsService', () => {
   });
 
   describe('update (US3, FR-004)', () => {
+    it('rejects an empty body (at least one field required)', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(campaignRow());
+
+      await expect(
+        service.update(orgUser, 'cu-1', {} as never),
+      ).rejects.toMatchObject({
+        response: {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: expect.stringContaining('At least one field'),
+          },
+        },
+      });
+      expect(prisma.campaign.update).not.toHaveBeenCalled();
+    });
+
     it('updates only while DRAFT', async () => {
       prisma.campaign.findFirst.mockResolvedValue(campaignRow());
       prisma.campaign.update.mockResolvedValue({
@@ -733,7 +749,7 @@ describe('CampaignsService', () => {
       );
     });
 
-    it('converts a past stage into an immediate repurchase automation using templateOnPast (HG-SEM-03)', async () => {
+    it('converts a past WARRANTY_EXPIRY stage into an immediate repurchase automation using templateOnPast (HG-SEM-03)', async () => {
       prisma.campaign.findFirst.mockResolvedValue(
         campaignRow({
           followUpSequence: {
@@ -742,8 +758,8 @@ describe('CampaignsService', () => {
             stages: [
               {
                 uuid: 'st-1',
-                name: 'P',
-                anchor: 'PURCHASE_DATE',
+                name: 'W',
+                anchor: 'WARRANTY_EXPIRY',
                 offsetDays: 0,
                 template: 'original',
                 templateOnPast: 'renovación',
@@ -761,7 +777,7 @@ describe('CampaignsService', () => {
               customerId: 'cu-a',
               purchaseDate: '2026-01-01T12:00:00.000Z',
             },
-            null,
+            new Date('2026-01-01T12:00:00.000Z'),
           );
           txAutomationCreate = tx.automation.create;
           return fn(tx);
@@ -788,8 +804,8 @@ describe('CampaignsService', () => {
             stages: [
               {
                 uuid: 'st-1',
-                name: 'P',
-                anchor: 'PURCHASE_DATE',
+                name: 'W',
+                anchor: 'WARRANTY_EXPIRY',
                 offsetDays: 0,
                 template: 'original',
               },
@@ -806,7 +822,7 @@ describe('CampaignsService', () => {
               customerId: 'cu-a',
               purchaseDate: '2026-01-01T12:00:00.000Z',
             },
-            null,
+            new Date('2026-01-01T12:00:00.000Z'),
           );
           txAutomationCreate = tx.automation.create;
           return fn(tx);
@@ -822,7 +838,7 @@ describe('CampaignsService', () => {
       expect(call.data.messageTemplate).toBe('Hola {customerName}');
     });
 
-    it('dedupes multiple past stages into a single repurchase automation per purchase', async () => {
+    it('dedupes multiple past WARRANTY_EXPIRY stages into a single repurchase automation per purchase', async () => {
       prisma.campaign.findFirst.mockResolvedValue(
         campaignRow({
           followUpSequence: {
@@ -831,19 +847,65 @@ describe('CampaignsService', () => {
             stages: [
               {
                 uuid: 'st-1',
-                name: 'P0',
-                anchor: 'PURCHASE_DATE',
-                offsetDays: 0,
+                name: 'W-30',
+                anchor: 'WARRANTY_EXPIRY',
+                offsetDays: -30,
                 template: 't0',
                 templateOnPast: 'r0',
               },
               {
                 uuid: 'st-2',
-                name: 'P10',
-                anchor: 'PURCHASE_DATE',
-                offsetDays: 10,
+                name: 'W0',
+                anchor: 'WARRANTY_EXPIRY',
+                offsetDays: 0,
                 template: 't10',
-                templateOnPast: 'r10',
+                templateOnPast: 'r1',
+              },
+            ],
+          },
+        }),
+      );
+      let txAutomationCreate: jest.Mock | undefined;
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = sequenceTransaction(
+            {
+              id: 'pu-1',
+              customerId: 'cu-a',
+              purchaseDate: '2026-01-01T12:00:00.000Z',
+            },
+            new Date('2026-01-01T12:00:00.000Z'),
+          );
+          txAutomationCreate = tx.automation.create;
+          return fn(tx);
+        },
+      );
+
+      const result = await service.activate(orgUser, 'cu-1');
+
+      expect(result.automationCount).toBe(1);
+      expect(txAutomationCreate).toHaveBeenCalledTimes(1);
+      const [call] = txAutomationCreate!.mock.calls[0] as [
+        { data: { scheduledDate: Date; messageTemplate: string } },
+      ];
+      expect(call.data.messageTemplate).toBe('r1');
+      expect(call.data.scheduledDate.getTime()).toBeLessThanOrEqual(Date.now());
+    });
+
+    it('omits past PURCHASE_DATE stages without generating a repurchase', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        campaignRow({
+          followUpSequence: {
+            uuid: 'fus-1',
+            warrantyMonths: 12,
+            stages: [
+              {
+                uuid: 'st-1',
+                name: 'P',
+                anchor: 'PURCHASE_DATE',
+                offsetDays: 0,
+                template: 'original',
+                templateOnPast: 'recompra',
               },
             ],
           },
@@ -867,13 +929,55 @@ describe('CampaignsService', () => {
 
       const result = await service.activate(orgUser, 'cu-1');
 
+      expect(result.automationCount).toBe(0);
+      expect(txAutomationCreate).not.toHaveBeenCalled();
+    });
+
+    it('uses startAt as the reference: past WARRANTY_EXPIRY stages become repurchase at startAt', async () => {
+      const startAt = new Date('2026-10-01T12:00:00.000Z');
+      prisma.campaign.findFirst.mockResolvedValue(
+        campaignRow({
+          startAt,
+          followUpSequence: {
+            uuid: 'fus-1',
+            warrantyMonths: 12,
+            stages: [
+              {
+                uuid: 'st-1',
+                name: 'W',
+                anchor: 'WARRANTY_EXPIRY',
+                offsetDays: 0,
+                template: 'original',
+                templateOnPast: 'renovación',
+              },
+            ],
+          },
+        }),
+      );
+      let txAutomationCreate: jest.Mock | undefined;
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = sequenceTransaction(
+            {
+              id: 'pu-1',
+              customerId: 'cu-a',
+              purchaseDate: '2026-01-01T12:00:00.000Z',
+            },
+            new Date('2026-01-01T12:00:00.000Z'),
+          );
+          txAutomationCreate = tx.automation.create;
+          return fn(tx);
+        },
+      );
+
+      const result = await service.activate(orgUser, 'cu-1');
+
       expect(result.automationCount).toBe(1);
-      expect(txAutomationCreate).toHaveBeenCalledTimes(1);
       const [call] = txAutomationCreate!.mock.calls[0] as [
         { data: { scheduledDate: Date; messageTemplate: string } },
       ];
-      expect(call.data.messageTemplate).toBe('r10');
-      expect(call.data.scheduledDate.getTime()).toBeLessThanOrEqual(Date.now());
+      expect(call.data.scheduledDate.getTime()).toBe(startAt.getTime());
+      expect(call.data.messageTemplate).toBe('renovación');
     });
 
     it('reuses an existing ACTIVE cycle for the purchase', async () => {

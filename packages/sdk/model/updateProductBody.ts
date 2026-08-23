@@ -11,6 +11,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { UpdateProductBodyStatus } from './updateProductBodyStatus';
+import type { UpdateProductBodyWarrantyMonths } from './updateProductBodyWarrantyMonths';
 
 /**
  * Request body to update a product. code is immutable and rejected with 400.
@@ -28,6 +29,8 @@ export type UpdateProductBody = {
      * @maxLength 100
      */
   category?: string;
+  /** Warranty duration in months (catalog values). */
+  warrantyMonths?: UpdateProductBodyWarrantyMonths;
   /** No transitions workflow in v1. */
   status?: UpdateProductBodyStatus;
 };

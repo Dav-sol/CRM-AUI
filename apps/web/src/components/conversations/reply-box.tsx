@@ -78,7 +78,7 @@ export function ReplyBox({ onSend }: ReplyBoxProps) {
               void send();
             }
           }}
-          placeholder="Escribí tu respuesta… (Enter para enviar)"
+          placeholder="Escribe tu respuesta… (Enter para enviar)"
           rows={2}
           className="min-h-11 resize-none"
           aria-label="Respuesta"

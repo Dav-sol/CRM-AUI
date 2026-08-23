@@ -33,6 +33,27 @@ export type GetAutomation200Data = ({
   purchaseId: string;
   /** uuid of the owning commercial cycle. */
   commercialCycleId: string;
+  /**
+     * Campaign that generated this automation, when applicable.
+     * @nullable
+     */
+  campaign?: {
+  uuid: string;
+  name: string;
+} | null;
+  /** @nullable */
+  customer?: {
+  name: string;
+  /** @nullable */
+  phone?: string | null;
+} | null;
+  /** Name of the purchased product (list context). */
+  productName?: string;
+  /**
+     * Snapshot of the message template used at execution time.
+     * @nullable
+     */
+  messageTemplate?: string | null;
   createdAt: string;
 }) & ({
   organizationId: string;

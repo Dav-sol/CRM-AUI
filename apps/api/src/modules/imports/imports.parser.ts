@@ -86,6 +86,13 @@ const HEADER_ALIASES: Record<string, string> = {
   cod_cliente: 'codcli',
   sale: 'quantity',
   venta: 'value',
+  warranty_months: 'warrantyMonths',
+  warrantyMonths: 'warrantyMonths',
+  warrantymonths: 'warrantyMonths',
+  warranty: 'warrantyMonths',
+  meses_garantia: 'warrantyMonths',
+  garantia: 'warrantyMonths',
+  garantias: 'warrantyMonths',
 };
 
 const REQUIRED_COLUMNS: Record<ImportType, string[]> = {
@@ -403,6 +410,7 @@ export function validateRow(type: ImportType, row: ParsedRow): RowIssue[] {
         status,
       );
     }
+    validateWarrantyCells(issues, row);
     return issues;
   }
 
@@ -467,5 +475,24 @@ export function validateRow(type: ImportType, row: ParsedRow): RowIssue[] {
     );
   }
 
+  validateWarrantyCells(issues, row);
+
   return issues;
+}
+
+function validateWarrantyCells(issues: RowIssue[], row: ParsedRow): void {
+  const raw = row.cells['warrantyMonths'] ?? '';
+  if (!raw) {
+    return;
+  }
+  const months = Number(raw);
+  if (!Number.isInteger(months) || months < 1 || months > 24) {
+    pushIssue(
+      issues,
+      row.number,
+      'warrantyMonths',
+      'warrantyMonths must be an integer between 1 and 24',
+      raw,
+    );
+  }
 }

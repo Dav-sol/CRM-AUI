@@ -74,7 +74,7 @@ describe("CreateSequenceSheet", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getAllByText(/Ingresá el nombre/).length).toBeGreaterThan(
+      expect(screen.getAllByText(/Ingresa el nombre/).length).toBeGreaterThan(
         0,
       ),
     );

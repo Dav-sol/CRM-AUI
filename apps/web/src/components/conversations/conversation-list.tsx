@@ -106,7 +106,7 @@ export function ConversationList({
       <EmptyState
         icon={MessagesSquare}
         title="Sin conversaciones"
-        description="Cuando haya conversaciones con tus clientes, las vas a ver acá."
+        description="Cuando haya conversaciones con tus clientes, las vas a ver aquí."
         className="py-8"
       />
     );

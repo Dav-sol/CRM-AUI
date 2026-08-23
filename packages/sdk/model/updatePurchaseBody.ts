@@ -11,6 +11,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { UpdatePurchaseBodyStatus } from './updatePurchaseBodyStatus';
+import type { UpdatePurchaseBodyWarrantyMonths } from './updatePurchaseBodyWarrantyMonths';
 
 /**
  * Request body to update a purchase. invoiceNumber is immutable and rejected with 400 if present. customerId and productId are immutable and ignored by the whitelist.
@@ -32,4 +33,6 @@ export type UpdatePurchaseBody = {
   value?: string;
   /** Changed freely without transitional rules (HG-7). */
   status?: UpdatePurchaseBodyStatus;
+  /** Overrides the effective warranty duration in months (catalog values); recomputes warrantyExpiresAt. */
+  warrantyMonths?: UpdatePurchaseBodyWarrantyMonths;
 };

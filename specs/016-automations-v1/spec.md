@@ -37,7 +37,7 @@ The Automatizaciones module (Módulo 05, `specs/02-modules.md:136-162`) programs
 - **FR-003**: AU-003 (US2): when a purchase is imported for a customer with an ACTIVE cycle, the existing cycle's PENDING/SCHEDULED automations → CANCELLED, the cycle → CANCELLED (`endDate = now`), then a new ACTIVE cycle + 3 automations are created (transactional; Q6).
 - **FR-004**: `GET /commercial-cycles` list: filters `status`, `customerId`, `purchaseId`, `createdFrom`, `createdTo`, pagination page/limit (≤100), sort whitelist (`-createdAt` default); tenant-scoped (US3).
 - **FR-005**: `GET /commercial-cycles/{uuid}`: detail including automations; cross-tenant/unknown → 404 `COMMERCIAL_CYCLE_NOT_FOUND` (US3).
-- **FR-006**: `GET /automations` list: filters `status`, `commercialCycleId`, `customerId`, `scheduledFrom`, `scheduledTo`, pagination, sort whitelist (`-scheduledDate` default); tenant-scoped (US4).
+- **FR-006**: `GET /automations` list: filters `status`, `commercialCycleId`, `customerId`, `scheduledFrom`, `scheduledTo`, pagination, sort whitelist (`-createdAt` default, most recent first); tenant-scoped (US4).
 - **FR-007**: `GET /automations/{uuid}`: detail with cycle/purchase/customer summaries; cross-tenant/unknown → 404 `AUTOMATION_NOT_FOUND` (US4).
 - **FR-008**: `POST /automations/{uuid}/cancel`: only PENDING/SCHEDULED → CANCELLED (AU-002, US5); EXECUTED/CANCELLED/PAUSED → 400 (AU-004); unknown/cross-tenant → 404 (Q8).
 - **FR-009**: Roles: `@Roles('PLATFORM_OWNER','ADMINISTRADOR','GERENTE')` on POST cancel; GET endpoints open to all authenticated roles (Q11).

@@ -225,7 +225,7 @@
     summary: List automations
 
     description: |
-      Returns a paginated list of automations ordered by -scheduledDate.
+      Returns a paginated list of automations ordered by -createdAt.
       Organization users only see their own organization; PLATFORM_OWNER sees all.
 
     operationId: listAutomations
@@ -310,7 +310,7 @@
       - name: sort
         in: query
         required: false
-        description: Field sorted by; "-" prefix means descending. Defaults to -scheduledDate.
+        description: Field sorted by; "-" prefix means descending. Defaults to -createdAt.
         schema:
           type: string
           pattern: "^-?(scheduledDate|createdAt|updatedAt|status)$"

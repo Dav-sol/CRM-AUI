@@ -102,7 +102,7 @@ export function SequenceList({ items, error, onChanged, onSelect, onEdit }: Sequ
       <EmptyState
         icon={Zap}
         title="Sin secuencias"
-        description="Cuando crees secuencias de seguimiento, las vas a ver acá."
+        description="Cuando crees secuencias de seguimiento, las vas a ver aquí."
         className="py-8"
       />
     );

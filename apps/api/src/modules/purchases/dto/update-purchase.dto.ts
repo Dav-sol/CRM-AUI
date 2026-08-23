@@ -1,6 +1,7 @@
 import {
   IsDateString,
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   Matches,
@@ -55,5 +56,6 @@ export class UpdatePurchaseDto {
   @IsInt()
   @Min(1)
   @Max(24)
+  @IsIn([12, 15, 18, 24])
   warrantyMonths?: number;
 }

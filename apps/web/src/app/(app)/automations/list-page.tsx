@@ -1,6 +1,12 @@
 "use client";
 
-import { CalendarClock, ChevronLeft, ChevronRight, Sparkles, Wand2 } from "lucide-react";
+import {
+  CalendarClock,
+  ChevronLeft,
+  ChevronRight,
+  Sparkles,
+  Wand2,
+} from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -8,6 +14,7 @@ import {
   AutomationList,
   AutomationStatusBadge,
   useAutomations,
+  useUpcomingAutomations,
   type AutomationFilters,
 } from "@/components/automations/automation-list";
 import { AutomationDetailSheet } from "@/components/automations/automation-detail";
@@ -17,43 +24,37 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const AUTOMATION_TABS: { label: string; value: AutomationFilters["status"] }[] = [
-  { label: "Todas", value: undefined },
-  { label: "Programadas", value: "SCHEDULED" },
-  { label: "Ejecutadas", value: "EXECUTED" },
-  { label: "Canceladas", value: "CANCELLED" },
-];
+const AUTOMATION_TABS: { label: string; value: AutomationFilters["status"] }[] =
+  [
+    { label: "Todas", value: undefined },
+    { label: "Programadas", value: "SCHEDULED" },
+    { label: "Ejecutadas", value: "EXECUTED" },
+    { label: "Canceladas", value: "CANCELLED" },
+  ];
 
 export function AutomationsIndexPage() {
   const [status, setStatus] = useState<AutomationFilters["status"]>(undefined);
   const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [selectedAutomation, setSelectedAutomation] = useState<string | null>(null);
-  const [now] = useState(() => Date.now());
+  const [selectedAutomation, setSelectedAutomation] = useState<string | null>(
+    null,
+  );
 
   const { items, meta, error } = useAutomations({ page, status, refreshKey });
+  const upcoming = useUpcomingAutomations(refreshKey);
 
   const totalPages = meta?.pages ?? 1;
-
-  const upcoming =
-    items
-      ?.filter(
-        (a) => a.status === "SCHEDULED" && new Date(a.scheduledDate).getTime() >= now,
-      )
-      .sort(
-        (a, b) =>
-          new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime(),
-      )
-      .slice(0, 4) ?? [];
 
   return (
     <div className="flex h-full w-full flex-col p-4 lg:p-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Automatizaciones</h1>
+          <h1 className="text-xl font-semibold tracking-tight">
+            Automatizaciones
+          </h1>
           <p className="text-sm text-muted-foreground">
-            Cada compra o campaña genera un mensaje de seguimiento automático en la fecha
-            programada. Acá ves todo el pipeline.
+            Cada compra o campaña genera un mensaje de seguimiento automático en
+            la fecha programada. Acá ves todo el pipeline.
           </p>
         </div>
         <Button variant="outline" onClick={() => setRefreshKey((k) => k + 1)}>
@@ -71,8 +72,8 @@ export function AutomationsIndexPage() {
             ¿Preferís empezar con una plantilla lista?
           </p>
           <p className="text-xs text-muted-foreground">
-            Creá un seguimiento desde una plantilla predefinida: bienvenida, recordatorio de
-            garantía o reactivación.
+            Crea un seguimiento desde una plantilla predefinida: bienvenida,
+            recordatorio de garantía o reactivación.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -98,19 +99,19 @@ export function AutomationsIndexPage() {
           <CalendarClock className="size-4 text-primary" aria-hidden="true" />
           Próximas a ejecutarse
         </h2>
-        {items === null ? (
+        {upcoming.items === null ? (
           <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {Array.from({ length: 4 }).map((_, index) => (
               <Skeleton key={index} className="h-20 w-full" />
             ))}
           </div>
-        ) : upcoming.length === 0 ? (
+        ) : upcoming.items.length === 0 ? (
           <p className="mt-2 rounded-lg border border-border/60 bg-card p-3 text-sm text-muted-foreground">
             No hay mensajes programados para el futuro cercano.
           </p>
         ) : (
           <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {upcoming.map((automation) => (
+            {upcoming.items.map((automation) => (
               <button
                 key={automation.uuid}
                 type="button"
@@ -133,7 +134,10 @@ export function AutomationsIndexPage() {
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-1 rounded-lg bg-muted p-1" role="tablist">
+        <div
+          className="flex items-center gap-1 rounded-lg bg-muted p-1"
+          role="tablist"
+        >
           {AUTOMATION_TABS.map((tabItem) => (
             <button
               key={tabItem.label}

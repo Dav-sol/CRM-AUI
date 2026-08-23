@@ -45,7 +45,7 @@ export function CampaignsPanel({ data }: CampaignsPanelProps) {
       <EmptyState
         icon={Megaphone}
         title="Sin campañas próximas"
-        description="Las campañas programadas aparecerán acá."
+        description="Las campañas programadas aparecerán aquí."
       />
     );
   }

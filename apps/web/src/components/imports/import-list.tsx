@@ -144,7 +144,7 @@ export function ImportList({ items, error, onSelect }: ImportListProps) {
       <EmptyState
         icon={FileUp}
         title="Sin importaciones"
-        description="Subí tu primer archivo de clientes, productos o compras para empezar."
+        description="Sube tu primer archivo de clientes, productos o compras para empezar."
         className="py-8"
       />
     );

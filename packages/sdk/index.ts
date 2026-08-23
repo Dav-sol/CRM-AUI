@@ -2326,7 +2326,7 @@ export const getListAutomationsUrl = (params?: ListAutomationsParams,) => {
 }
 
 /**
- * Returns a paginated list of automations ordered by -scheduledDate.
+ * Returns a paginated list of automations ordered by -createdAt.
  * Organization users only see their own organization; PLATFORM_OWNER sees all.
  * @summary List automations
  */

@@ -236,5 +236,32 @@ describe('imports.parser', () => {
         expect.arrayContaining(['purchaseDate', 'quantity', 'value']),
       );
     });
+
+    it('accepts warranty aliases and flags out-of-range warrantyMonths', () => {
+      expect(
+        validateRow(
+          'PRODUCTS',
+          row({
+            code: 'P1',
+            name: 'Batería',
+            warrantyMonths: '15',
+          }),
+        ),
+      ).toEqual([]);
+
+      const issues = validateRow(
+        'PURCHASES',
+        row({
+          invoiceNumber: 'F1',
+          codcli: 'C1',
+          code: 'P1',
+          purchaseDate: '2026-08-01',
+          quantity: '1',
+          value: '100',
+          warrantyMonths: '25',
+        }),
+      );
+      expect(issues.map((issue) => issue.field)).toContain('warrantyMonths');
+    });
   });
 });

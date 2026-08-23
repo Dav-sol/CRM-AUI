@@ -43,7 +43,7 @@ export function Thread({ messages, loading }: ThreadProps) {
         <EmptyState
           icon={MessageSquareText}
           title="Sin mensajes todavía"
-          description="Cuando haya mensajes en esta conversación, los vas a ver acá."
+          description="Cuando haya mensajes en esta conversación, los vas a ver aquí."
         />
       </div>
     );

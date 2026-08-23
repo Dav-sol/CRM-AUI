@@ -298,6 +298,26 @@ export class CampaignsService {
       });
     }
 
+    const hasChanges =
+      dto.name !== undefined ||
+      dto.description !== undefined ||
+      dto.type !== undefined ||
+      dto.template !== undefined ||
+      dto.templateD3 !== undefined ||
+      dto.templateD180 !== undefined ||
+      dto.templateD365 !== undefined ||
+      dto.segment !== undefined ||
+      dto.startAt !== undefined ||
+      dto.followUpSequenceId !== undefined;
+    if (!hasChanges) {
+      throw new BadRequestException({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'At least one field must be provided',
+        },
+      });
+    }
+
     const updated = await this.prisma.campaign.update({
       where: { id: campaign.id },
       data: {
@@ -450,7 +470,9 @@ export class CampaignsService {
           rows,
           followUpSequence.stages,
           campaign.template,
-          now,
+          // Reference = max(startAt, now): the campaign starts operating on
+          // this date; stages before it are never sent historically.
+          scheduledDate,
         );
       } else {
         // Original single-template logic
@@ -939,7 +961,7 @@ export class CampaignsService {
       templateOnPast: string | null;
     }>,
     campaignTemplate: string,
-    now: Date,
+    reference: Date,
   ): Promise<number> {
     let automationCount = 0;
 
@@ -995,8 +1017,9 @@ export class CampaignsService {
           cycleId = existing.id;
         }
 
-        // HG-SEM-03: stages whose computed date already passed are converted
-        // into a single immediate repurchase automation (per purchase).
+        // HG-SEM-03: stages whose computed date is before the campaign start
+        // reference (max(startAt, now)) become a repurchase opportunity when
+        // warranty-anchored; purchase-anchored past stages are omitted.
         let repurchaseStage: {
           stage: (typeof stages)[number];
           computed: Date;
@@ -1020,16 +1043,19 @@ export class CampaignsService {
           const computed = new Date(base);
           computed.setDate(computed.getDate() + stage.offsetDays);
 
-          if (computed.getTime() < now.getTime()) {
-            // Stage date already passed at activation: keep the most advanced
-            // past stage as the repurchase candidate for this purchase.
-            if (
-              !repurchaseStage ||
-              computed.getTime() > repurchaseStage.computed.getTime() ||
-              (computed.getTime() === repurchaseStage.computed.getTime() &&
-                stage.offsetDays > repurchaseStage.stage.offsetDays)
-            ) {
-              repurchaseStage = { stage, computed };
+          if (computed.getTime() < reference.getTime()) {
+            // The stage moment precedes the campaign start: no historical send.
+            // WARRANTY_EXPIRY stages become a repurchase candidate (the most
+            // advanced past warranty stage); PURCHASE_DATE stages are omitted.
+            if (stage.anchor === FollowUpStageAnchor.WARRANTY_EXPIRY) {
+              if (
+                !repurchaseStage ||
+                computed.getTime() > repurchaseStage.computed.getTime() ||
+                (computed.getTime() === repurchaseStage.computed.getTime() &&
+                  stage.offsetDays > repurchaseStage.stage.offsetDays)
+              ) {
+                repurchaseStage = { stage, computed };
+              }
             }
             continue;
           }
@@ -1060,7 +1086,7 @@ export class CampaignsService {
               purchaseId: row.purchaseId,
               campaignId,
               commercialCycleId: cycleId,
-              scheduledDate: now,
+              scheduledDate: reference,
               status: 'SCHEDULED',
               priority: 0,
               messageTemplate: stage.templateOnPast ?? campaignTemplate,

@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 export const loginSchema = z.object({
-  email: z.string().email("Ingresá un email válido"),
-  password: z.string().min(1, "Ingresá tu contraseña"),
+  email: z.string().email("Ingresa un email válido"),
+  password: z.string().min(1, "Ingresa tu contraseña"),
 });
 
 export type LoginFormValues = z.infer<typeof loginSchema>;
@@ -29,12 +29,12 @@ export const customerSchema = z.object({
   codcli: z
     .string()
     .trim()
-    .min(1, "Ingresá el código de cliente")
+    .min(1, "Ingresa el código de cliente")
     .max(50, "El código no puede superar los 50 caracteres"),
   name: z
     .string()
     .trim()
-    .min(1, "Ingresá el nombre del cliente")
+    .min(1, "Ingresa el nombre del cliente")
     .max(200, "El nombre no puede superar los 200 caracteres"),
   phone: z
     .string()
@@ -46,7 +46,7 @@ export const customerSchema = z.object({
     .string()
     .trim()
     .max(200, "El email no puede superar los 200 caracteres")
-    .email("Ingresá un email válido")
+    .email("Ingresa un email válido")
     .optional()
     .or(z.literal("")),
   address: z
@@ -66,31 +66,38 @@ export const customerSchema = z.object({
 export type CustomerFormValues = z.infer<typeof customerSchema>;
 
 export const purchaseSchema = z.object({
-  customerId: z.string().min(1, "Seleccioná un cliente"),
-  productId: z.string().min(1, "Seleccioná un producto"),
+  customerId: z.string().min(1, "Selecciona un cliente"),
+  productId: z.string().min(1, "Selecciona un producto"),
   invoiceNumber: z
     .string()
     .trim()
-    .min(1, "Ingresá el número de factura")
+    .min(1, "Ingresa el número de factura")
     .max(50, "El número de factura no puede superar los 50 caracteres"),
-  purchaseDate: z.string().min(1, "Ingresá la fecha de compra"),
+  purchaseDate: z.string().min(1, "Ingresa la fecha de compra"),
   quantity: z.preprocess(
     (value) => (typeof value === "string" && value.trim() === "" ? NaN : value),
     z.coerce
-      .number({ message: "Ingresá la cantidad" })
+      .number({ message: "Ingresa la cantidad" })
       .int("La cantidad debe ser un número entero")
       .min(1, "La cantidad debe ser al menos 1"),
   ),
   value: z
     .string()
     .trim()
-    .min(1, "Ingresá el valor de la compra")
+    .min(1, "Ingresa el valor de la compra")
     .regex(
       /^\d{1,10}(\.\d{1,2})?$/,
       "El valor debe ser un monto válido (ej: 125.50)",
     ),
   status: z.enum(["COMPLETED", "CANCELLED", "REFUNDED"]).default("COMPLETED"),
-  warrantyMonths: z.number().int().positive().max(24).optional(),
+  warrantyMonths: z
+    .number({ message: "La garantía debe ser un número entero" })
+    .int("La garantía debe ser un número entero")
+    .optional()
+    .refine(
+      (value) => value === undefined || [12, 15, 18, 24].includes(value),
+      { message: "La garantía debe ser 12, 15, 18 o 24 meses" },
+    ),
 });
 
 export type PurchaseFormValues = z.output<typeof purchaseSchema>;
@@ -100,7 +107,7 @@ export const campaignSchema = z.object({
   name: z
     .string()
     .trim()
-    .min(1, "Ingresá el nombre de la campaña")
+    .min(1, "Ingresa el nombre de la campaña")
     .max(120, "El nombre no puede superar los 120 caracteres"),
   description: z
     .string()
@@ -113,7 +120,7 @@ export const campaignSchema = z.object({
   template: z
     .string()
     .trim()
-    .min(1, "Ingresá el mensaje de la campaña")
+    .min(1, "Ingresa el mensaje de la campaña")
     .max(4096, "El mensaje no puede superar los 4096 caracteres"),
   templateD3: z
     .string()
@@ -135,7 +142,7 @@ export const campaignSchema = z.object({
     .or(z.literal("")),
   startAt: z
     .string()
-    .min(1, "Ingresá la fecha de inicio")
+    .min(1, "Ingresa la fecha de inicio")
     .optional()
     .or(z.literal("")),
   segment: z
@@ -166,12 +173,12 @@ export const productSchema = z.object({
   code: z
     .string()
     .trim()
-    .min(1, "Ingresá el código del producto")
+    .min(1, "Ingresa el código del producto")
     .max(50, "El código no puede superar los 50 caracteres"),
   name: z
     .string()
     .trim()
-    .min(1, "Ingresá el nombre del producto")
+    .min(1, "Ingresa el nombre del producto")
     .max(200, "El nombre no puede superar los 200 caracteres"),
   category: z
     .string()
@@ -179,6 +186,14 @@ export const productSchema = z.object({
     .max(100, "La categoría no puede superar los 100 caracteres")
     .optional()
     .or(z.literal("")),
+  warrantyMonths: z
+    .number({ message: "La garantía debe ser un número entero" })
+    .int("La garantía debe ser un número entero")
+    .optional()
+    .refine(
+      (value) => value === undefined || [12, 15, 18, 24].includes(value),
+      { message: "La garantía debe ser 12, 15, 18 o 24 meses" },
+    ),
   status: z.enum(["ACTIVE", "INACTIVE"]),
 });
 
@@ -250,7 +265,7 @@ const followUpSequenceStageSchemaBase = z.object({
   name: z
     .string()
     .trim()
-    .min(1, "Ingresá el nombre de la etapa")
+    .min(1, "Ingresa el nombre de la etapa")
     .max(120, "El nombre no puede superar los 120 caracteres"),
   anchor: z.enum(FOLLOW_UP_ANCHORS).optional(),
   offsetDays: z
@@ -261,7 +276,7 @@ const followUpSequenceStageSchemaBase = z.object({
   template: z
     .string()
     .trim()
-    .min(1, "Ingresá el mensaje de la etapa")
+    .min(1, "Ingresa el mensaje de la etapa")
     .max(4096, "El mensaje no puede superar los 4096 caracteres"),
   templateOnPast: z
     .string()
@@ -294,7 +309,7 @@ export const followUpSequenceSchema = z
     name: z
       .string()
       .trim()
-      .min(1, "Ingresá el nombre de la secuencia")
+      .min(1, "Ingresa el nombre de la secuencia")
       .max(120, "El nombre no puede superar los 120 caracteres"),
     description: z
       .string()

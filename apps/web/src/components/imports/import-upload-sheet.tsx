@@ -63,7 +63,7 @@ export function ImportUploadSheet({ onSaved }: ImportUploadSheetProps) {
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (!file) {
-      setSubmitError("Seleccioná un archivo .xlsx, .xls o .csv.");
+      setSubmitError("Selecciona un archivo .xlsx, .xls o .csv.");
       return;
     }
     setSubmitError(null);
@@ -100,7 +100,7 @@ export function ImportUploadSheet({ onSaved }: ImportUploadSheetProps) {
           <SheetHeader className="border-b border-border/60">
             <SheetTitle>Importar archivo</SheetTitle>
             <SheetDescription>
-              Subí un Excel o CSV con tus clientes, productos o compras. Los duplicados se
+              Sube un Excel o CSV con tus clientes, productos o compras. Los duplicados se
               actualizan automáticamente.
             </SheetDescription>
           </SheetHeader>

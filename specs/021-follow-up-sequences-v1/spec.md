@@ -49,19 +49,18 @@ partially documented in the OpenAPI contracts
   Legacy sequences (all `WARRANTY_EXPIRY`) therefore keep the previous
   "skip purchases without warranty" behavior.
 
-- **Q6: What happens to a stage whose computed date already passed at campaign
-  activation?** → A6 (HG-SEM-03): it is **not** sent with its original message
-  and it is **not** silently skipped. It is converted into an immediate
-  repurchase opportunity:
-  - One automation per purchase (at most one — HG-SEM-03 dedupe), using the
-    most advanced past stage (largest computed `scheduledDate`; tie-break:
-    larger `offsetDays`, then stage order).
-  - `scheduledDate = now` (captured once at activation; the scheduler delivers
-    on the next tick).
-  - `messageTemplate = stage.templateOnPast ?? campaign.template` (fallback).
-  - The message communicates that the customer is already in a
-    renewal/repurchase window (never "just happened").
-  Stages whose computed date is today or in the future keep their original
+- **Q6: What happens to a stage whose computed date is before the campaign
+  start?** → A6 (HG-SEM-03, refined): the campaign starts operating on
+  `reference = max(startAt, now)` (captured once at activation). A stage whose
+  computed date is before `reference` is **never sent historically**:
+  - `WARRANTY_EXPIRY` stages become an immediate repurchase opportunity:
+    at most one per purchase (dedupe), using the most advanced past
+    warranty stage (largest computed `scheduledDate`; tie-break: larger
+    `offsetDays`, then stage order). `scheduledDate = reference` and
+    `messageTemplate = stage.templateOnPast ?? campaign.template`. The message
+    communicates a renewal/repurchase window (never "just happened").
+  - `PURCHASE_DATE` stages are simply **omitted** (no repurchase conversion).
+  Stages whose computed date is `reference` or later keep their original
   `scheduledDate` and `messageTemplate`.
 
 - **Q7: Can a sequence mix both anchors?** → A7: Yes (HG-SEM-04).
@@ -123,10 +122,12 @@ default `WARRANTY_EXPIRY`) and `template_on_past` (nullable) — non-destructive
 - **FR-004**: Campaign activation (`campaigns.service.ts`
   `generateAutomationsFromSequence`): per qualifying purchase and per stage,
   resolve `base` from the anchor and compute `scheduledDate`; apply the
-  HG-SEM-05 per-anchor skip and the HG-SEM-03 repurchase conversion.
-- **FR-005**: The repurchase conversion writes `scheduledDate = now` and
+  HG-SEM-05 per-anchor skip and the HG-SEM-03 repurchase conversion using
+  `reference = max(startAt, now)`.
+- **FR-005**: The repurchase conversion applies only to `WARRANTY_EXPIRY`
+  stages before `reference`; it writes `scheduledDate = reference` and
   `messageTemplate = templateOnPast ?? campaign.template` (Q6); at most one per
-  purchase.
+  purchase. `PURCHASE_DATE` stages before `reference` are omitted.
 - **FR-006**: Snapshot semantics preserved: generated `Automation` rows store
   the resolved date and message template (Q10).
 - **FR-007**: Tenant isolation unchanged: sequences are org-scoped; campaign

@@ -20,22 +20,53 @@ export type ProductFilters = {
 
 export function useProducts(filters: ProductFilters) {
   const [items, setItems] = useState<ProductItem[] | null>(null);
-  const [meta, setMeta] = useState<{ page: number; pages: number; total: number } | null>(null);
+  const [meta, setMeta] = useState<{
+    page: number;
+    pages: number;
+    total: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const grouped = !filters.search?.trim() && !filters.status;
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       setError(null);
-      const params: ProductListParams = { page: filters.page ?? 1, limit: 20 };
-      if (filters.search?.trim()) {
-        params.search = filters.search.trim();
-      }
-      if (filters.status) {
-        params.status = filters.status;
-      }
       try {
+        if (grouped) {
+          // Complete grouped catalog: load every page so the brand sections
+          // are not fragmented by pagination.
+          const all: ProductItem[] = [];
+          let page = 1;
+          let pages = 1;
+          do {
+            const data = await apiListProducts({ page, limit: 100 });
+            all.push(...data.data);
+            pages = data.meta?.pages ?? 1;
+            page++;
+            if (cancelled) {
+              return;
+            }
+          } while (page <= pages);
+          if (cancelled) {
+            return;
+          }
+          setItems(all);
+          setMeta({ page: 1, pages: 1, total: all.length });
+          return;
+        }
+        const params: ProductListParams = {
+          page: filters.page ?? 1,
+          limit: 20,
+        };
+        if (filters.search?.trim()) {
+          params.search = filters.search.trim();
+        }
+        if (filters.status) {
+          params.status = filters.status;
+        }
         const data = await apiListProducts(params);
         if (!cancelled) {
           setItems(data.data);
@@ -59,12 +90,22 @@ export function useProducts(filters: ProductFilters) {
     return () => {
       cancelled = true;
     };
-  }, [filters.page, filters.search, filters.status, filters.refreshKey]);
+  }, [
+    filters.page,
+    filters.search,
+    filters.status,
+    filters.refreshKey,
+    grouped,
+  ]);
 
   return { items, meta, error };
 }
 
-export function ProductStatusBadge({ status }: { status: ProductItem["status"] }) {
+export function ProductStatusBadge({
+  status,
+}: {
+  status: ProductItem["status"];
+}) {
   return (
     <Badge variant={status === "ACTIVE" ? "default" : "secondary"}>
       {PRODUCT_STATUS_LABELS[status]}
@@ -107,7 +148,12 @@ export function ProductList({ items, error, onChanged }: ProductListProps) {
 
   if (error) {
     return (
-      <EmptyState icon={Package} title="Error al cargar" description={error} className="py-8" />
+      <EmptyState
+        icon={Package}
+        title="Error al cargar"
+        description={error}
+        className="py-8"
+      />
     );
   }
 
@@ -116,7 +162,7 @@ export function ProductList({ items, error, onChanged }: ProductListProps) {
       <EmptyState
         icon={Package}
         title="Sin productos"
-        description="Cuando cargues tu catálogo de productos, los vas a ver acá."
+        description="Cuando cargues tu catálogo de productos, los vas a ver aquí."
         className="py-8"
       />
     );
@@ -129,6 +175,11 @@ export function ProductList({ items, error, onChanged }: ProductListProps) {
     bucket.push(product);
     groups.set(family, bucket);
   }
+  const naturalCompare = new Intl.Collator(undefined, { numeric: true })
+    .compare;
+  for (const bucket of groups.values()) {
+    bucket.sort((a, b) => naturalCompare(a.code, b.code));
+  }
   const families = [...groups.entries()].sort(
     (a, b) => FAMILY_ORDER.indexOf(a[0]) - FAMILY_ORDER.indexOf(b[0]),
   );
@@ -140,15 +191,21 @@ export function ProductList({ items, error, onChanged }: ProductListProps) {
           <div className="flex items-center justify-between gap-2 px-2">
             <h2 className="text-sm font-semibold tracking-tight">{family}</h2>
             <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-              {familyItems.length} {familyItems.length === 1 ? "producto" : "productos"}
+              {familyItems.length}{" "}
+              {familyItems.length === 1 ? "producto" : "productos"}
             </span>
           </div>
           <ul className="mt-2 divide-y divide-border/60 rounded-lg border border-border/60 bg-card">
             {familyItems.map((product) => (
-              <li key={product.uuid} className="flex items-center gap-4 px-4 py-2.5">
+              <li
+                key={product.uuid}
+                className="flex items-center gap-4 px-4 py-2.5"
+              >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="truncate text-sm font-medium">{product.name}</p>
+                    <p className="truncate text-sm font-medium">
+                      {product.name}
+                    </p>
                     <span className="font-mono text-[11px] text-muted-foreground">
                       {product.code}
                     </span>
@@ -159,7 +216,10 @@ export function ProductList({ items, error, onChanged }: ProductListProps) {
                     {product.warrantyMonths} meses de garantía
                   </Badge>
                 ) : (
-                  <Badge variant="outline" className="shrink-0 text-muted-foreground">
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 text-muted-foreground"
+                  >
                     Sin garantía
                   </Badge>
                 )}

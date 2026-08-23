@@ -137,7 +137,7 @@ export function CampaignList({ items, error, onChanged }: CampaignListProps) {
       <EmptyState
         icon={Megaphone}
         title="Sin campañas"
-        description="Cuando crees campañas de seguimiento, las vas a ver acá."
+        description="Cuando crees campañas de seguimiento, las vas a ver aquí."
         className="py-8"
       />
     );
