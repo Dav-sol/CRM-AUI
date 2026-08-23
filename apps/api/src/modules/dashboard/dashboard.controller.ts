@@ -25,4 +25,9 @@ export class DashboardController {
   async activity(@CurrentUser() user: AuthUser) {
     return { data: await this.dashboardService.activity(user) };
   }
+
+  @Get('actionable')
+  async actionable(@CurrentUser() user: AuthUser) {
+    return { data: await this.dashboardService.actionable(user) };
+  }
 }

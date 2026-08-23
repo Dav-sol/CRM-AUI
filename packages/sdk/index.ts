@@ -139,6 +139,8 @@ import type {
   GetCustomer200,
   GetCustomer401,
   GetCustomer404,
+  GetDashboardActionable200,
+  GetDashboardActionable401,
   GetDashboardActivity200,
   GetDashboardActivity401,
   GetDashboardCampaigns200,
@@ -4598,6 +4600,59 @@ export const getDashboardActivity = async ( options?: RequestInit): Promise<getD
 
   const data: getDashboardActivityResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as getDashboardActivityResponse
+}
+
+
+
+export type getDashboardActionableResponse200 = {
+  data: GetDashboardActionable200
+  status: 200
+}
+
+export type getDashboardActionableResponse401 = {
+  data: GetDashboardActionable401
+  status: 401
+}
+
+export type getDashboardActionableResponseSuccess = (getDashboardActionableResponse200) & {
+  headers: Headers;
+};
+export type getDashboardActionableResponseError = (getDashboardActionableResponse401) & {
+  headers: Headers;
+};
+
+export type getDashboardActionableResponse = (getDashboardActionableResponseSuccess | getDashboardActionableResponseError)
+
+export const getGetDashboardActionableUrl = () => {
+
+
+
+
+  return `/api/v1/dashboard/actionable`
+}
+
+/**
+ * Returns real, org-scoped decision-support lists (demo D3):
+ * upcoming SCHEDULED automations, warranties expiring in ~30 days, and
+ * purchases whose warranty recently expired (repurchase window). Read-only.
+ * @summary Qué hacer hoy (acciones reales)
+ */
+export const getDashboardActionable = async ( options?: RequestInit): Promise<getDashboardActionableResponse> => {
+
+  const res = await fetch(getGetDashboardActionableUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: getDashboardActionableResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getDashboardActionableResponse
 }
 
 

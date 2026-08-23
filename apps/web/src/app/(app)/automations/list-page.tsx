@@ -29,6 +29,7 @@ const AUTOMATION_TABS: { label: string; value: AutomationFilters["status"] }[] =
     { label: "Todas", value: undefined },
     { label: "Programadas", value: "SCHEDULED" },
     { label: "Ejecutadas", value: "EXECUTED" },
+    { label: "Con error", value: "ERROR" },
     { label: "Canceladas", value: "CANCELLED" },
   ];
 

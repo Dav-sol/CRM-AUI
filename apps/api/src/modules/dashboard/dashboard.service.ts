@@ -52,6 +52,41 @@ export interface DashboardActivityItem {
   createdAt: Date;
 }
 
+export interface DashboardUpcomingAutomation {
+  uuid: string;
+  scheduledDate: Date;
+  status: string;
+  customerName: string;
+  productName: string;
+  campaignName: string | null;
+}
+
+export interface DashboardExpiringWarranty {
+  purchaseId: string;
+  customerName: string;
+  productName: string;
+  warrantyExpiresAt: Date;
+}
+
+export interface DashboardRepurchaseOpportunity {
+  purchaseId: string;
+  customerName: string;
+  productName: string;
+  warrantyExpiresAt: Date;
+}
+
+export interface DashboardActionable {
+  upcomingAutomations: DashboardUpcomingAutomation[];
+  expiringWarranties: DashboardExpiringWarranty[];
+  repurchaseWindow: DashboardRepurchaseOpportunity[];
+}
+
+const EMPTY_ACTIONABLE: DashboardActionable = {
+  upcomingAutomations: [],
+  expiringWarranties: [],
+  repurchaseWindow: [],
+};
+
 const EMPTY_SUMMARY: DashboardSummary = {
   customers: { total: 0, newThisMonth: 0 },
   purchases: { total: 0, thisMonth: 0 },
@@ -180,6 +215,97 @@ export class DashboardService {
     ]);
 
     return { recent, upcoming };
+  }
+
+  // "Qué hacer hoy" (demo D3): real, org-scoped, decision-support lists.
+  async actionable(user: AuthUser): Promise<DashboardActionable> {
+    const organizationId = user.organizationId;
+    if (!organizationId) {
+      return EMPTY_ACTIONABLE;
+    }
+    const now = new Date();
+    const in30Days = new Date(now.getTime() + 30 * 86_400_000);
+    const in12Months = new Date(now.getTime() - 12 * 30 * 86_400_000);
+
+    const [upcomingAutomations, expiringWarranties, repurchaseWindow] =
+      await Promise.all([
+        this.prisma.automation.findMany({
+          where: {
+            organizationId,
+            deletedAt: null,
+            status: 'SCHEDULED',
+            scheduledDate: { gte: now },
+            purchase: { deletedAt: null },
+          },
+          orderBy: { scheduledDate: 'asc' },
+          take: 5,
+          select: {
+            uuid: true,
+            scheduledDate: true,
+            status: true,
+            campaign: { select: { name: true } },
+            purchase: {
+              select: {
+                customer: { select: { name: true } },
+                product: { select: { name: true } },
+              },
+            },
+          },
+        }),
+        this.prisma.purchase.findMany({
+          where: {
+            organizationId,
+            deletedAt: null,
+            warrantyExpiresAt: { gte: now, lte: in30Days },
+          },
+          orderBy: { warrantyExpiresAt: 'asc' },
+          take: 5,
+          select: {
+            id: true,
+            warrantyExpiresAt: true,
+            customer: { select: { name: true } },
+            product: { select: { name: true } },
+          },
+        }),
+        this.prisma.purchase.findMany({
+          where: {
+            organizationId,
+            deletedAt: null,
+            warrantyExpiresAt: { gte: in12Months, lte: now },
+          },
+          orderBy: { warrantyExpiresAt: 'desc' },
+          take: 5,
+          select: {
+            id: true,
+            warrantyExpiresAt: true,
+            customer: { select: { name: true } },
+            product: { select: { name: true } },
+          },
+        }),
+      ]);
+
+    return {
+      upcomingAutomations: upcomingAutomations.map((automation) => ({
+        uuid: automation.uuid,
+        scheduledDate: automation.scheduledDate,
+        status: automation.status,
+        customerName: automation.purchase?.customer?.name ?? 'Cliente',
+        productName: automation.purchase?.product?.name ?? '',
+        campaignName: automation.campaign?.name ?? null,
+      })),
+      expiringWarranties: expiringWarranties.map((purchase) => ({
+        purchaseId: purchase.id,
+        customerName: purchase.customer?.name ?? 'Cliente',
+        productName: purchase.product?.name ?? '',
+        warrantyExpiresAt: purchase.warrantyExpiresAt as Date,
+      })),
+      repurchaseWindow: repurchaseWindow.map((purchase) => ({
+        purchaseId: purchase.id,
+        customerName: purchase.customer?.name ?? 'Cliente',
+        productName: purchase.product?.name ?? '',
+        warrantyExpiresAt: purchase.warrantyExpiresAt as Date,
+      })),
+    };
   }
 
   async activity(user: AuthUser): Promise<DashboardActivityItem[]> {

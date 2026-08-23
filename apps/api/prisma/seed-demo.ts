@@ -26,11 +26,22 @@ const HEROES = [
   },
 ] as const;
 
-const HERO_PURCHASES = [
-  { monthsAgo: 18, warrantyMonths: 18, quantity: 1, value: '380.00' },
-  { monthsAgo: 12, warrantyMonths: 15, quantity: 1, value: '300.00' },
-  { monthsAgo: 6, warrantyMonths: 12, quantity: 2, value: '540.00' },
-] as const;
+type HeroPurchaseSpec = {
+  monthsAgo?: number;
+  daysAgo?: number;
+  warrantyMonths: number;
+  quantity: number;
+  value: string;
+};
+
+// Historia demostrable (demo D2): una garantía vencida (RECOMPRA), una a punto
+// de vencer (~60 días → D-60 hoy y D-30 en ~30 días) y una compra reciente
+// (+3 y +30 días próximos).
+const HERO_PURCHASES: HeroPurchaseSpec[] = [
+  { monthsAgo: 22, warrantyMonths: 18, quantity: 1, value: '380.00' },
+  { monthsAgo: 10, warrantyMonths: 12, quantity: 1, value: '300.00' },
+  { daysAgo: 5, warrantyMonths: 12, quantity: 2, value: '540.00' },
+];
 
 type SeedStage = {
   name: string;
@@ -263,7 +274,9 @@ async function ensureHeroPurchases(
     for (let p = 0; p < HERO_PURCHASES.length; p++) {
       const spec = HERO_PURCHASES[p];
       const productId = productIds[p % productIds.length];
-      const purchaseDate = monthsAgo(spec.monthsAgo);
+      const purchaseDate = spec.daysAgo
+        ? addDays(new Date(), -spec.daysAgo)
+        : monthsAgo(spec.monthsAgo as number);
       const invoiceNumber = `DEMO-${hero.uuid.slice(0, 6).toUpperCase()}-${p + 1}`;
       const existing = await prisma.purchase.findFirst({
         where: {
@@ -355,6 +368,22 @@ async function ensureSequences(orgId: string): Promise<Map<string, string>> {
       select: { id: true },
     });
     if (existing) {
+      // Demo D2: refresh stages so the sequences always reflect the current
+      // anchor model (PURCHASE_DATE + WARRANTY_EXPIRY + templateOnPast).
+      await prisma.followUpSequenceStage.updateMany({
+        where: { sequenceId: existing.id, deletedAt: null },
+        data: { deletedAt: new Date(), deletedBy: 'seed-demo' },
+      });
+      await prisma.followUpSequenceStage.createMany({
+        data: seq.stages.map((stage) => ({
+          sequenceId: existing.id,
+          name: stage.name,
+          anchor: stage.anchor,
+          offsetDays: stage.offsetDays,
+          template: stage.template,
+          templateOnPast: stage.templateOnPast,
+        })),
+      });
       byName.set(seq.name, existing.id);
       continue;
     }
@@ -392,11 +421,18 @@ async function ensureCampaigns(
     uuid: string;
     name: string;
     status: string;
+    template: string;
   }> = [];
   for (const camp of CAMPAIGNS) {
     let existing = await prisma.campaign.findFirst({
       where: { organizationId: orgId, name: camp.name, deletedAt: null },
-      select: { id: true, uuid: true, name: true, status: true },
+      select: {
+        id: true,
+        uuid: true,
+        name: true,
+        status: true,
+        template: true,
+      },
     });
     if (!existing) {
       existing = await prisma.campaign.create({
@@ -411,7 +447,13 @@ async function ensureCampaigns(
             ? (sequenceIds.get(camp.sequenceName) ?? null)
             : null,
         },
-        select: { id: true, uuid: true, name: true, status: true },
+        select: {
+          id: true,
+          uuid: true,
+          name: true,
+          status: true,
+          template: true,
+        },
       });
       console.log(`  ✓ Campaign "${camp.name}" [${camp.status}]`);
     }
@@ -423,6 +465,7 @@ async function ensureCampaigns(
 async function generateFlagshipAutomations(
   orgId: string,
   campaign: { id: string },
+  campaignTemplate: string,
   stages: Array<{
     name: string;
     anchor: 'PURCHASE_DATE' | 'WARRANTY_EXPIRY';
@@ -431,23 +474,18 @@ async function generateFlagshipAutomations(
     templateOnPast: string | null;
   }>,
 ): Promise<void> {
-  const existing = await prisma.automation.count({
+  // Demo D2: refresh the flagship story. Soft-delete previous demo automations
+  // and regenerate with the runtime semantics (anchor + recompra + omit).
+  await prisma.automation.updateMany({
     where: { campaignId: campaign.id, deletedAt: null },
+    data: { deletedAt: new Date(), deletedBy: 'seed-demo' },
   });
-  if (existing > 0) {
-    console.log(
-      '  ∎ Flagship campaign already has automations; skipping generation.',
-    );
-    return;
-  }
 
-  const minExpiry = addDays(new Date(), 90);
   const purchases = await prisma.purchase.findMany({
     where: {
       organizationId: orgId,
       deletedAt: null,
       warrantyMonths: 12,
-      warrantyExpiresAt: { gte: minExpiry },
       customer: { deletedAt: null, status: 'ACTIVE' },
     },
     orderBy: { purchaseDate: 'desc' },
@@ -469,6 +507,7 @@ async function generateFlagshipAutomations(
     if (rows.length >= FLAGSHIP_MAX_CUSTOMERS) break;
   }
 
+  const now = new Date();
   let createdCount = 0;
   for (const row of rows) {
     let cycle = await prisma.commercialCycle.findUnique({
@@ -491,6 +530,15 @@ async function generateFlagshipAutomations(
       });
       cycle.status = 'ACTIVE';
     }
+
+    // Mirrors the runtime HG-SEM-03 semantics (reference = now at generation):
+    // past WARRANTY_EXPIRY stages become a single repurchase; past
+    // PURCHASE_DATE stages are omitted; the rest are scheduled.
+    let repurchase: {
+      stage: (typeof stages)[number];
+      computed: Date;
+    } | null = null;
+
     for (const stage of stages) {
       if (stage.anchor === 'WARRANTY_EXPIRY' && !row.warrantyExpiresAt) {
         continue;
@@ -499,13 +547,25 @@ async function generateFlagshipAutomations(
         stage.anchor === 'PURCHASE_DATE'
           ? row.purchaseDate
           : (row.warrantyExpiresAt as Date);
+      const computed = addDays(base, stage.offsetDays);
+      if (computed.getTime() < now.getTime()) {
+        if (stage.anchor === 'WARRANTY_EXPIRY') {
+          if (
+            !repurchase ||
+            computed.getTime() > repurchase.computed.getTime()
+          ) {
+            repurchase = { stage, computed };
+          }
+        }
+        continue;
+      }
       await prisma.automation.create({
         data: {
           organizationId: orgId,
           purchaseId: row.id,
           campaignId: campaign.id,
           commercialCycleId: cycle.id,
-          scheduledDate: addDays(base, stage.offsetDays),
+          scheduledDate: computed,
           status: 'SCHEDULED',
           priority: 0,
           messageTemplate: stage.template,
@@ -514,10 +574,56 @@ async function generateFlagshipAutomations(
       });
       createdCount++;
     }
+
+    if (repurchase) {
+      await prisma.automation.create({
+        data: {
+          organizationId: orgId,
+          purchaseId: row.id,
+          campaignId: campaign.id,
+          commercialCycleId: cycle.id,
+          scheduledDate: now,
+          status: 'SCHEDULED',
+          priority: 0,
+          messageTemplate: repurchase.stage.templateOnPast ?? campaignTemplate,
+          createdBy: 'seed-demo',
+        },
+      });
+      createdCount++;
+    }
   }
   console.log(
-    `  ✓ Flagship campaign automations generated: ${createdCount} (${rows.length} clientes × ${stages.length} etapas)`,
+    `  ✓ Flagship campaign automations regenerated: ${createdCount} (${rows.length} clientes)`,
   );
+}
+
+// Demo D2: hide noise that hurts the demo narrative (org-scoped, reversible
+// soft-delete). No global catalog changes.
+async function hideDemoNoise(orgId: string): Promise<void> {
+  const noise = await prisma.product.findMany({
+    where: {
+      organizationId: orgId,
+      deletedAt: null,
+      OR: [
+        { name: { contains: 'BORNE DE BATERIA', mode: 'insensitive' } },
+        { name: { contains: 'BORNES', mode: 'insensitive' } },
+        { name: { contains: 'ADAPTADOR', mode: 'insensitive' } },
+        { name: { contains: 'MARCO PARA', mode: 'insensitive' } },
+        { name: { startsWith: 'CAJA ', mode: 'insensitive' } },
+        { name: { contains: 'SERVICIO TALLER', mode: 'insensitive' } },
+        { category: 'TUDOR' },
+      ],
+    },
+    select: { id: true },
+  });
+  if (noise.length === 0) {
+    return;
+  }
+  await prisma.product.updateMany({
+    where: { id: { in: noise.map((p) => p.id) } },
+    data: { deletedAt: new Date(), deletedBy: 'seed-demo' },
+  });
+  console.log(`  ✓ Demo noise hidden (soft-delete): ${noise.length} productos`);
 }
 
 async function ensureHeroAutomations(
@@ -690,6 +796,8 @@ async function main() {
 
   await ensureAdminPassword();
 
+  await hideDemoNoise(orgId);
+
   const heroes = await ensureHeroes(orgId);
   const productIds = await ensureWarrantyProducts(orgId);
   await ensureHeroPurchases(orgId, heroes, productIds);
@@ -723,7 +831,12 @@ async function main() {
   });
   console.log('  ✓ Demo automations generation');
   if (flagship && seq12) {
-    await generateFlagshipAutomations(orgId, flagship, seq12.stages);
+    await generateFlagshipAutomations(
+      orgId,
+      flagship,
+      flagship.template,
+      seq12.stages,
+    );
     await ensureHeroAutomations(orgId, heroes, flagship.id, seq12.stages);
   }
 

@@ -21,6 +21,7 @@ import {
   getConversation,
   getCustomer,
   getDashboardActivity,
+  getDashboardActionable,
   getDashboardCampaigns,
   getDashboardSummary,
   getFollowUpSequence,
@@ -358,6 +359,13 @@ export async function apiDashboardActivity(): Promise<
 > {
   const res = await call((options) => getDashboardActivity(options));
   return unwrap(getDashboardActivity, res);
+}
+
+export async function apiDashboardActionable(): Promise<
+  SdkData<typeof getDashboardActionable>
+> {
+  const res = await call((options) => getDashboardActionable(options));
+  return unwrap(getDashboardActionable, res);
 }
 
 export async function apiListCustomers(

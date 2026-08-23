@@ -52,6 +52,8 @@ const MESSAGE_SORT_FIELDS = new Set(['createdAt', 'sentAt', 'status']);
 
 const SCHEDULER_BATCH_SIZE = 100;
 
+const MAX_AUTOMATION_RETRIES = 3;
+
 const AUTOMATIC_TEMPLATE =
   'Hola {customerName}. {organizationName} te saluda y te envía este mensaje de seguimiento tras tu compra de {productName}.';
 
@@ -176,7 +178,9 @@ export class WhatsappService {
   async executeDueAutomations(): Promise<void> {
     const due = await this.prisma.automation.findMany({
       where: {
-        status: 'SCHEDULED',
+        // SCHEDULED (first attempt) and ERROR (bounded retry, P1) both fire.
+        status: { in: ['SCHEDULED', 'ERROR'] },
+        retryCount: { lt: MAX_AUTOMATION_RETRIES },
         scheduledDate: { lte: new Date() },
         deletedAt: null,
         OR: [{ campaignId: null }, { campaign: { status: 'ACTIVE' } }],
@@ -251,11 +255,12 @@ export class WhatsappService {
     try {
       const result = await this.prisma.$transaction(async (tx) => {
         // AU-011: single-row guarded transition — never executes twice.
+        // P1 (demo D1): SCHEDULED/ERROR → EXECUTING; EXECUTED only after the
+        // provider confirms the send.
         const updated = await tx.automation.updateMany({
-          where: { id: automation.id, status: 'SCHEDULED' },
+          where: { id: automation.id, status: { in: ['SCHEDULED', 'ERROR'] } },
           data: {
-            status: 'EXECUTED',
-            executedDate: new Date(),
+            status: 'EXECUTING',
             updatedBy: null,
           },
         });
@@ -293,6 +298,7 @@ export class WhatsappService {
         `automatic execution failed for automation ${automation.uuid}`,
         error instanceof Error ? error.stack : String(error),
       );
+      await this.markAutomationFailed(automation.id);
       this.emit('AutomationFailed', null, automation.organizationId, {
         automationId: automation.uuid,
         purchaseId: automation.purchaseId,
@@ -326,6 +332,7 @@ export class WhatsappService {
         automation.organizationId,
         'customer_no_phone',
       );
+      await this.markAutomationFailed(automation.id);
       this.emit('AutomationFailed', null, automation.organizationId, {
         automationId: automation.uuid,
         purchaseId: automation.purchaseId,
@@ -347,9 +354,17 @@ export class WhatsappService {
       return;
     }
 
+    const simulated = this.isSandboxOrganization(automation.organizationId);
     try {
-      const sendResult = await this.provider.sendMessage(phone, content);
+      const sendResult = simulated
+        ? {
+            providerMessageId: `sim-${message.uuid}`,
+            providerConversationId: null,
+          }
+        : await this.provider.sendMessage(phone, content);
       await this.markSent(message, automation.organizationId, sendResult);
+      // Only EXECUTED after the send is confirmed (P1, demo D1).
+      await this.markAutomationExecuted(automation.id);
       this.emit('AutomationExecuted', null, automation.organizationId, {
         automationId: automation.uuid,
         purchaseId: automation.purchaseId,
@@ -364,7 +379,11 @@ export class WhatsappService {
         userId: null,
         organizationId: automation.organizationId,
         description: `automatic execution done automation=${automation.uuid}`,
-        metadata: { automationId: automation.uuid, messageId: message.uuid },
+        metadata: {
+          automationId: automation.uuid,
+          messageId: message.uuid,
+          ...(simulated ? { simulated: true, reason: 'sandbox' } : {}),
+        },
       });
     } catch (error) {
       const reason =
@@ -372,6 +391,7 @@ export class WhatsappService {
           ? 'provider_error'
           : 'internal_error';
       await this.failMessage(message, automation.organizationId, reason);
+      await this.markAutomationFailed(automation.id);
       this.emit('AutomationFailed', null, automation.organizationId, {
         automationId: automation.uuid,
         purchaseId: automation.purchaseId,
@@ -1363,6 +1383,33 @@ export class WhatsappService {
       failedAt: new Date().toISOString(),
       reason,
     } satisfies MessageFailedPayload);
+  }
+
+  // P1 (demo D1): the automation only reaches EXECUTED after the provider
+  // confirms the send. Guarded single-row transition on EXECUTING.
+  private async markAutomationExecuted(automationId: string): Promise<void> {
+    await this.prisma.automation.updateMany({
+      where: { id: automationId, status: 'EXECUTING' },
+      data: { status: 'EXECUTED', executedDate: new Date(), updatedBy: null },
+    });
+  }
+
+  private async markAutomationFailed(automationId: string): Promise<void> {
+    await this.prisma.automation.updateMany({
+      where: { id: automationId, status: 'EXECUTING' },
+      data: {
+        status: 'ERROR',
+        retryCount: { increment: 1 },
+        updatedBy: null,
+      },
+    });
+  }
+
+  private isSandboxOrganization(organizationId: string): boolean {
+    const sandbox = this.configService.get<string[]>(
+      'whatsapp.sandboxOrganizations',
+    );
+    return Array.isArray(sandbox) && sandbox.includes(organizationId);
   }
 
   private async findMessageUuidByProviderId(

@@ -223,6 +223,7 @@ export const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
 export const AUTOMATION_STATUS_LABELS: Record<string, string> = {
   PENDING: "Pendiente",
   SCHEDULED: "Programada",
+  EXECUTING: "Enviando",
   EXECUTED: "Ejecutada",
   CANCELLED: "Cancelada",
   ERROR: "Error",

@@ -828,7 +828,9 @@ export class CampaignsService {
       const remaining = await this.prisma.automation.count({
         where: {
           campaignId: automation.campaignId,
-          status: 'SCHEDULED',
+          // SCHEDULED (pending) or ERROR (failed, retryable) keep the campaign
+          // active; EXECUTING is transient.
+          status: { in: ['SCHEDULED', 'ERROR'] },
           deletedAt: null,
         },
       });

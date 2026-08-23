@@ -1,7 +1,13 @@
 "use client";
 
 import type { ConversationMessage } from "@/lib/sdk-types";
-import { Check, CheckCheck, Clock3, MessageSquareText } from "lucide-react";
+import {
+  Check,
+  CheckCheck,
+  CircleX,
+  Clock3,
+  MessageSquareText,
+} from "lucide-react";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,7 +19,7 @@ const STATUS_ICON: Record<string, typeof Check> = {
   SENT: Check,
   DELIVERED: Check,
   READ: CheckCheck,
-  FAILED: Check,
+  FAILED: CircleX,
 };
 
 type ThreadProps = {
@@ -28,9 +34,14 @@ export function Thread({ messages, loading }: ThreadProps) {
         {Array.from({ length: 5 }).map((_, index) => (
           <div
             key={index}
-            className={cn("flex", index % 2 === 0 ? "justify-start" : "justify-end")}
+            className={cn(
+              "flex",
+              index % 2 === 0 ? "justify-start" : "justify-end",
+            )}
           >
-            <Skeleton className={cn("h-10", index % 2 === 0 ? "w-2/3" : "w-1/2")} />
+            <Skeleton
+              className={cn("h-10", index % 2 === 0 ? "w-2/3" : "w-1/2")}
+            />
           </div>
         ))}
       </div>
@@ -50,7 +61,10 @@ export function Thread({ messages, loading }: ThreadProps) {
   }
 
   return (
-    <div className="flex-1 space-y-3 overflow-y-auto p-6" aria-label="Historial de mensajes">
+    <div
+      className="flex-1 space-y-3 overflow-y-auto p-6"
+      aria-label="Historial de mensajes"
+    >
       {messages.map((message) => {
         const inbound = message.direction === "INBOUND";
         const StatusIcon = STATUS_ICON[message.status] ?? Check;
@@ -70,15 +84,21 @@ export function Thread({ messages, loading }: ThreadProps) {
                     : "bg-primary text-primary-foreground",
               )}
             >
-              <p className="whitespace-pre-wrap break-words">{message.content}</p>
+              <p className="whitespace-pre-wrap break-words">
+                {message.content}
+              </p>
               <div
                 className={cn(
                   "mt-1 flex items-center justify-end gap-1 text-[10px]",
-                  inbound ? "text-muted-foreground" : "text-primary-foreground/70",
+                  inbound
+                    ? "text-muted-foreground"
+                    : "text-primary-foreground/70",
                 )}
               >
                 <span>{formatTime(message.sentAt ?? message.createdAt)}</span>
-                {!inbound && <StatusIcon className="size-3" aria-label={message.status} />}
+                {!inbound && (
+                  <StatusIcon className="size-3" aria-label={message.status} />
+                )}
               </div>
             </div>
           </div>

@@ -112,6 +112,8 @@ paths:
     $ref: "./paths/dashboard.yaml#/~1dashboard~1campaigns"
   /dashboard/activity:
     $ref: "./paths/dashboard.yaml#/~1dashboard~1activity"
+  /dashboard/actionable:
+    $ref: "./paths/dashboard.yaml#/~1dashboard~1actionable"
   /follow-up-sequences:
     $ref: "./paths/follow-up-sequences.yaml#/~1follow-up-sequences"
   /follow-up-sequences/{uuid}:

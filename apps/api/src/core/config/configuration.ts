@@ -40,5 +40,10 @@ export default () => ({
     webhookVerifyToken: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
     webhookSecret: process.env.WHATSAPP_WEBHOOK_SECRET,
     defaultOrganizationId: process.env.WHATSAPP_DEFAULT_ORGANIZATION_ID,
+    // Demo decision D1: organizations whose WhatsApp sends are simulated.
+    sandboxOrganizations: (process.env.WHATSAPP_SANDBOX_ORGANIZATION_IDS ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean),
   },
 });

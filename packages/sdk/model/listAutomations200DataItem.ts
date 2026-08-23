@@ -17,11 +17,12 @@
 export type ListAutomations200DataItem = ({
   uuid: string;
   /**
-     * Lifecycle of an automation. EXECUTED is a final state (no execution
-     * engine in v1). ERROR is used when the automation could not be
-     * executed; PAUSED is reserved for future deferred flows.
+     * Lifecycle of an automation. SCHEDULED → EXECUTING (send in flight) →
+     * EXECUTED only after the provider confirms; a failed send moves to ERROR
+     * (bounded retry). ERROR is retryable; PAUSED is reserved for future
+     * deferred flows.
      */
-  status: 'PENDING' | 'SCHEDULED' | 'EXECUTED' | 'CANCELLED' | 'ERROR' | 'PAUSED';
+  status: 'PENDING' | 'SCHEDULED' | 'EXECUTING' | 'EXECUTED' | 'CANCELLED' | 'ERROR' | 'PAUSED';
   scheduledDate: string;
   /** @nullable */
   executedDate: string | null;

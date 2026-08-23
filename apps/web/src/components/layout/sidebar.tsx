@@ -4,6 +4,7 @@ import {
   BarChart3,
   FileUp,
   LayoutDashboard,
+  ListOrdered,
   Megaphone,
   MessagesSquare,
   Package,
@@ -16,7 +17,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type NavItem = {
   label: string;
@@ -26,14 +31,35 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard", available: true },
+  {
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    href: "/dashboard",
+    available: true,
+  },
   { label: "Clientes", icon: Users, href: "/customers", available: true },
   { label: "Compras", icon: ShoppingCart, href: "/purchases", available: true },
   { label: "Productos", icon: Package, href: "/products", available: true },
-  { label: "Seguimientos", icon: Megaphone, href: "/campaigns", available: true },
-  { label: "Automatizaciones", icon: Workflow, href: "/automations", available: true },
+  {
+    label: "Conversaciones",
+    icon: MessagesSquare,
+    href: "/conversations",
+    available: true,
+  },
+  { label: "Campañas", icon: Megaphone, href: "/campaigns", available: true },
+  {
+    label: "Seguimientos",
+    icon: ListOrdered,
+    href: "/follow-up-sequences",
+    available: true,
+  },
+  {
+    label: "Automatizaciones",
+    icon: Workflow,
+    href: "/automations",
+    available: true,
+  },
   { label: "Importaciones", icon: FileUp, href: "/imports", available: true },
-  { label: "Conversaciones", icon: MessagesSquare, href: "/conversations", available: true },
   { label: "Reportes", icon: BarChart3, available: false },
   { label: "Configuración", icon: Settings, available: false },
 ];
@@ -62,7 +88,8 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {NAV_ITEMS.map((item) => {
-          const active = item.href !== undefined && pathname.startsWith(item.href);
+          const active =
+            item.href !== undefined && pathname.startsWith(item.href);
           const content = (
             <span
               className={cn(
@@ -72,10 +99,13 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
                 !active &&
                   item.available &&
                   "text-muted-foreground hover:bg-muted hover:text-foreground",
-                !item.available && "cursor-not-allowed text-muted-foreground/50",
+                !item.available &&
+                  "cursor-not-allowed text-muted-foreground/50",
               )}
             >
-              <item.icon className={cn("size-4.5 shrink-0", active && "text-primary")} />
+              <item.icon
+                className={cn("size-4.5 shrink-0", active && "text-primary")}
+              />
               {!collapsed && <span className="truncate">{item.label}</span>}
               {!collapsed && !item.available && (
                 <span className="ml-auto rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">

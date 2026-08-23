@@ -35,7 +35,7 @@ const expectData = (shape: Record<string, unknown>): Record<string, unknown> =>
 describe('WhatsappService', () => {
   let service: WhatsappService;
   let prisma: {
-    automation: { findMany: jest.Mock };
+    automation: { findMany: jest.Mock; updateMany: jest.Mock };
     message: {
       findFirst: jest.Mock;
       create: jest.Mock;
@@ -63,7 +63,10 @@ describe('WhatsappService', () => {
 
   beforeEach(async () => {
     prisma = {
-      automation: { findMany: jest.fn() },
+      automation: {
+        findMany: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
       message: {
         findFirst: jest.fn(),
         create: jest.fn(),
@@ -351,6 +354,99 @@ describe('WhatsappService', () => {
       expect(events).toContain('MessageQueued');
       expect(events).toContain('MessageSent');
       expect(events).toContain('AutomationExecuted');
+    });
+
+    it('transitions SCHEDULED → EXECUTING and only EXECUTED after the send (P1)', async () => {
+      prisma.automation.findMany.mockResolvedValue([dueAutomation]);
+      let txAutomationUpdate: jest.Mock | undefined;
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = txMock();
+          txAutomationUpdate = tx.automation.updateMany;
+          return fn(tx);
+        },
+      );
+      provider.sendMessage.mockResolvedValue({
+        providerMessageId: 'wamid-1',
+        providerConversationId: '573000000000',
+        status: 'SENT',
+      });
+      prisma.message.update.mockResolvedValue({});
+
+      await service.executeDueAutomations();
+
+      // Guarded acquisition: SCHEDULED/ERROR → EXECUTING (in the transaction).
+      expect(txAutomationUpdate).toHaveBeenCalledWith({
+        where: { id: 'a-1', status: { in: ['SCHEDULED', 'ERROR'] } },
+        data: expect.objectContaining({ status: 'EXECUTING' }) as object,
+      });
+      // EXECUTED is applied only after the provider confirms the send.
+      expect(prisma.automation.updateMany).toHaveBeenCalledWith({
+        where: { id: 'a-1', status: 'EXECUTING' },
+        data: expect.objectContaining({
+          status: 'EXECUTED',
+          executedDate: expect.any(Date),
+        }) as object,
+      });
+    });
+
+    it('moves a failed automation to ERROR (retryable) and increments retryCount', async () => {
+      prisma.automation.findMany.mockResolvedValue([dueAutomation]);
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => fn(txMock()),
+      );
+      provider.sendMessage.mockRejectedValue(new Error('provider down'));
+      prisma.message.update.mockResolvedValue({});
+      prisma.automation.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.executeDueAutomations();
+
+      expect(prisma.automation.updateMany).toHaveBeenCalledWith({
+        where: { id: 'a-1', status: 'EXECUTING' },
+        data: expect.objectContaining({
+          status: 'ERROR',
+          retryCount: { increment: 1 },
+        }) as object,
+      });
+      const events = emittedNames();
+      expect(events).toContain('AutomationFailed');
+      expect(events).not.toContain('AutomationExecuted');
+    });
+
+    it('simulates the send for sandbox organizations and marks it as simulated (demo D1)', async () => {
+      configService.get.mockImplementation((key: string) => {
+        if (key === 'whatsapp.sandboxOrganizations') {
+          return ['org-1'];
+        }
+        if (key === 'whatsapp.defaultOrganizationId') {
+          return 'org-1';
+        }
+        return null;
+      });
+      prisma.automation.findMany.mockResolvedValue([dueAutomation]);
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => fn(txMock()),
+      );
+      prisma.message.update.mockResolvedValue({});
+      prisma.automation.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.executeDueAutomations();
+
+      expect(provider.sendMessage).not.toHaveBeenCalled();
+      expect(prisma.message.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'SENT',
+            providerMessageId: expect.stringContaining('sim-'),
+          }) as object,
+        }),
+      );
+      expect(prisma.automation.updateMany).toHaveBeenCalledWith({
+        where: { id: 'a-1', status: 'EXECUTING' },
+        data: expect.objectContaining({ status: 'EXECUTED' }) as object,
+      });
+      const sent = emittedNames();
+      expect(sent).toContain('AutomationExecuted');
     });
 
     it('never creates a second message when the status guard fails (AU-011)', async () => {

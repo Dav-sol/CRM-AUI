@@ -35,6 +35,7 @@ export const envValidationSchema = Joi.object({
   WHATSAPP_WEBHOOK_VERIFY_TOKEN: Joi.string().min(1).required(),
   WHATSAPP_WEBHOOK_SECRET: Joi.string().min(1).required(),
   WHATSAPP_DEFAULT_ORGANIZATION_ID: Joi.string().min(1).required(),
+  WHATSAPP_SANDBOX_ORGANIZATION_IDS: Joi.string().optional(),
 
   APP_NAME: Joi.string().default('automatize-it-api'),
 

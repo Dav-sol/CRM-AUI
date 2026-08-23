@@ -7,8 +7,14 @@ describe('DashboardService', () => {
   let service: DashboardService;
   let prisma: {
     customer: { count: jest.Mock };
-    purchase: { count: jest.Mock };
-    automation: { count: jest.Mock };
+    purchase: {
+      count: jest.Mock;
+      findMany: jest.Mock;
+    };
+    automation: {
+      count: jest.Mock;
+      findMany: jest.Mock;
+    };
     message: { count: jest.Mock };
     conversation: { count: jest.Mock };
     campaign: { count: jest.Mock; findMany: jest.Mock };
@@ -26,8 +32,14 @@ describe('DashboardService', () => {
   beforeEach(async () => {
     prisma = {
       customer: { count: jest.fn().mockResolvedValue(0) },
-      purchase: { count: jest.fn().mockResolvedValue(0) },
-      automation: { count: jest.fn().mockResolvedValue(0) },
+      purchase: {
+        count: jest.fn().mockResolvedValue(0),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      automation: {
+        count: jest.fn().mockResolvedValue(0),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       message: { count: jest.fn().mockResolvedValue(0) },
       conversation: { count: jest.fn().mockResolvedValue(0) },
       campaign: {
@@ -324,6 +336,73 @@ describe('DashboardService', () => {
 
       expect(result).toEqual([]);
       expect(prisma.audit.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('actionable (demo D3)', () => {
+    it('returns upcoming automations, expiring warranties and the repurchase window', async () => {
+      prisma.automation.findMany.mockResolvedValue([
+        {
+          uuid: 'au-1',
+          scheduledDate: new Date('2026-09-01T10:00:00Z'),
+          status: 'SCHEDULED',
+          campaign: { name: 'Demo' },
+          purchase: {
+            customer: { name: 'Ana' },
+            product: { name: 'Batería X' },
+          },
+        },
+      ]);
+      prisma.purchase.findMany.mockResolvedValue([
+        {
+          id: 'pu-1',
+          warrantyExpiresAt: new Date('2026-09-15T00:00:00Z'),
+          customer: { name: 'Ana' },
+          product: { name: 'Batería Y' },
+        },
+      ]);
+
+      const result = await service.actionable({
+        id: 'u-1',
+        uuid: 'uu-1',
+        accountType: 'ORGANIZATION',
+        organizationId: 'org-1',
+        role: 'ADMINISTRADOR',
+      });
+
+      expect(prisma.automation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            organizationId: 'org-1',
+            status: 'SCHEDULED',
+            scheduledDate: { gte: expect.any(Date) },
+          }) as object,
+        }),
+      );
+      expect(result.upcomingAutomations[0]).toMatchObject({
+        uuid: 'au-1',
+        customerName: 'Ana',
+        productName: 'Batería X',
+        campaignName: 'Demo',
+      });
+      expect(result.expiringWarranties[0].customerName).toBe('Ana');
+      expect(result.repurchaseWindow[0].customerName).toBe('Ana');
+    });
+
+    it('returns empty actionable lists for platform users', async () => {
+      const result = await service.actionable({
+        id: 'u-2',
+        uuid: 'uu-2',
+        accountType: 'PLATFORM',
+        organizationId: null,
+        role: 'PLATFORM_OWNER',
+      });
+
+      expect(result).toEqual({
+        upcomingAutomations: [],
+        expiringWarranties: [],
+        repurchaseWindow: [],
+      });
     });
   });
 });

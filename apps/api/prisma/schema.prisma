@@ -284,6 +284,8 @@ model Automation {
   executedDate      DateTime?        @map("executed_date")
   status            AutomationStatus @default(PENDING)
   priority          Int              @default(0)
+  // Attempts made; bounds automatic retries of ERROR automations.
+  retryCount        Int              @default(0) @map("retry_count")
   // Snapshot of the FollowUpSequenceStage template at generation time.
   // When set, WhatsApp execution uses it directly instead of the legacy
   // campaign stage heuristics (templateD3/D180/D365).
@@ -641,6 +643,9 @@ enum CampaignStatus {
 enum AutomationStatus {
   PENDING
   SCHEDULED
+  // Transient state while the provider send is in flight: never EXECUTED
+  // before the send is confirmed (P1 production fix, demo decision D1).
+  EXECUTING
   EXECUTED
   CANCELLED
   ERROR

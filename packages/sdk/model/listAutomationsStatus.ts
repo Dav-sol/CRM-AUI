@@ -17,6 +17,7 @@ export type ListAutomationsStatus = typeof ListAutomationsStatus[keyof typeof Li
 export const ListAutomationsStatus = {
   PENDING: 'PENDING',
   SCHEDULED: 'SCHEDULED',
+  EXECUTING: 'EXECUTING',
   EXECUTED: 'EXECUTED',
   CANCELLED: 'CANCELLED',
   ERROR: 'ERROR',

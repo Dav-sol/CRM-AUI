@@ -167,3 +167,140 @@
                     message:
                       type: string
                       example: Unauthorized
+
+/dashboard/actionable:
+  get:
+    tags:
+      - Dashboard
+
+    summary: Qué hacer hoy (acciones reales)
+
+    description: |
+      Returns real, org-scoped decision-support lists (demo D3):
+      upcoming SCHEDULED automations, warranties expiring in ~30 days, and
+      purchases whose warranty recently expired (repurchase window). Read-only.
+
+    operationId: getDashboardActionable
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Acciones recomendadas
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              required:
+                - data
+
+              properties:
+
+                data:
+                  type: object
+
+                  required:
+                    - upcomingAutomations
+                    - expiringWarranties
+                    - repurchaseWindow
+
+                  properties:
+
+                    upcomingAutomations:
+                      type: array
+                      items:
+                        type: object
+                        required:
+                          - uuid
+                          - scheduledDate
+                          - status
+                          - customerName
+                          - productName
+                        properties:
+                          uuid:
+                            type: string
+                          scheduledDate:
+                            type: string
+                            format: date-time
+                          status:
+                            type: string
+                          customerName:
+                            type: string
+                          productName:
+                            type: string
+                          campaignName:
+                            type: string
+                            nullable: true
+
+                    expiringWarranties:
+                      type: array
+                      items:
+                        type: object
+                        required:
+                          - purchaseId
+                          - customerName
+                          - productName
+                          - warrantyExpiresAt
+                        properties:
+                          purchaseId:
+                            type: string
+                          customerName:
+                            type: string
+                          productName:
+                            type: string
+                          warrantyExpiresAt:
+                            type: string
+                            format: date-time
+
+                    repurchaseWindow:
+                      type: array
+                      items:
+                        type: object
+                        required:
+                          - purchaseId
+                          - customerName
+                          - productName
+                          - warrantyExpiresAt
+                        properties:
+                          purchaseId:
+                            type: string
+                          customerName:
+                            type: string
+                          productName:
+                            type: string
+                          warrantyExpiresAt:
+                            type: string
+                            format: date-time
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
