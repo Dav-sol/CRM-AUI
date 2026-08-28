@@ -35,7 +35,7 @@ The Conversations Inbox module (Módulo 07 Conversaciones, `specs/02-modules.md:
 
 ## 4. Functional Requirements
 
-- **FR-001**: Bandeja `GET /conversations` — extend filters `assigned` (`true|false`), `tagIds` (any-of), `status`, `channel`, `customerId`, `advisorId`, date range; rows include `advisor`, `tags[]`, `status`; pagination (≤100), sort whitelist; tenant-scoped — US1.
+- **FR-001**: Bandeja `GET /conversations` — extend filters `assigned` (`true|false`), `tagIds` (any-of), `status`, `channel`, `customerId`, `advisorId`, `name` (customer name contains), date range; rows include `advisor`, `tags[]`, `status`; pagination (≤100), sort whitelist; tenant-scoped — US1.
 - **FR-002**: `GET /conversations/{uuid}` — detail includes messages (one query, no N+1), `tags[]`, `notes[]`, `advisor`; cross-tenant/unknown → 404 `CONVERSATION_NOT_FOUND` — US2.
 - **FR-003**: `POST /conversations/{uuid}/messages` (reply) — OUTGOING/OUTBOUND Message, QUEUED → provider → SENT/FAILED, reopen CLOSED→OPEN; ARCHIVED → 400 `VALIDATION_ERROR`; Idempotency-Key honored; audit — US3.
 - **FR-004**: `POST /conversations/{uuid}/assign` + `/transfer` — set `advisorId` (same-org target, else 400); same-advisor no-op; events `ConversationAssigned`/`ConversationTransferred`; all authenticated roles (HG-4) — US4.

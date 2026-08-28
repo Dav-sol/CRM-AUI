@@ -32,6 +32,10 @@ paths:
     $ref: "./paths/customers.yaml#/~1customers"
   /customers/{id}:
     $ref: "./paths/customers.yaml#/~1customers~1{id}"
+  /customers/{id}/no-contact:
+    $ref: "./paths/customers.yaml#/~1customers~1{id}~1no-contact"
+  /customers/{id}/allow-contact:
+    $ref: "./paths/customers.yaml#/~1customers~1{id}~1allow-contact"
   /purchases:
     $ref: "./paths/purchases.yaml#/~1purchases"
   /purchases/stats:
@@ -90,6 +94,8 @@ paths:
     $ref: "./paths/campaigns.yaml#/~1campaigns~1{uuid}"
   /campaigns/{uuid}/activate:
     $ref: "./paths/campaigns.yaml#/~1campaigns~1{uuid}~1activate"
+  /campaigns/{uuid}/approve:
+    $ref: "./paths/campaigns.yaml#/~1campaigns~1{uuid}~1approve"
   /campaigns/{uuid}/pause:
     $ref: "./paths/campaigns.yaml#/~1campaigns~1{uuid}~1pause"
   /campaigns/{uuid}/resume:
@@ -98,6 +104,8 @@ paths:
     $ref: "./paths/campaigns.yaml#/~1campaigns~1{uuid}~1cancel"
   /campaigns/{uuid}/preview-segment:
     $ref: "./paths/campaigns.yaml#/~1campaigns~1{uuid}~1preview-segment"
+  /campaigns/segment-preview:
+    $ref: "./paths/campaigns.yaml#/~1campaigns~1segment-preview"
   /quick-replies:
     $ref: "./paths/quick-replies.yaml#/~1quick-replies"
   /quick-replies/{uuid}:
@@ -118,6 +126,32 @@ paths:
     $ref: "./paths/follow-up-sequences.yaml#/~1follow-up-sequences"
   /follow-up-sequences/{uuid}:
     $ref: "./paths/follow-up-sequences.yaml#/~1follow-up-sequences~1{uuid}"
+  /quotes:
+    $ref: "./paths/quotes.yaml#/~1quotes"
+  /quotes/{uuid}:
+    $ref: "./paths/quotes.yaml#/~1quotes~1{uuid}"
+  /quotes/{uuid}/send:
+    $ref: "./paths/quotes.yaml#/~1quotes~1{uuid}~1send"
+  /quotes/{uuid}/accept:
+    $ref: "./paths/quotes.yaml#/~1quotes~1{uuid}~1accept"
+  /quotes/{uuid}/reject:
+    $ref: "./paths/quotes.yaml#/~1quotes~1{uuid}~1reject"
+  /quotes/{uuid}/expire:
+    $ref: "./paths/quotes.yaml#/~1quotes~1{uuid}~1expire"
+  /templates:
+    $ref: "./paths/templates.yaml#/~1templates"
+  /templates/{id}:
+    $ref: "./paths/templates.yaml#/~1templates~1{id}"
+  /reports/customers:
+    $ref: "./paths/reports.yaml#/~1reports~1customers"
+  /reports/purchases:
+    $ref: "./paths/reports.yaml#/~1reports~1purchases"
+  /reports/campaigns:
+    $ref: "./paths/reports.yaml#/~1reports~1campaigns"
+  /reports/automations:
+    $ref: "./paths/reports.yaml#/~1reports~1automations"
+  /reports/messages:
+    $ref: "./paths/reports.yaml#/~1reports~1messages"
 
 components:
 

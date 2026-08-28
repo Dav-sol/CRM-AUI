@@ -1,0 +1,77 @@
+type: object
+
+description: |
+  Cotización simple (Fase P0-C): un producto + cantidad. Conserva la cadena de
+  atribución campaña → mensaje → conversación → cotización → venta.
+
+required:
+  - uuid
+  - status
+  - quantity
+  - value
+  - customerName
+  - createdAt
+
+properties:
+
+  uuid:
+    type: string
+
+  status:
+    type: string
+    enum: [DRAFT, ENVIADA, ACEPTADA, RECHAZADA, VENCIDA]
+
+  customerId:
+    type: string
+    nullable: true
+
+  customerName:
+    type: string
+
+  conversationId:
+    type: string
+    nullable: true
+
+  campaignId:
+    type: string
+    nullable: true
+
+  campaignName:
+    type: string
+    nullable: true
+
+  productId:
+    type: string
+    nullable: true
+
+  productName:
+    type: string
+    nullable: true
+
+  quantity:
+    type: integer
+
+  value:
+    type: number
+
+  note:
+    type: string
+    nullable: true
+
+  sentAt:
+    type: string
+    format: date-time
+    nullable: true
+
+  acceptedAt:
+    type: string
+    format: date-time
+    nullable: true
+
+  purchaseId:
+    type: string
+    nullable: true
+
+  createdAt:
+    type: string
+    format: date-time

@@ -11,6 +11,11 @@ import { PrismaService } from '../../core/database/prisma.service';
 import type { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
 import { WhatsappService } from './whatsapp.service';
+import { PancakeWhatsAppProvider } from './pancake/pancake-whatsapp.provider';
+import {
+  PancakeRateLimitError,
+  PancakeTimeoutError,
+} from './pancake/pancake.client';
 import {
   ProviderSendError,
   WHATSAPP_PROVIDER,
@@ -35,7 +40,11 @@ const expectData = (shape: Record<string, unknown>): Record<string, unknown> =>
 describe('WhatsappService', () => {
   let service: WhatsappService;
   let prisma: {
-    automation: { findMany: jest.Mock; updateMany: jest.Mock };
+    automation: {
+      findMany: jest.Mock;
+      updateMany: jest.Mock;
+      findUnique: jest.Mock;
+    };
     message: {
       findFirst: jest.Mock;
       create: jest.Mock;
@@ -56,6 +65,7 @@ describe('WhatsappService', () => {
   let auditService: { record: jest.Mock };
   let eventEmitter: { emit: jest.Mock };
   let provider: { sendMessage: jest.Mock };
+  let pancakeProvider: { sendMessage: jest.Mock; isConfigured: jest.Mock };
   let configService: { get: jest.Mock };
 
   const emittedNames = (): string[] =>
@@ -66,6 +76,7 @@ describe('WhatsappService', () => {
       automation: {
         findMany: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUnique: jest.fn(),
       },
       message: {
         findFirst: jest.fn(),
@@ -93,6 +104,10 @@ describe('WhatsappService', () => {
     auditService = { record: jest.fn().mockResolvedValue(undefined) };
     eventEmitter = { emit: jest.fn() };
     provider = { sendMessage: jest.fn() };
+    pancakeProvider = {
+      sendMessage: jest.fn(),
+      isConfigured: jest.fn(() => false),
+    };
     configService = {
       get: jest.fn((key: string) => {
         if (key === 'whatsapp.defaultOrganizationId') {
@@ -109,6 +124,7 @@ describe('WhatsappService', () => {
         { provide: AuditIdentityService, useValue: auditService },
         { provide: EventEmitter2, useValue: eventEmitter },
         { provide: WHATSAPP_PROVIDER, useValue: provider as WhatsAppProvider },
+        { provide: PancakeWhatsAppProvider, useValue: pancakeProvider },
         { provide: ConfigService, useValue: configService },
       ],
     }).compile();
@@ -413,6 +429,64 @@ describe('WhatsappService', () => {
       expect(events).not.toContain('AutomationExecuted');
     });
 
+    it('marks a Pancake ambiguous/non-retryable failure as terminal (no auto-retry, H5)', async () => {
+      configService.get.mockImplementation((key: string) => {
+        if (key === 'whatsapp.defaultOrganizationId') return 'org-1';
+        if (key === 'pancake.organizationId') return 'org-1';
+        return null;
+      });
+      pancakeProvider.isConfigured.mockReturnValue(true);
+      const timeout = new PancakeTimeoutError('timeout');
+      timeout.retryable = false;
+      pancakeProvider.sendMessage.mockRejectedValue(timeout);
+      prisma.automation.findMany.mockResolvedValue([dueAutomation]);
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => fn(txMock()),
+      );
+      prisma.message.update.mockResolvedValue({});
+      prisma.automation.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.executeDueAutomations();
+
+      // Terminal: ERROR with retryCount exhausted so the scheduler never re-picks.
+      expect(prisma.automation.updateMany).toHaveBeenCalledWith({
+        where: { id: 'a-1', status: 'EXECUTING' },
+        data: expect.objectContaining({
+          status: 'ERROR',
+          retryCount: 3,
+        }) as object,
+      });
+      expect(pancakeProvider.sendMessage).toHaveBeenCalled();
+    });
+
+    it('keeps a Pancake retryable failure (429/5xx) on the retryable ERROR path', async () => {
+      configService.get.mockImplementation((key: string) => {
+        if (key === 'whatsapp.defaultOrganizationId') return 'org-1';
+        if (key === 'pancake.organizationId') return 'org-1';
+        return null;
+      });
+      pancakeProvider.isConfigured.mockReturnValue(true);
+      const rate = new PancakeRateLimitError('rate');
+      rate.retryable = true;
+      pancakeProvider.sendMessage.mockRejectedValue(rate);
+      prisma.automation.findMany.mockResolvedValue([dueAutomation]);
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => fn(txMock()),
+      );
+      prisma.message.update.mockResolvedValue({});
+      prisma.automation.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.executeDueAutomations();
+
+      expect(prisma.automation.updateMany).toHaveBeenCalledWith({
+        where: { id: 'a-1', status: 'EXECUTING' },
+        data: expect.objectContaining({
+          status: 'ERROR',
+          retryCount: { increment: 1 },
+        }) as object,
+      });
+    });
+
     it('simulates the send for sandbox organizations and marks it as simulated (demo D1)', async () => {
       configService.get.mockImplementation((key: string) => {
         if (key === 'whatsapp.sandboxOrganizations') {
@@ -540,6 +614,80 @@ describe('WhatsappService', () => {
       expect(events).toContain('AutomationFailed');
       expect(auditService.record).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'automation.failed' }),
+      );
+    });
+  });
+
+  describe('expireStuckExecuting (F7)', () => {
+    it('returns orphaned EXECUTING automations to ERROR/retry, never EXECUTED', async () => {
+      configService.get.mockImplementation((key: string) =>
+        key === 'whatsapp.executingTimeoutMs' ? 1000 : null,
+      );
+      prisma.automation.findMany.mockResolvedValue([
+        {
+          id: 'a-1',
+          uuid: 'au-1',
+          organizationId: 'org-1',
+          purchaseId: 'pu-1',
+        },
+      ]);
+      prisma.automation.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.expireStuckExecuting();
+
+      expect(prisma.automation.updateMany).toHaveBeenCalledWith({
+        where: { id: 'a-1', status: 'EXECUTING' },
+        data: {
+          status: 'ERROR',
+          retryCount: { increment: 1 },
+          updatedBy: null,
+        },
+      });
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'AutomationFailed',
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            reason: 'executing_timeout',
+          }) as object,
+        }),
+      );
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'automation.failed' }),
+      );
+    });
+
+    it('skips the sweep when the timeout is disabled (0)', async () => {
+      configService.get.mockImplementation((key: string) =>
+        key === 'whatsapp.executingTimeoutMs' ? 0 : null,
+      );
+
+      await service.expireStuckExecuting();
+
+      expect(prisma.automation.findMany).not.toHaveBeenCalled();
+      expect(prisma.automation.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('ignores automations that already left EXECUTING (guarded update)', async () => {
+      configService.get.mockImplementation((key: string) =>
+        key === 'whatsapp.executingTimeoutMs' ? 1000 : null,
+      );
+      prisma.automation.findMany.mockResolvedValue([
+        {
+          id: 'a-1',
+          uuid: 'au-1',
+          organizationId: 'org-1',
+          purchaseId: 'pu-1',
+        },
+      ]);
+      prisma.automation.updateMany.mockResolvedValue({ count: 0 });
+
+      await service.expireStuckExecuting();
+
+      expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+        'AutomationFailed',
+        expect.objectContaining({
+          payload: expect.objectContaining({ automationId: 'au-1' }) as object,
+        }),
       );
     });
   });
@@ -1188,6 +1336,57 @@ describe('WhatsappService', () => {
       const events = emittedNames();
       expect(events).toContain('ConversationOpened');
       expect(events).toContain('MessageReceived');
+    });
+
+    it('attributes an inbound reply to the last recent automation of the conversation (Fase 2, P0-4)', async () => {
+      prisma.message.findFirst
+        .mockResolvedValueOnce(null) // idempotency
+        .mockResolvedValueOnce({ automationId: 'auto-int-1' }); // reply origin
+      prisma.automation.findUnique.mockResolvedValue({
+        uuid: 'auto-1',
+        campaignId: 'camp-1',
+      });
+      prisma.customer.findMany.mockResolvedValue([
+        {
+          id: 'cu-1',
+          uuid: 'cuu-1',
+          organizationId: 'org-1',
+          phone: '573000000000',
+        },
+      ]);
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) =>
+          fn({
+            conversation: {
+              findFirst: jest.fn().mockResolvedValue({
+                id: 'conv-1',
+                uuid: 'conv-uuid-1',
+              }),
+              create: jest.fn(),
+            },
+          }),
+      );
+      prisma.message.create.mockResolvedValue({
+        id: 'msg-1',
+        uuid: 'msg-uuid-1',
+      });
+
+      await service.handleInboundMessage({
+        providerMessageId: 'wamid.in.2',
+        from: '573000000000',
+        text: 'Sí, quiero revisar la batería',
+        timestamp: '1755000000',
+        providerConversationId: 'conv-p-1',
+      });
+
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            inReplyToAutomationId: 'auto-1',
+            inReplyToCampaignId: 'camp-1',
+          }),
+        }),
+      );
     });
 
     it('auto-creates a PENDING customer and links the conversation for an unknown number (Decisión 4)', async () => {

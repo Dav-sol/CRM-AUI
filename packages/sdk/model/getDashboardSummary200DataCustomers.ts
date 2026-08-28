@@ -16,4 +16,12 @@ export type GetDashboardSummary200DataCustomers = {
   total: number;
   /** Customers created in the current calendar month (UTC). */
   newThisMonth: number;
+  /** Customers created inside the selected range. */
+  newInRange: number;
+  /**
+     * % change of newInRange vs the previous period (null without a
+     * comparison range).
+     * @nullable
+     */
+  newDelta: number | null;
 };

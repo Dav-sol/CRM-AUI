@@ -541,7 +541,7 @@ describe('FollowUpSequencesService', () => {
 
     it('rejects an empty body (at least one field required)', async () => {
       await expect(
-        service.update(adminUser, 'fus-1', {} as never),
+        service.update(adminUser, 'fus-1', {}),
       ).rejects.toMatchObject({
         response: {
           error: {

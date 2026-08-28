@@ -32,13 +32,13 @@ curl -s http://localhost:3000/api/v1/commercial-cycles/{uuid} -H "Authorization:
 # { data: { status: "ACTIVE", startDate, automations: [ { status: "SCHEDULED", scheduledDate } ] } } (AS-004)
 ```
 
-## S4 — Re-purchase cancels previous cycle (AU-003)
+## S4 — Re-purchase keeps each cycle (AU-003 + playbook §15)
 
-Import a second purchase for the SAME customer before the cycle ends → the previous cycle + its PENDING/SCHEDULED automations are CANCELLED, a new ACTIVE cycle is created (AS-003).
+Import a second purchase for the SAME customer before the previous cycle ends → the previous cycle + its PENDING/SCHEDULED automations remain ACTIVE (they belong to another purchase/warranty); a NEW ACTIVE cycle is created for the new purchase (AS-003).
 
 ```bash
 curl -s http://localhost:3000/api/v1/commercial-cycles -H "Authorization: Bearer $TOKEN"
-# two cycles: former CANCELLED with endDate set; new ACTIVE
+# two ACTIVE cycles, one per purchase (former cycle is NOT cancelled)
 ```
 
 ## S5 — Idempotent event replay

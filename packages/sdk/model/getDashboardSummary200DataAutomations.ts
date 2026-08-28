@@ -14,4 +14,11 @@
 export type GetDashboardSummary200DataAutomations = {
   /** Automations with status SCHEDULED. */
   scheduled: number;
+  /** Automations executed inside the selected range. */
+  executedInRange: number;
+  /**
+     * Percent change of executedInRange vs the previous period.
+     * @nullable
+     */
+  executedDelta: number | null;
 };

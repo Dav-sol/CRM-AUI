@@ -43,4 +43,12 @@ export class QueryCampaignsDto {
   @IsString()
   @MaxLength(120)
   search?: string; // name contains, case-insensitive
+
+  @IsOptional()
+  @IsString()
+  createdFrom?: string; // ISO date or date-only, whole-day inclusive
+
+  @IsOptional()
+  @IsString()
+  createdTo?: string; // ISO date or date-only, whole-day inclusive
 }

@@ -1,9 +1,9 @@
 type: object
 
 description: |
-  Partial update of a campaign. Only allowed while the campaign is DRAFT;
-  at least one field must be provided. The segment, when present, must
-  include at least one criterion.
+  Partial update of a campaign. Only allowed while the campaign is DRAFT or
+  APPROVED (before activation); at least one field must be provided. The
+  segment, when present, must include at least one criterion.
 
 properties:
 
@@ -36,6 +36,15 @@ properties:
 
   segment:
     $ref: "./CampaignSegment.yaml"
+
+  stages:
+    type: array
+    maxItems: 20
+    description: |
+      Etapas inline del timeline (Fase 1). Excluyente con followUpSequenceId.
+      Un array vacío limpia las etapas inline existentes.
+    items:
+      $ref: "./CampaignStage.yaml"
 
   startAt:
     type: string

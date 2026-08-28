@@ -19,6 +19,11 @@ import {
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
+import {
+  brandOf,
+  renderTemplate,
+  type MessageTemplateVars,
+} from '../../common/message-variables';
 import { ConversationPathParamsDto } from './dto/conversation-path-params.dto';
 import { QueryConversationsDto } from './dto/query-conversations.dto';
 import { QueryMessagesDto } from './dto/query-messages.dto';
@@ -38,10 +43,13 @@ import { Inject } from '@nestjs/common';
 import type {
   InboundWebhookPayload,
   ProviderInboundMessage,
+  ProviderSendResult,
   ProviderStatusUpdate,
   WhatsAppProvider,
 } from './whatsapp.provider';
 import { ProviderSendError, WHATSAPP_PROVIDER } from './whatsapp.provider';
+import { PancakeWhatsAppProvider } from './pancake/pancake-whatsapp.provider';
+import { PancakeError } from './pancake/pancake.client';
 
 const MODULE = 'whatsapp';
 
@@ -53,6 +61,10 @@ const MESSAGE_SORT_FIELDS = new Set(['createdAt', 'sentAt', 'status']);
 const SCHEDULER_BATCH_SIZE = 100;
 
 const MAX_AUTOMATION_RETRIES = 3;
+
+// Fase 2 (P0-4): ventana para atribuir una respuesta entrante a la última
+// automatización OUTBOUND de la conversación.
+const REPLY_ORIGIN_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 const AUTOMATIC_TEMPLATE =
   'Hola {customerName}. {organizationName} te saluda y te envía este mensaje de seguimiento tras tu compra de {productName}.';
@@ -104,6 +116,8 @@ export interface MessageSummary {
   uuid: string;
   conversationId: string;
   automationId: string | null;
+  inReplyToCampaignId: string | null;
+  inReplyToCampaignName: string | null;
   type: MessageType;
   content: string;
   direction: MessageDirection;
@@ -168,6 +182,7 @@ export class WhatsappService {
     private readonly eventEmitter: EventEmitter2,
     @Inject(WHATSAPP_PROVIDER)
     private readonly provider: WhatsAppProvider,
+    private readonly pancakeProvider: PancakeWhatsAppProvider,
     private readonly configService: ConfigService,
   ) {}
 
@@ -186,14 +201,15 @@ export class WhatsappService {
         OR: [{ campaignId: null }, { campaign: { status: 'ACTIVE' } }],
         purchase: {
           deletedAt: null,
-          customer: { deletedAt: null, status: 'ACTIVE' },
+          // Fase 5 (T19): el opt-out detiene los envíos.
+          customer: { deletedAt: null, status: 'ACTIVE', noContactAt: null },
         },
       },
       include: {
         purchase: {
           include: {
             customer: true,
-            product: { select: { name: true } },
+            product: { select: { name: true, category: true } },
           },
         },
         organization: { select: { name: true } },
@@ -215,6 +231,66 @@ export class WhatsappService {
     }
   }
 
+  // F7: EXECUTING automations whose send was never confirmed within
+  // `whatsapp.executingTimeoutMs` are orphaned (crash/hang between the guard
+  // transition and the provider confirmation). They return to ERROR so the
+  // normal retry mechanism re-picks them (bounded by MAX_AUTOMATION_RETRIES).
+  // They are NEVER auto-marked EXECUTED: that would be a false confirmation.
+  async expireStuckExecuting(): Promise<void> {
+    const timeoutMs =
+      this.configService.get<number>('whatsapp.executingTimeoutMs') ?? 600_000;
+    if (timeoutMs <= 0) {
+      return;
+    }
+    const cutoff = new Date(Date.now() - timeoutMs);
+    const stuck = await this.prisma.automation.findMany({
+      where: {
+        status: 'EXECUTING',
+        updatedAt: { lt: cutoff },
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        uuid: true,
+        organizationId: true,
+        purchaseId: true,
+      },
+      take: SCHEDULER_BATCH_SIZE,
+    });
+
+    for (const automation of stuck) {
+      const updated = await this.prisma.automation.updateMany({
+        where: { id: automation.id, status: 'EXECUTING' },
+        data: {
+          status: 'ERROR',
+          retryCount: { increment: 1 },
+          updatedBy: null,
+        },
+      });
+      if (updated.count === 0) {
+        continue;
+      }
+      this.emit('AutomationFailed', null, automation.organizationId, {
+        automationId: automation.uuid,
+        purchaseId: automation.purchaseId,
+        failedAt: new Date().toISOString(),
+        reason: 'executing_timeout',
+      } satisfies AutomationFailedPayload);
+      await this.auditService.record({
+        module: MODULE,
+        action: 'automation.failed',
+        outcome: 'failure',
+        userId: null,
+        organizationId: automation.organizationId,
+        description: `automatic execution timed out automation=${automation.uuid}`,
+        metadata: {
+          automationId: automation.uuid,
+          reason: 'executing_timeout',
+        },
+      });
+    }
+  }
+
   private async executeOneAutomation(automation: {
     id: string;
     uuid: string;
@@ -224,6 +300,7 @@ export class WhatsappService {
     messageTemplate?: string | null;
     purchase: {
       purchaseDate: Date;
+      warrantyExpiresAt?: Date | null;
       customer: {
         id: string;
         uuid: string;
@@ -231,7 +308,7 @@ export class WhatsappService {
         name: string;
         status: CustomerStatus;
       };
-      product: { name: string } | null;
+      product: { name: string; category?: string | null } | null;
     };
     organization: { name: string } | null;
     campaign?: {
@@ -355,13 +432,16 @@ export class WhatsappService {
     }
 
     const simulated = this.isSandboxOrganization(automation.organizationId);
+    const usePancake = this.shouldUsePancake(automation.organizationId);
     try {
-      const sendResult = simulated
-        ? {
-            providerMessageId: `sim-${message.uuid}`,
-            providerConversationId: null,
-          }
-        : await this.provider.sendMessage(phone, content);
+      const sendResult = usePancake
+        ? await this.pancakeProvider.sendMessage(phone, content)
+        : simulated
+          ? {
+              providerMessageId: `sim-${message.uuid}`,
+              providerConversationId: null,
+            }
+          : await this.provider.sendMessage(phone, content);
       await this.markSent(message, automation.organizationId, sendResult);
       // Only EXECUTED after the send is confirmed (P1, demo D1).
       await this.markAutomationExecuted(automation.id);
@@ -391,12 +471,24 @@ export class WhatsappService {
           ? 'provider_error'
           : 'internal_error';
       await this.failMessage(message, automation.organizationId, reason);
-      await this.markAutomationFailed(automation.id);
+      // H5 (Pancake): ambiguous failures (timeout/network) may have reached
+      // the provider. They are terminal by default (retryOnAmbiguous=false):
+      // auto-retrying could duplicate the message (Pancake has no idempotency
+      // key). Non-retryable Pancake errors (auth/404/success=false) are also
+      // terminal. Everything else keeps the retryable ERROR path.
+      const pancakeTerminal =
+        error instanceof PancakeError && error.retryable === false;
+      if (pancakeTerminal) {
+        await this.markAutomationTerminal(automation.id);
+      } else {
+        await this.markAutomationFailed(automation.id);
+      }
       this.emit('AutomationFailed', null, automation.organizationId, {
         automationId: automation.uuid,
         purchaseId: automation.purchaseId,
         failedAt: new Date().toISOString(),
         reason,
+        ...(pancakeTerminal ? { terminal: true } : {}),
       } satisfies AutomationFailedPayload);
       await this.auditService.record({
         module: MODULE,
@@ -405,7 +497,11 @@ export class WhatsappService {
         userId: null,
         organizationId: automation.organizationId,
         description: `automatic execution failed automation=${automation.uuid}`,
-        metadata: { automationId: automation.uuid, reason },
+        metadata: {
+          automationId: automation.uuid,
+          reason,
+          ...(pancakeTerminal ? { terminal: true } : {}),
+        },
       });
     }
   }
@@ -415,8 +511,9 @@ export class WhatsappService {
     messageTemplate?: string | null;
     purchase: {
       purchaseDate: Date;
+      warrantyExpiresAt?: Date | null;
       customer: { name: string };
-      product: { name: string } | null;
+      product: { name: string; category?: string | null } | null;
     };
     organization: { name: string } | null;
     campaign?: {
@@ -433,7 +530,7 @@ export class WhatsappService {
         ? automation.messageTemplate
         : null;
     if (snapshotTemplate) {
-      return this.renderTemplate(snapshotTemplate, automation);
+      return renderTemplate(snapshotTemplate, this.varsOf(automation));
     }
     // AU-005 stages: +3 días, +6 meses, +12 meses. La plantilla de etapa
     // gana; si no está definida se usa la plantilla base de la campaña.
@@ -448,23 +545,31 @@ export class WhatsappService {
       (campaign && days <= 180 && campaign.templateD180) ||
       (campaign && days <= 365 && campaign.templateD365);
     const template = stageTemplate || campaign?.template || AUTOMATIC_TEMPLATE;
-    return this.renderTemplate(template, automation);
+    return renderTemplate(template, this.varsOf(automation));
   }
 
-  private renderTemplate(
-    template: string,
+  private varsOf(
     automation: {
       purchase: {
+        purchaseDate: Date;
+        warrantyExpiresAt?: Date | null;
         customer: { name: string };
-        product: { name: string } | null;
+        product: { name: string; category?: string | null } | null;
       };
       organization: { name: string } | null;
     },
-  ): string {
-    return template
-      .replace('{customerName}', automation.purchase.customer.name)
-      .replace('{productName}', automation.purchase.product?.name ?? '')
-      .replace('{organizationName}', automation.organization?.name ?? '');
+  ): MessageTemplateVars {
+    return {
+      customerName: automation.purchase.customer.name,
+      productName: automation.purchase.product?.name ?? '',
+      organizationName: automation.organization?.name ?? '',
+      brand: brandOf(
+        automation.purchase.product?.category,
+        automation.purchase.product?.name,
+      ),
+      warrantyExpiresAt: automation.purchase.warrantyExpiresAt,
+      purchaseDate: automation.purchase.purchaseDate,
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -562,7 +667,11 @@ export class WhatsappService {
     }
 
     try {
-      const sendResult = await this.provider.sendMessage(phone, dto.content);
+      const sendResult = await this.sendViaProvider(
+        customer.organizationId,
+        phone,
+        dto.content,
+      );
       await this.markSent(message, customer.organizationId, sendResult);
       await this.auditService.record({
         module: MODULE,
@@ -695,7 +804,11 @@ export class WhatsappService {
     }
 
     try {
-      const sendResult = await this.provider.sendMessage(phone, content);
+      const sendResult = await this.sendViaProvider(
+        conversation.organizationId,
+        phone,
+        content,
+      );
       await this.markSent(message, conversation.organizationId, sendResult);
       await this.auditService.record({
         module: MODULE,
@@ -805,6 +918,7 @@ export class WhatsappService {
 
     let created: { uuid: string };
     try {
+      const replyOrigin = await this.resolveReplyOrigin(conversation.id);
       const row = await this.prisma.message.create({
         data: {
           organizationId,
@@ -816,6 +930,12 @@ export class WhatsappService {
           providerMessageId: message.providerMessageId,
           providerConversationId: message.providerConversationId,
           sentAt: this.toDate(message.timestamp),
+          ...(replyOrigin
+            ? {
+                inReplyToAutomationId: replyOrigin.automationId,
+                inReplyToCampaignId: replyOrigin.campaignId,
+              }
+            : {}),
         },
       });
       created = { uuid: row.uuid };
@@ -966,7 +1086,33 @@ export class WhatsappService {
     if (!conversation) {
       return null;
     }
-    return toConversationDetail(conversation);
+    const detail = toConversationDetail(conversation);
+
+    // Fase 2 (P0-4): resuelve el nombre de la campaña para mensajes que
+    // respondieron a una automatización (badge "Respondió a {campaña}").
+    const campaignIds = detail.messages
+      .map((message) => message.inReplyToCampaignId)
+      .filter((id): id is string => Boolean(id));
+    if (campaignIds.length > 0) {
+      const campaigns = await this.prisma.campaign.findMany({
+        where: { uuid: { in: [...new Set(campaignIds)] } },
+        select: { uuid: true, name: true },
+      });
+      const nameByUuid = new Map(
+        campaigns.map((campaign) => [campaign.uuid, campaign.name]),
+      );
+      detail.messages = detail.messages.map((message) =>
+        message.inReplyToCampaignId
+          ? {
+              ...message,
+              inReplyToCampaignName:
+                nameByUuid.get(message.inReplyToCampaignId) ?? null,
+            }
+          : message,
+      );
+    }
+
+    return detail;
   }
 
   async listMessages(
@@ -1112,6 +1258,41 @@ export class WhatsappService {
     });
   }
 
+  // Fase 2 (P0-4): resuelve el origen de una respuesta entrante. Si en la
+  // conversación hubo una automatización OUTBOUND reciente (dentro de la
+  // ventana), el mensaje entrante se atribuye a esa automatización/campaña.
+  private async resolveReplyOrigin(
+    conversationId: string,
+  ): Promise<{ automationId: string; campaignId: string | null } | null> {
+    const since = new Date(Date.now() - REPLY_ORIGIN_WINDOW_MS);
+    const last = await this.prisma.message.findFirst({
+      where: {
+        conversationId,
+        type: MessageType.AUTOMATIC,
+        direction: MessageDirection.OUTBOUND,
+        automationId: { not: null },
+        createdAt: { gte: since },
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { automationId: true },
+    });
+    if (!last?.automationId) {
+      return null;
+    }
+    const automation = await this.prisma.automation.findUnique({
+      where: { id: last.automationId },
+      select: { uuid: true, campaignId: true },
+    });
+    if (!automation) {
+      return null;
+    }
+    return {
+      automationId: automation.uuid,
+      campaignId: automation.campaignId,
+    };
+  }
+
   private async findOrOpenCustomerConversation(
     tx: PrismaClient,
     organizationId: string,
@@ -1244,6 +1425,12 @@ export class WhatsappService {
     }
     if (query.customerId) {
       where.customer = { uuid: query.customerId };
+    }
+    if (query.name?.trim()) {
+      where.customer = {
+        ...(where.customer as Prisma.CustomerWhereInput),
+        name: { contains: query.name.trim(), mode: 'insensitive' },
+      };
     }
     if (query.advisorId) {
       where.advisor = { uuid: query.advisorId };
@@ -1405,11 +1592,46 @@ export class WhatsappService {
     });
   }
 
+  // H5: a failure that must not be auto-retried (ambiguous/terminal) lands in
+  // ERROR with retryCount exhausted, so the scheduler never re-picks it.
+  private async markAutomationTerminal(automationId: string): Promise<void> {
+    await this.prisma.automation.updateMany({
+      where: { id: automationId, status: 'EXECUTING' },
+      data: {
+        status: 'ERROR',
+        retryCount: MAX_AUTOMATION_RETRIES,
+        updatedBy: null,
+      },
+    });
+  }
+
   private isSandboxOrganization(organizationId: string): boolean {
     const sandbox = this.configService.get<string[]>(
       'whatsapp.sandboxOrganizations',
     );
     return Array.isArray(sandbox) && sandbox.includes(organizationId);
+  }
+
+  // Pancake is org-scoped: only PANCAKE_ORGANIZATION_ID routes its sends
+  // through the Pancake provider (and only when it is configured).
+  private shouldUsePancake(organizationId: string): boolean {
+    const pancakeOrg = this.configService.get<string>('pancake.organizationId');
+    return Boolean(
+      pancakeOrg &&
+      pancakeOrg === organizationId &&
+      this.pancakeProvider.isConfigured(),
+    );
+  }
+
+  private async sendViaProvider(
+    organizationId: string,
+    phone: string,
+    content: string,
+  ): Promise<ProviderSendResult> {
+    if (this.shouldUsePancake(organizationId)) {
+      return this.pancakeProvider.sendMessage(phone, content);
+    }
+    return this.provider.sendMessage(phone, content);
   }
 
   private async findMessageUuidByProviderId(
@@ -1611,6 +1833,8 @@ function toMessageSummary(message: {
   uuid: string;
   conversationId: string;
   automationId: string | null;
+  inReplyToCampaignId: string | null;
+  inReplyToCampaignName?: string | null;
   type: MessageType;
   content: string;
   direction: MessageDirection;
@@ -1624,6 +1848,8 @@ function toMessageSummary(message: {
     uuid: message.uuid,
     conversationId: message.conversationId,
     automationId: message.automationId,
+    inReplyToCampaignId: message.inReplyToCampaignId,
+    inReplyToCampaignName: message.inReplyToCampaignName ?? null,
     type: message.type,
     content: message.content,
     direction: message.direction,

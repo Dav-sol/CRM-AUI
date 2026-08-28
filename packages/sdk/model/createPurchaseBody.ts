@@ -42,6 +42,16 @@ export type CreatePurchaseBody = {
   status?: CreatePurchaseBodyStatus;
   /** Optional override of product warranty duration in months (catalog values). */
   warrantyMonths?: CreatePurchaseBodyWarrantyMonths;
+  /**
+     * Atribución de ventas (Fase 2): uuid de la conversación que originó la
+     * venta. Al registrarse, la compra crea su propio ciclo (AU-003).
+     */
+  sourceConversationId?: string;
+  /**
+     * Atribución de ventas (Fase P0-C): uuid de la cotización aceptada que
+     * originó la venta. La cotización queda vinculada (ACEPTADA + purchaseId).
+     */
+  quoteId?: string;
   /** Only accepted for PLATFORM_OWNER; required for them. Organization users must not send it (400 VALIDATION_ERROR). */
   organizationId?: string;
 };

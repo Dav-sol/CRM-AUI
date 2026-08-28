@@ -45,5 +45,70 @@ export default () => ({
       .split(',')
       .map((value) => value.trim())
       .filter(Boolean),
+    // F7: EXECUTING automations older than this are orphaned (provider never
+    // confirmed); they return to ERROR/retry (never auto-EXECUTED).
+    executingTimeoutMs: parseInt(
+      process.env.WHATSAPP_EXECUTING_TIMEOUT_MS ?? '600000',
+      10,
+    ),
+  },
+
+  // Journey anti-spam (playbook §14): maximum COMMERCIAL automations per
+  // customer per 60 days, and a minimum distance between commercial contacts.
+  // Transactional (warranty/post-purchase) never count.
+  journeys: {
+    maxCommercialPer60d: parseInt(
+      process.env.JOURNEYS_MAX_COMMERCIAL_PER_60D ?? '3',
+      10,
+    ),
+    // Fase 4 (T16): nunca dos comerciales demasiado cerca (playbook §14).
+    minDaysBetweenCommercial: parseInt(
+      process.env.JOURNEYS_MIN_DAYS_BETWEEN_COMMERCIAL ?? '3',
+      10,
+    ),
+  },
+
+  // Fase 3 (P0-5): costo estimado por mensaje de WhatsApp (COP). Solo estimado;
+  // no hay cobro ni capa de presupuesto real en v1.
+  // Fase P0.2 (D6): tarifas por propósito preparadas para costos reales de Meta.
+  campaigns: {
+    messageCost: parseInt(process.env.WHATSAPP_MESSAGE_COST ?? '200', 10),
+    messageCostCommercial: parseInt(
+      process.env.WHATSAPP_MESSAGE_COST_COMMERCIAL ?? '400',
+      10,
+    ),
+  },
+
+  // Fase P0-C: cotizaciones vencen automáticamente tras N días sin respuesta.
+  quotes: {
+    expiryDays: parseInt(process.env.QUOTE_EXPIRY_DAYS ?? '7', 10),
+  },
+
+  // Pancake (WhatsApp via Pancake Public API). Org-scoped: only the
+  // organization in PANCAKE_ORGANIZATION_ID routes its sends through Pancake.
+  // Two tokens: PANCAKE_API_TOKEN = page_access_token for pages.fm; the
+  // PANCAKE_BOTCAKE_API_TOKEN (Botcake > Configuración > Integraciones > API)
+  // is required to list WhatsApp message_templates via botcake.io (Bearer).
+  pancake: {
+    apiToken: process.env.PANCAKE_API_TOKEN, // page_access_token (Pancake)
+    botcakeApiToken: process.env.PANCAKE_BOTCAKE_API_TOKEN, // Bearer for botcake.io
+    pageId: process.env.PANCAKE_PAGE_ID, // e.g. waba_1146111635255630
+    apiBaseUrl:
+      process.env.PANCAKE_API_BASE_URL ?? 'https://pages.fm/api/public_api',
+    templatesApiUrl:
+      process.env.PANCAKE_TEMPLATES_API_URL ??
+      'https://botcake.io/api/public_api/v1',
+    organizationId: process.env.PANCAKE_ORGANIZATION_ID,
+    senderId: process.env.PANCAKE_SENDER_ID,
+    timeoutMs: parseInt(process.env.PANCAKE_TIMEOUT_MS ?? '15000', 10),
+    minIntervalMs: parseInt(process.env.PANCAKE_MIN_INTERVAL_MS ?? '250', 10),
+    // Ambiguous failures (timeout/network) are terminal by default: never
+    // auto-retry a send that may have reached the provider (no idempotency).
+    retryOnAmbiguous:
+      (process.env.PANCAKE_RETRY_ON_AMBIGUOUS ?? 'false') === 'true',
+    // Resolve the real conversation id via GET before sending (handles the
+    // "CO." PSID conversations that the composed [pageID]_[phone] misses).
+    resolveConversationId:
+      (process.env.PANCAKE_RESOLVE_CONVERSATION_ID ?? 'false') === 'true',
   },
 });

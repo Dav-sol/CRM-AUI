@@ -20,6 +20,8 @@ properties:
     required:
       - total
       - newThisMonth
+      - newInRange
+      - newDelta
     properties:
       total:
         type: integer
@@ -27,12 +29,25 @@ properties:
       newThisMonth:
         type: integer
         description: Customers created in the current calendar month (UTC).
+      newInRange:
+        type: integer
+        description: Customers created inside the selected range.
+      newDelta:
+        type: number
+        nullable: true
+        description: |
+          % change of newInRange vs the previous period (null without a
+          comparison range).
 
   purchases:
     type: object
     required:
       - total
       - thisMonth
+      - inRange
+      - countDelta
+      - value
+      - valueDelta
     properties:
       total:
         type: integer
@@ -40,21 +55,46 @@ properties:
       thisMonth:
         type: integer
         description: Purchases with purchaseDate in the current calendar month (UTC).
+      inRange:
+        type: integer
+        description: Purchases with purchaseDate inside the selected range.
+      countDelta:
+        type: number
+        nullable: true
+        description: "Percent change of inRange vs the previous period."
+      value:
+        type: number
+        description: Sum of purchase.value inside the selected range (revenue proxy).
+      valueDelta:
+        type: number
+        nullable: true
+        description: "Percent change of value vs the previous period."
 
   automations:
     type: object
     required:
       - scheduled
+      - executedInRange
+      - executedDelta
     properties:
       scheduled:
         type: integer
         description: Automations with status SCHEDULED.
+      executedInRange:
+        type: integer
+        description: Automations executed inside the selected range.
+      executedDelta:
+        type: number
+        nullable: true
+        description: "Percent change of executedInRange vs the previous period."
 
   messages:
     type: object
     required:
       - sent
       - pending
+      - sentInRange
+      - sentDelta
     properties:
       sent:
         type: integer
@@ -62,6 +102,13 @@ properties:
       pending:
         type: integer
         description: Messages with status QUEUED.
+      sentInRange:
+        type: integer
+        description: Messages sent inside the selected range.
+      sentDelta:
+        type: number
+        nullable: true
+        description: "Percent change of sentInRange vs the previous period."
 
   conversations:
     type: object

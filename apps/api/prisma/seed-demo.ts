@@ -1,6 +1,9 @@
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, TemplateCategory, TemplateTone, TemplateAngle } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const prisma = new PrismaClient();
 
@@ -9,13 +12,39 @@ const DEMO_PASSWORD = 'Demo12345!';
 const BCRYPT_COST = 12;
 const FLAGSHIP_MAX_CUSTOMERS = 100;
 
-const HEROES = [
+type HeroPurchaseSpec = {
+  // Days from "now" until the warranty expires (negative = already expired).
+  expiryOffsetDays: number;
+  warrantyMonths: 12 | 15 | 18 | 24;
+  quantity: number;
+  value: string;
+};
+
+type Hero = {
+  codcli: string;
+  name: string;
+  city: string;
+  phone: string;
+  email: string;
+  status?: 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
+  purchases: HeroPurchaseSpec[];
+};
+
+// Demo curada (playbook): cada cliente cuenta una historia distinta del ciclo
+// de vida de la batería. `expiryOffsetDays` ubica el vencimiento de la garantía
+// relativo a hoy para que los journeys se vean en vivo.
+const HEROES: Hero[] = [
   {
     codcli: 'DEMO-0001',
     name: 'Carlos Mendoza',
     city: 'Barranquilla',
     phone: '+57 300 111 2233',
     email: 'carlos.mendoza@example.com',
+    purchases: [
+      // Recomprador: 2 compras → 2 ciclos activos (AU-003: no se cancela el previo).
+      { expiryOffsetDays: 30, warrantyMonths: 12, quantity: 1, value: '270000.00' },
+      { expiryOffsetDays: 355, warrantyMonths: 12, quantity: 1, value: '300000.00' },
+    ],
   },
   {
     codcli: 'DEMO-0002',
@@ -23,24 +52,199 @@ const HEROES = [
     city: 'Cartagena',
     phone: '+57 301 444 5566',
     email: 'maria.torres@example.com',
+    purchases: [
+      { expiryOffsetDays: 355, warrantyMonths: 12, quantity: 1, value: '290000.00' },
+    ],
   },
-] as const;
-
-type HeroPurchaseSpec = {
-  monthsAgo?: number;
-  daysAgo?: number;
-  warrantyMonths: number;
-  quantity: number;
-  value: string;
-};
-
-// Historia demostrable (demo D2): una garantía vencida (RECOMPRA), una a punto
-// de vencer (~60 días → D-60 hoy y D-30 en ~30 días) y una compra reciente
-// (+3 y +30 días próximos).
-const HERO_PURCHASES: HeroPurchaseSpec[] = [
-  { monthsAgo: 22, warrantyMonths: 18, quantity: 1, value: '380.00' },
-  { monthsAgo: 10, warrantyMonths: 12, quantity: 1, value: '300.00' },
-  { daysAgo: 5, warrantyMonths: 12, quantity: 2, value: '540.00' },
+  {
+    codcli: 'DEMO-0003',
+    name: 'Luis Pérez',
+    city: 'Santa Marta',
+    phone: '+57 302 555 6677',
+    email: 'luis.perez@example.com',
+    purchases: [
+      { expiryOffsetDays: 715, warrantyMonths: 24, quantity: 1, value: '880000.00' },
+    ],
+  },
+  {
+    codcli: 'DEMO-0004',
+    name: 'Ana Gómez',
+    city: 'Soledad',
+    phone: '+57 303 666 7788',
+    email: 'ana.gomez@example.com',
+    purchases: [
+      // Mitad de garantía 12 meses (Mes 6 → D-180).
+      { expiryOffsetDays: 180, warrantyMonths: 12, quantity: 1, value: '320000.00' },
+    ],
+  },
+  {
+    codcli: 'DEMO-0005',
+    name: 'Jorge Ramírez',
+    city: 'Barranquilla',
+    phone: '+57 304 777 8899',
+    email: 'jorge.ramirez@example.com',
+    purchases: [
+      { expiryOffsetDays: 225, warrantyMonths: 15, quantity: 1, value: '460000.00' },
+    ],
+  },
+  {
+    codcli: 'DEMO-0006',
+    name: 'Diana Castro',
+    city: 'Cartagena',
+    phone: '+57 305 888 9900',
+    email: 'diana.castro@example.com',
+    purchases: [
+      { expiryOffsetDays: 270, warrantyMonths: 18, quantity: 1, value: '420000.00' },
+    ],
+  },
+  {
+    codcli: 'DEMO-0007',
+    name: 'Pedro Díaz',
+    city: 'Malambo',
+    phone: '+57 306 999 0011',
+    email: 'pedro.diaz@example.com',
+    purchases: [
+      { expiryOffsetDays: 360, warrantyMonths: 24, quantity: 1, value: '650000.00' },
+    ],
+  },
+  {
+    codcli: 'DEMO-0008',
+    name: 'Sofía Rodríguez',
+    city: 'Barranquilla',
+    phone: '+57 307 111 2234',
+    email: 'sofia.rodriguez@example.com',
+    purchases: [
+      // Próximo a vencer: D-60.
+      { expiryOffsetDays: 60, warrantyMonths: 12, quantity: 1, value: '350000.00' },
+    ],
+  },
+  {
+    codcli: 'DEMO-0009',
+    name: 'Andrés López',
+    city: 'Cartagena',
+    phone: '+57 308 222 3345',
+    email: 'andres.lopez@example.com',
+    purchases: [
+      // Próximo a vencer: D-30.
+      { expiryOffsetDays: 30, warrantyMonths: 12, quantity: 1, value: '270000.00' },
+    ],
+  },
+  {
+    codcli: 'DEMO-0010',
+    name: 'Laura Martínez',
+    city: 'Santa Marta',
+    phone: '+57 309 333 4456',
+    email: 'laura.martinez@example.com',
+    purchases: [
+      { expiryOffsetDays: 30, warrantyMonths: 15, quantity: 1, value: '540000.00' },
+    ],
+  },
+  {
+    codcli: 'DEMO-0011',
+    name: 'Camilo Rojas',
+    city: 'Soledad',
+    phone: '+57 310 444 5567',
+    email: 'camilo.rojas@example.com',
+    purchases: [
+      { expiryOffsetDays: 60, warrantyMonths: 24, quantity: 1, value: '780000.00' },
+    ],
+  },
+  {
+    codcli: 'DEMO-0012',
+    name: 'Valentina Morales',
+    city: 'Barranquilla',
+    phone: '+57 311 555 6678',
+    email: 'valentina.morales@example.com',
+    purchases: [
+      // Garantía vencida hace 30 días → conversión de recompra hoy.
+      { expiryOffsetDays: -30, warrantyMonths: 12, quantity: 1, value: '310000.00' },
+    ],
+  },
+  {
+    codcli: 'DEMO-0013',
+    name: 'Felipe Torres',
+    city: 'Cartagena',
+    phone: '+57 312 666 7789',
+    email: 'felipe.torres@example.com',
+    purchases: [
+      // Vencido hace ~90 días → post-garantía / renovación.
+      { expiryOffsetDays: -90, warrantyMonths: 24, quantity: 1, value: '900000.00' },
+    ],
+  },
+  {
+    codcli: 'DEMO-0014',
+    name: 'Martín Peña',
+    city: 'Soledad',
+    phone: '+57 313 777 8890',
+    email: 'martin.pena@example.com',
+    purchases: [
+      { expiryOffsetDays: -75, warrantyMonths: 12, quantity: 1, value: '280000.00' },
+    ],
+  },
+  {
+    codcli: 'DEMO-0015',
+    name: 'Carmen Duarte',
+    city: 'Barranquilla',
+    phone: '+57 314 888 9901',
+    email: 'carmen.duarte@example.com',
+    purchases: [
+      { expiryOffsetDays: -120, warrantyMonths: 12, quantity: 1, value: '340000.00' },
+    ],
+  },
+  {
+    codcli: 'DEMO-0016',
+    name: 'Natalia Ríos',
+    city: 'Santa Marta',
+    phone: '+57 315 999 0012',
+    email: 'natalia.rios@example.com',
+    status: 'INACTIVE',
+    purchases: [
+      // Inactiva: última compra hace ~28 meses.
+      { expiryOffsetDays: -420, warrantyMonths: 12, quantity: 1, value: '300000.00' },
+    ],
+  },
+  {
+    codcli: 'DEMO-0017',
+    name: 'Óscar Herrera',
+    city: 'Malambo',
+    phone: '+57 316 111 2235',
+    email: 'oscar.herrera@example.com',
+    status: 'INACTIVE',
+    purchases: [
+      { expiryOffsetDays: -540, warrantyMonths: 24, quantity: 1, value: '700000.00' },
+    ],
+  },
+  {
+    codcli: 'DEMO-0018',
+    name: 'Gabriela Vargas',
+    city: 'Barranquilla',
+    phone: '+57 317 222 3346',
+    email: 'gabriela.vargas@example.com',
+    purchases: [
+      { expiryOffsetDays: 120, warrantyMonths: 12, quantity: 1, value: '320000.00' },
+    ],
+  },
+  {
+    codcli: 'DEMO-0019',
+    name: 'Roberto Silva',
+    city: 'Cartagena',
+    phone: '+57 318 333 4457',
+    email: 'roberto.silva@example.com',
+    status: 'BLOCKED',
+    purchases: [
+      { expiryOffsetDays: -200, warrantyMonths: 12, quantity: 1, value: '290000.00' },
+    ],
+  },
+  {
+    codcli: 'DEMO-0020',
+    name: 'Daniela Ortega',
+    city: 'Santa Marta',
+    phone: '+57 319 444 5568',
+    email: 'daniela.ortega@example.com',
+    purchases: [
+      { expiryOffsetDays: 335, warrantyMonths: 15, quantity: 1, value: '480000.00' },
+    ],
+  },
 ];
 
 type SeedStage = {
@@ -57,76 +261,229 @@ const SEQUENCES: Array<{
   warrantyMonths: number;
   stages: SeedStage[];
 }> = [
+  // Playbook §29: batería de 12 meses → mitad de ciclo Mes 6 (D-180).
   {
-    name: 'Secuencia Demo — Garantía 12 meses',
-    description: 'Secuencia de seguimiento para garantía de 12 meses.',
+    name: 'Secuencia Demo — Journey Garantía 12 meses',
+    description:
+      'Journey de vida de la batería de 12 meses (playbook: bienvenida, revisión mitad de garantía, prevención D-60, preparación D-30, vencimiento y post-garantía).',
     warrantyMonths: 12,
     stages: [
       {
-        name: 'Garantía digital',
+        name: 'Bienvenida y satisfacción (D0)',
         anchor: 'PURCHASE_DATE',
         offsetDays: 0,
         template:
-          'Hola {customerName}, activamos la garantía digital de tu batería {productName}. Guardá este comprobante.',
+          'Hola {customerName}, gracias por confiar en {organizationName}. Tu batería {productName} quedó instalada y con garantía activa. ¿Todo funciona correctamente? Ante cualquier consulta estamos a tu disposición.',
       },
       {
-        name: 'Confirmación postventa',
-        anchor: 'PURCHASE_DATE',
-        offsetDays: 3,
+        name: 'Revisión mitad de garantía (Mes 6)',
+        anchor: 'WARRANTY_EXPIRY',
+        offsetDays: -180,
         template:
-          'Hola {customerName}, ¿cómo va tu batería {productName}? Ante cualquier consulta estamos para ayudarte.',
+          'Hola {customerName}, tu batería {productName} completó la mitad de su garantía. Te recomendamos una revisión gratuita de alternador y voltaje en la fábrica o taller autorizado del fabricante para prevenir inconvenientes.',
+        templateOnPast:
+          'Hola {customerName}, tu batería {productName} está fuera de su ciclo recomendado. Podemos revisar su estado y, si corresponde, ofrecerte una opción de renovación.',
       },
       {
-        name: 'Alerta de vencimiento',
+        name: 'Prevención pre-vencimiento (D-60)',
         anchor: 'WARRANTY_EXPIRY',
         offsetDays: -60,
         template:
-          'Hola {customerName}, tu batería {productName} está por vencer su garantía. Queremos ayudarte a revisarla.',
+          'Hola {customerName}, tu batería {productName} tiene la garantía próxima a vencer. Te invitamos a una revisión preventiva de diagnóstico para asegurar su buen estado.',
         templateOnPast:
-          'Hola {customerName}, tu batería {productName} ya está fuera de su ciclo recomendado. Podemos ayudarte a revisar su estado y ofrecerte una opción de reemplazo.',
+          'Hola {customerName}, tu batería {productName} está fuera de su ciclo recomendado. Podemos ayudarte a revisar su estado.',
       },
       {
-        name: 'Oferta de renovación',
+        name: 'Preparación para renovación (D-30)',
         anchor: 'WARRANTY_EXPIRY',
         offsetDays: -30,
         template:
-          'Hola {customerName}, tu batería {productName} vence pronto. Aprovechá nuestra oferta de renovación.',
+          'Hola {customerName}, en 30 días vence la garantía de tu batería {productName}. En {organizationName} podemos revisarla y asesorarte sobre el mejor momento para tu próxima batería, sin compromiso.',
         templateOnPast:
-          'Hola {customerName}, tu batería {productName} ya está fuera de su ciclo recomendado. Podemos ayudarte a revisar su estado y ofrecerte una opción de reemplazo.',
-      },
-    ],
-  },
-  {
-    name: 'Secuencia Demo — Garantía 24 meses',
-    description: 'Secuencia de seguimiento para garantía de 24 meses.',
-    warrantyMonths: 24,
-    stages: [
-      {
-        name: 'Confirmación postventa',
-        anchor: 'PURCHASE_DATE',
-        offsetDays: 3,
-        template: 'Hola {customerName}, ¿cómo va tu batería {productName}?',
+          'Hola {customerName}, tu batería {productName} ya superó su garantía. Las baterías pueden durar más que su garantía; si notas fallas, podemos revisarla y asesorarte.',
       },
       {
-        name: 'Vencimiento de garantía',
+        name: 'Vencimiento de garantía (D0)',
         anchor: 'WARRANTY_EXPIRY',
         offsetDays: 0,
         template:
-          'Hola {customerName}, hoy vence la garantía de tu {productName}. Programá tu revisión con {organizationName}.',
+          'Hola {customerName}, hoy vence la garantía de tu batería {productName}. Una batería fuera de garantía no implica que deba reemplazarse: podemos revisar su estado en nuestro taller y orientarte con datos reales.',
+        templateOnPast:
+          'Hola {customerName}, tu batería {productName} venció su garantía. Sin asumir un reemplazo, podemos revisar su estado y, si corresponde, ofrecerte una opción de renovación.',
       },
       {
-        name: '+180 días post-garantía',
+        name: 'Post-garantía / oportunidad de renovación (+90d)',
         anchor: 'WARRANTY_EXPIRY',
-        offsetDays: 180,
+        offsetDays: 90,
         template:
-          'Hola {customerName}, te ofrecemos una oferta especial para tu próximo cambio de {productName}.',
+          'Hola {customerName}, queremos saber cómo sigue tu batería {productName}. Si notaste fallas al arrancar o menor rendimiento, en {organizationName} podemos diagnosticarla y recomendarte la mejor opción.',
+        templateOnPast:
+          'Hola {customerName}, tu batería {productName} ya lleva tiempo fuera de garantía. Podemos revisarla y, si lo necesitas, ofrecerte una opción de renovación acorde a tu vehículo.',
+      },
+    ],
+  },
+  // Playbook §9: 15 meses → mitad Mes 8 (D-210).
+  {
+    name: 'Secuencia Demo — Journey Garantía 15 meses',
+    description:
+      'Journey de vida de la batería de 15 meses (playbook §9).',
+    warrantyMonths: 15,
+    stages: [
+      {
+        name: 'Bienvenida y satisfacción (D0)',
+        anchor: 'PURCHASE_DATE',
+        offsetDays: 0,
+        template:
+          'Hola {customerName}, gracias por confiar en {organizationName}. Tu batería {productName} quedó instalada y con garantía activa. ¿Todo funciona correctamente?',
       },
       {
-        name: '+365 días post-garantía',
+        name: 'Revisión mitad de garantía (Mes 8)',
         anchor: 'WARRANTY_EXPIRY',
-        offsetDays: 365,
+        offsetDays: -210,
         template:
-          'Hola {customerName}, un año después de tu garantía seguimos con descuentos exclusivos en {organizationName}.',
+          'Hola {customerName}, tu batería {productName} completó parte de su garantía. Te recomendamos una revisión gratuita de alternador y voltaje en la fábrica o taller autorizado del fabricante.',
+        templateOnPast:
+          'Hola {customerName}, tu batería {productName} está fuera de su ciclo recomendado. Podemos revisar su estado y asesorarte.',
+      },
+      {
+        name: 'Prevención pre-vencimiento (D-60)',
+        anchor: 'WARRANTY_EXPIRY',
+        offsetDays: -60,
+        template:
+          'Hola {customerName}, tu batería {productName} tiene la garantía próxima a vencer. Te invitamos a una revisión preventiva de diagnóstico.',
+        templateOnPast:
+          'Hola {customerName}, tu batería {productName} está fuera de su ciclo recomendado. Podemos ayudarte a revisar su estado.',
+      },
+      {
+        name: 'Preparación para renovación (D-30)',
+        anchor: 'WARRANTY_EXPIRY',
+        offsetDays: -30,
+        template:
+          'Hola {customerName}, en 30 días vence la garantía de tu batería {productName}. En {organizationName} podemos revisarla y asesorarte sin compromiso.',
+        templateOnPast:
+          'Hola {customerName}, tu batería {productName} ya superó su garantía. Si notas fallas, podemos revisarla y asesorarte.',
+      },
+      {
+        name: 'Vencimiento de garantía (D0)',
+        anchor: 'WARRANTY_EXPIRY',
+        offsetDays: 0,
+        template:
+          'Hola {customerName}, hoy vence la garantía de tu batería {productName}. Sin asumir un reemplazo, podemos revisar su estado y orientarte con datos reales.',
+        templateOnPast:
+          'Hola {customerName}, tu batería {productName} venció su garantía. Podemos revisar su estado y, si corresponde, ofrecerte una opción de renovación.',
+      },
+    ],
+  },
+  // Playbook §9: 18 meses → mitad Mes 9 (D-270).
+  {
+    name: 'Secuencia Demo — Journey Garantía 18 meses',
+    description:
+      'Journey de vida de la batería de 18 meses (playbook §9).',
+    warrantyMonths: 18,
+    stages: [
+      {
+        name: 'Bienvenida y satisfacción (D0)',
+        anchor: 'PURCHASE_DATE',
+        offsetDays: 0,
+        template:
+          'Hola {customerName}, gracias por confiar en {organizationName}. Tu batería {productName} quedó instalada y con garantía activa. ¿Todo funciona correctamente?',
+      },
+      {
+        name: 'Revisión mitad de garantía (Mes 9)',
+        anchor: 'WARRANTY_EXPIRY',
+        offsetDays: -270,
+        template:
+          'Hola {customerName}, tu batería {productName} completó parte de su garantía. Te recomendamos una revisión gratuita de alternador y voltaje en la fábrica o taller autorizado del fabricante.',
+        templateOnPast:
+          'Hola {customerName}, tu batería {productName} está fuera de su ciclo recomendado. Podemos revisar su estado y asesorarte.',
+      },
+      {
+        name: 'Prevención pre-vencimiento (D-60)',
+        anchor: 'WARRANTY_EXPIRY',
+        offsetDays: -60,
+        template:
+          'Hola {customerName}, tu batería {productName} tiene la garantía próxima a vencer. Te invitamos a una revisión preventiva de diagnóstico.',
+        templateOnPast:
+          'Hola {customerName}, tu batería {productName} está fuera de su ciclo recomendado. Podemos ayudarte a revisar su estado.',
+      },
+      {
+        name: 'Preparación para renovación (D-30)',
+        anchor: 'WARRANTY_EXPIRY',
+        offsetDays: -30,
+        template:
+          'Hola {customerName}, en 30 días vence la garantía de tu batería {productName}. En {organizationName} podemos revisarla y asesorarte sin compromiso.',
+        templateOnPast:
+          'Hola {customerName}, tu batería {productName} ya superó su garantía. Si notas fallas, podemos revisarla y asesorarte.',
+      },
+      {
+        name: 'Vencimiento de garantía (D0)',
+        anchor: 'WARRANTY_EXPIRY',
+        offsetDays: 0,
+        template:
+          'Hola {customerName}, hoy vence la garantía de tu batería {productName}. Sin asumir un reemplazo, podemos revisar su estado y orientarte con datos reales.',
+        templateOnPast:
+          'Hola {customerName}, tu batería {productName} venció su garantía. Podemos revisar su estado y, si corresponde, ofrecerte una opción de renovación.',
+      },
+    ],
+  },
+  // Playbook §30: batería de 24 meses → mitad Mes 12 (D-360).
+  {
+    name: 'Secuencia Demo — Journey Garantía 24 meses',
+    description:
+      'Journey de vida de la batería de 24 meses (playbook: satisfacción D0, revisión intermedia Mes 12, prevención D-60, preparación D-30, vencimiento y post-garantía).',
+    warrantyMonths: 24,
+    stages: [
+      {
+        name: 'Bienvenida y satisfacción (D0)',
+        anchor: 'PURCHASE_DATE',
+        offsetDays: 0,
+        template:
+          'Hola {customerName}, gracias por confiar en {organizationName}. Tu batería {productName} quedó instalada y con garantía activa. ¿Todo funciona correctamente?',
+      },
+      {
+        name: 'Revisión mitad de garantía (Mes 12)',
+        anchor: 'WARRANTY_EXPIRY',
+        offsetDays: -360,
+        template:
+          'Hola {customerName}, tu batería {productName} completó la mitad de su garantía. Te recomendamos una revisión gratuita de alternador y voltaje en la fábrica o taller autorizado del fabricante para prevenir inconvenientes.',
+        templateOnPast:
+          'Hola {customerName}, tu batería {productName} está fuera de su ciclo recomendado. Podemos revisar su estado y asesorarte.',
+      },
+      {
+        name: 'Prevención pre-vencimiento (D-60)',
+        anchor: 'WARRANTY_EXPIRY',
+        offsetDays: -60,
+        template:
+          'Hola {customerName}, tu batería {productName} tiene la garantía próxima a vencer. Te invitamos a una revisión preventiva de diagnóstico para asegurar su buen estado.',
+        templateOnPast:
+          'Hola {customerName}, tu batería {productName} está fuera de su ciclo recomendado. Podemos ayudarte a revisar su estado.',
+      },
+      {
+        name: 'Preparación para renovación (D-30)',
+        anchor: 'WARRANTY_EXPIRY',
+        offsetDays: -30,
+        template:
+          'Hola {customerName}, en 30 días vence la garantía de tu batería {productName}. En {organizationName} podemos revisarla y asesorarte sobre el mejor momento para tu próxima batería, sin compromiso.',
+        templateOnPast:
+          'Hola {customerName}, tu batería {productName} ya superó su garantía. Las baterías pueden durar más que su garantía; si notas fallas, podemos revisarla y asesorarte.',
+      },
+      {
+        name: 'Vencimiento de garantía (D0)',
+        anchor: 'WARRANTY_EXPIRY',
+        offsetDays: 0,
+        template:
+          'Hola {customerName}, hoy vence la garantía de tu batería {productName}. Una batería fuera de garantía no implica que deba reemplazarse: podemos revisar su estado en nuestro taller y orientarte con datos reales.',
+        templateOnPast:
+          'Hola {customerName}, tu batería {productName} venció su garantía. Sin asumir un reemplazo, podemos revisar su estado y, si corresponde, ofrecerte una opción de renovación.',
+      },
+      {
+        name: 'Post-garantía / oportunidad de renovación (+90d)',
+        anchor: 'WARRANTY_EXPIRY',
+        offsetDays: 90,
+        template:
+          'Hola {customerName}, queremos saber cómo sigue tu batería {productName}. Si notaste fallas al arrancar o menor rendimiento, en {organizationName} podemos diagnosticarla y recomendarte la mejor opción.',
+        templateOnPast:
+          'Hola {customerName}, tu batería {productName} ya lleva tiempo fuera de garantía. Podemos revisarla y, si lo necesitas, ofrecerte una opción de renovación acorde a tu vehículo.',
       },
     ],
   },
@@ -134,29 +491,85 @@ const SEQUENCES: Array<{
 
 const CAMPAIGNS = [
   {
-    name: 'Campaña Demo — Garantía 12 meses',
+    name: 'Journey Postventa — Garantía 12 meses',
+    description:
+      'Ciclo de vida de la batería de 12 meses: bienvenida, revisión mitad de garantía, prevención, vencimiento y post-garantía.',
     type: 'REPURCHASE' as const,
     status: 'ACTIVE' as const,
     segment: { warrantyMonths: 12 },
-    sequenceName: 'Secuencia Demo — Garantía 12 meses',
+    sequenceName: 'Secuencia Demo — Journey Garantía 12 meses',
+    startAt: addDays(new Date(), -30),
+    template:
+      'Hola {customerName}, tu batería {productName} tiene garantía activa. Seguimos su ciclo para cuidar tu inversión.',
+  },
+  {
+    name: 'Journey Postventa — Garantía 24 meses',
+    description:
+      'Ciclo de vida de la batería de 24 meses: bienvenida, revisión intermedia, prevención, vencimiento y post-garantía.',
+    type: 'REPURCHASE' as const,
+    status: 'APPROVED' as const,
+    segment: { warrantyMonths: 24 },
+    sequenceName: 'Secuencia Demo — Journey Garantía 24 meses',
+    startAt: addDays(new Date(), 7),
+    template:
+      'Hola {customerName}, tu batería {productName} tiene garantía activa. Seguimos su ciclo para cuidar tu inversión.',
+  },
+  {
+    name: 'Journey Postventa — Garantía 15 meses',
+    description: 'Ciclo de vida de la batería de 15 meses (playbook §9).',
+    type: 'REPURCHASE' as const,
+    status: 'DRAFT' as const,
+    segment: { warrantyMonths: 15 },
+    sequenceName: 'Secuencia Demo — Journey Garantía 15 meses',
+    startAt: addDays(new Date(), 14),
     template:
       'Hola {customerName}, tu batería {productName} tiene garantía activa.',
   },
   {
-    name: 'Campaña Demo — Recompra fin de año',
+    name: 'Journey Postventa — Garantía 18 meses',
+    description: 'Ciclo de vida de la batería de 18 meses (playbook §9).',
     type: 'REPURCHASE' as const,
     status: 'DRAFT' as const,
-    segment: { city: 'Barranquilla' },
-    sequenceName: null,
+    segment: { warrantyMonths: 18 },
+    sequenceName: 'Secuencia Demo — Journey Garantía 18 meses',
+    startAt: addDays(new Date(), 14),
     template:
-      'Hola {customerName}, en {organizationName} preparamos ofertas de fin de año para tu {productName}.',
+      'Hola {customerName}, tu batería {productName} tiene garantía activa.',
   },
   {
-    name: 'Campaña Demo — Pausada',
+    name: 'Reactivación de clientes inactivos',
+    description:
+      'Clientes sin compras recientes (>24 meses) con una razón concreta para volver a contactarlos.',
+    type: 'MANUAL' as const,
+    status: 'APPROVED' as const,
+    segment: {
+      purchaseTo: addMonths(new Date(), -24).toISOString().slice(0, 10),
+    },
+    sequenceName: null,
+    startAt: addDays(new Date(), 3),
+    template:
+      'Hola {customerName}, hace tiempo que no te contactamos. Queremos saber cómo está tu batería {productName} y si necesita una revisión.',
+  },
+  {
+    name: 'Recompra — Oportunidades de fin de año',
+    description:
+      'Clientes de Barranquilla con oportunidad real de renovación (señal comercial, no asumir reemplazo).',
+    type: 'REPURCHASE' as const,
+    status: 'APPROVED' as const,
+    segment: { city: 'Barranquilla' },
+    sequenceName: null,
+    startAt: addDays(new Date(), 10),
+    template:
+      'Hola {customerName}, en {organizationName} preparamos opciones para tu próximo cambio de {productName}.',
+  },
+  {
+    name: 'Campaña pausada',
+    description: 'Ejemplo de campaña pausada (sin envíos mientras no se reanude).',
     type: 'MANUAL' as const,
     status: 'PAUSED' as const,
     segment: { customerStatus: 'ACTIVE' },
     sequenceName: null,
+    startAt: null,
     template: 'Hola {customerName}, queremos saber cómo va tu {productName}.',
   },
 ] as const;
@@ -178,8 +591,40 @@ function addDays(date: Date, days: number): Date {
   return result;
 }
 
-function monthsAgo(n: number): Date {
-  return addMonths(new Date(), -n);
+// purchaseDate such that warrantyExpiresAt = purchaseDate + warrantyMonths lands
+// `expiryOffsetDays` from today (negative = already expired).
+function purchaseDateForExpiry(
+  expiryOffsetDays: number,
+  warrantyMonths: number,
+): Date {
+  return addDays(addMonths(new Date(), -warrantyMonths), expiryOffsetDays);
+}
+
+// Demo desde 0: borrado físico (solo de la org demo) en orden de dependencias.
+// Se conservan org, admin, catálogo de productos e historial de otras orgs.
+async function resetDemoOrg(orgId: string): Promise<void> {
+  const scoped = { organizationId: orgId };
+  await prisma.message.deleteMany({ where: scoped });
+  await prisma.conversationNote.deleteMany({ where: scoped });
+  await prisma.conversationTagAssignment.deleteMany({ where: scoped });
+  await prisma.conversation.deleteMany({ where: scoped });
+  await prisma.conversationTag.deleteMany({ where: scoped });
+  await prisma.automation.deleteMany({ where: scoped });
+  await prisma.commercialCycle.deleteMany({
+    where: { purchase: { organizationId: orgId } },
+  });
+  await prisma.purchase.deleteMany({ where: scoped });
+  await prisma.customer.deleteMany({ where: scoped });
+  await prisma.campaign.deleteMany({ where: scoped });
+  await prisma.followUpSequenceStage.deleteMany({
+    where: { sequence: { organizationId: orgId } },
+  });
+  await prisma.followUpSequence.deleteMany({ where: scoped });
+  await prisma.quickReply.deleteMany({ where: scoped });
+  await prisma.template.deleteMany({ where: scoped });
+  await prisma.import.deleteMany({ where: scoped });
+  await prisma.audit.deleteMany({ where: scoped });
+  console.log('  ✓ Demo organization reset (hard delete, org-scoped)');
 }
 
 async function ensureAdminPassword(): Promise<void> {
@@ -203,12 +648,17 @@ async function ensureAdminPassword(): Promise<void> {
 
 async function ensureHeroes(
   orgId: string,
-): Promise<Array<{ id: string; uuid: string; name: string }>> {
-  const heroes: Array<{ id: string; uuid: string; name: string }> = [];
+): Promise<Array<{ id: string; uuid: string; name: string; codcli: string }>> {
+  const heroes: Array<{
+    id: string;
+    uuid: string;
+    name: string;
+    codcli: string;
+  }> = [];
   for (const hero of HEROES) {
     const existing = await prisma.customer.findFirst({
       where: { organizationId: orgId, codcli: hero.codcli, deletedAt: null },
-      select: { id: true, uuid: true, name: true },
+      select: { id: true, uuid: true, name: true, codcli: true },
     });
     if (existing) {
       heroes.push(existing);
@@ -222,10 +672,10 @@ async function ensureHeroes(
         city: hero.city,
         phone: hero.phone,
         email: hero.email,
-        status: 'ACTIVE',
+        status: hero.status ?? 'ACTIVE',
         createdBy: 'seed-demo',
       },
-      select: { id: true, uuid: true, name: true },
+      select: { id: true, uuid: true, name: true, codcli: true },
     });
     heroes.push(created);
     console.log(`  ✓ Hero customer ${hero.codcli} (${hero.name})`);
@@ -233,62 +683,59 @@ async function ensureHeroes(
   return heroes;
 }
 
-async function ensureWarrantyProducts(orgId: string): Promise<string[]> {
-  const candidates = await prisma.product.findMany({
-    where: { organizationId: orgId, deletedAt: null, purchases: { some: {} } },
-    orderBy: { purchases: { _count: 'desc' } },
-    take: 3,
-    select: { id: true, warrantyMonths: true },
-  });
-  const fallback = await prisma.product.findMany({
+// Pool de productos por duración de garantía (playbook §9: 12/15/18/24).
+async function ensureProductPool(
+  orgId: string,
+): Promise<Map<number, string[]>> {
+  const pool = new Map<number, string[]>();
+  const allProducts = await prisma.product.findMany({
     where: { organizationId: orgId, deletedAt: null },
-    take: 3,
+    orderBy: { name: 'asc' },
     select: { id: true, warrantyMonths: true },
   });
-  const pool = [...candidates, ...fallback].slice(0, 3);
-  const warrantyCycle = [18, 15, 12];
-  const ids: string[] = [];
-  for (let i = 0; i < pool.length; i++) {
-    const product = pool[i];
-    const warrantyMonths =
-      product.warrantyMonths ?? warrantyCycle[i % warrantyCycle.length];
-    if (product.warrantyMonths == null) {
-      await prisma.product.update({
-        where: { id: product.id },
-        data: { warrantyMonths },
-      });
-      console.log(`  ✓ Product ${product.id} warrantyMonths=${warrantyMonths}`);
+  for (const warranty of [12, 15, 18, 24]) {
+    let ids = allProducts
+      .filter((product) => product.warrantyMonths === warranty)
+      .slice(0, 3)
+      .map((product) => product.id);
+    if (ids.length === 0) {
+      const candidates = allProducts.filter(
+        (product) => product.warrantyMonths !== warranty,
+      );
+      for (const product of candidates.slice(0, 2)) {
+        await prisma.product.update({
+          where: { id: product.id },
+          data: { warrantyMonths: warranty },
+        });
+        ids.push(product.id);
+      }
     }
-    ids.push(product.id);
+    pool.set(warranty, ids);
+    console.log(
+      `  ✓ Product pool warranty=${warranty} (${ids.length} referencias)`,
+    );
   }
-  return ids;
+  return pool;
 }
 
 async function ensureHeroPurchases(
   orgId: string,
   heroes: Array<{ id: string; uuid: string }>,
-  productIds: string[],
+  productPool: Map<number, string[]>,
 ): Promise<void> {
+  let createdCount = 0;
   for (let h = 0; h < heroes.length; h++) {
     const hero = heroes[h];
-    for (let p = 0; p < HERO_PURCHASES.length; p++) {
-      const spec = HERO_PURCHASES[p];
-      const productId = productIds[p % productIds.length];
-      const purchaseDate = spec.daysAgo
-        ? addDays(new Date(), -spec.daysAgo)
-        : monthsAgo(spec.monthsAgo as number);
+    const heroSpec = HEROES[h];
+    for (let p = 0; p < heroSpec.purchases.length; p++) {
+      const spec = heroSpec.purchases[p];
+      const bucket = productPool.get(spec.warrantyMonths) ?? [];
+      const productId = bucket[p % Math.max(bucket.length, 1)];
+      const purchaseDate = purchaseDateForExpiry(
+        spec.expiryOffsetDays,
+        spec.warrantyMonths,
+      );
       const invoiceNumber = `DEMO-${hero.uuid.slice(0, 6).toUpperCase()}-${p + 1}`;
-      const existing = await prisma.purchase.findFirst({
-        where: {
-          organizationId: orgId,
-          customerId: hero.id,
-          productId,
-          invoiceNumber,
-          purchaseDate,
-        },
-        select: { id: true },
-      });
-      if (existing) continue;
       await prisma.purchase.create({
         data: {
           organizationId: orgId,
@@ -304,61 +751,12 @@ async function ensureHeroPurchases(
           createdBy: 'seed-demo',
         },
       });
+      createdCount++;
     }
   }
-  console.log(
-    `  ✓ Hero purchases created (${heroes.length} × ${HERO_PURCHASES.length})`,
-  );
+  console.log(`  ✓ Hero purchases created (${createdCount})`);
 }
 
-async function backfillWarranty(orgId: string): Promise<void> {
-  const products = await prisma.product.findMany({
-    where: {
-      organizationId: orgId,
-      warrantyMonths: null,
-      deletedAt: null,
-      purchases: { some: {} },
-    },
-    select: { id: true },
-  });
-  let updated = 0;
-  for (let i = 0; i < products.length; i++) {
-    const warrantyMonths = i % 2 === 0 ? 12 : 15;
-    await prisma.product.update({
-      where: { id: products[i].id },
-      data: { warrantyMonths },
-    });
-    await prisma.purchase.updateMany({
-      where: {
-        organizationId: orgId,
-        productId: products[i].id,
-        warrantyMonths: null,
-        deletedAt: null,
-      },
-      data: { warrantyMonths },
-    });
-    const purchases = await prisma.purchase.findMany({
-      where: {
-        organizationId: orgId,
-        productId: products[i].id,
-        warrantyMonths,
-        warrantyExpiresAt: null,
-        deletedAt: null,
-      },
-      select: { id: true, purchaseDate: true },
-    });
-    for (const purchase of purchases) {
-      await prisma.purchase.update({
-        where: { id: purchase.id },
-        data: {
-          warrantyExpiresAt: addMonths(purchase.purchaseDate, warrantyMonths),
-        },
-      });
-      updated++;
-    }
-  }
-  console.log(`  ✓ Warranty backfilled on ${updated} purchases (G1)`);
-}
 
 async function ensureSequences(orgId: string): Promise<Map<string, string>> {
   const byName = new Map<string, string>();
@@ -424,8 +822,40 @@ async function ensureCampaigns(
     template: string;
   }> = [];
   for (const camp of CAMPAIGNS) {
-    let existing = await prisma.campaign.findFirst({
+    const existing = await prisma.campaign.findFirst({
       where: { organizationId: orgId, name: camp.name, deletedAt: null },
+      select: { id: true, uuid: true, name: true, status: true, template: true },
+    });
+    if (existing) {
+      // Demo desde 0: refresca descripción/fechas/estado en re-ejecución.
+      await prisma.campaign.update({
+        where: { id: existing.id },
+        data: {
+          status: camp.status,
+          startAt: camp.startAt,
+          description: camp.description,
+          followUpSequenceId: camp.sequenceName
+            ? (sequenceIds.get(camp.sequenceName) ?? null)
+            : null,
+        },
+      });
+      campaigns.push(existing);
+      continue;
+    }
+    const created = await prisma.campaign.create({
+      data: {
+        organizationId: orgId,
+        name: camp.name,
+        description: camp.description,
+        type: camp.type,
+        status: camp.status,
+        startAt: camp.startAt,
+        template: camp.template,
+        segment: camp.segment,
+        followUpSequenceId: camp.sequenceName
+          ? (sequenceIds.get(camp.sequenceName) ?? null)
+          : null,
+      },
       select: {
         id: true,
         uuid: true,
@@ -434,33 +864,14 @@ async function ensureCampaigns(
         template: true,
       },
     });
-    if (!existing) {
-      existing = await prisma.campaign.create({
-        data: {
-          organizationId: orgId,
-          name: camp.name,
-          type: camp.type,
-          status: camp.status,
-          template: camp.template,
-          segment: camp.segment,
-          followUpSequenceId: camp.sequenceName
-            ? (sequenceIds.get(camp.sequenceName) ?? null)
-            : null,
-        },
-        select: {
-          id: true,
-          uuid: true,
-          name: true,
-          status: true,
-          template: true,
-        },
-      });
-      console.log(`  ✓ Campaign "${camp.name}" [${camp.status}]`);
-    }
-    campaigns.push(existing);
+    campaigns.push(created);
+    console.log(`  ✓ Campaign "${camp.name}" [${camp.status}]`);
   }
   return campaigns;
 }
+
+
+
 
 async function generateFlagshipAutomations(
   orgId: string,
@@ -559,6 +970,15 @@ async function generateFlagshipAutomations(
         }
         continue;
       }
+      // F4 mirror: the repurchase conversion substitutes later post-warranty
+      // recompra stages of the same purchase (one renovation contact).
+      if (
+        repurchase &&
+        stage.anchor === 'WARRANTY_EXPIRY' &&
+        stage.offsetDays > 0
+      ) {
+        continue;
+      }
       await prisma.automation.create({
         data: {
           organizationId: orgId,
@@ -568,6 +988,8 @@ async function generateFlagshipAutomations(
           scheduledDate: computed,
           status: 'SCHEDULED',
           priority: 0,
+          purpose: 'TRANSACTIONAL',
+          stageName: stage.name,
           messageTemplate: stage.template,
           createdBy: 'seed-demo',
         },
@@ -585,6 +1007,9 @@ async function generateFlagshipAutomations(
           scheduledDate: now,
           status: 'SCHEDULED',
           priority: 0,
+          // La conversión de recompra es COMMERCIAL (anti-spam 3/60d).
+          purpose: 'COMMERCIAL',
+          stageName: 'Recompra / renovación',
           messageTemplate: repurchase.stage.templateOnPast ?? campaignTemplate,
           createdBy: 'seed-demo',
         },
@@ -674,15 +1099,25 @@ async function ensureHeroAutomations(
       // 2 EXECUTED (past) for the 360 timeline
       for (let i = 0; i < 2; i++) {
         const stage = stages[i % stages.length];
+        const base =
+          stage.anchor === 'PURCHASE_DATE'
+            ? purchase.purchaseDate
+            : (purchase.warrantyExpiresAt ?? addMonths(new Date(), -6));
+        const execDate = addDays(base, stage.offsetDays);
+        // Only create EXECUTED automations with dates in the past
+        if (execDate.getTime() > Date.now()) {
+          continue;
+        }
         await prisma.automation.create({
           data: {
             organizationId: orgId,
             purchaseId: purchase.id,
             campaignId: flagshipCampaignId,
             commercialCycleId: cycle.id,
-            scheduledDate: addDays(new Date(), -30 - i * 30),
-            executedDate: addDays(new Date(), -30 - i * 30),
+            scheduledDate: execDate,
+            executedDate: execDate,
             status: 'EXECUTED',
+            stageName: stage.name,
             priority: 0,
             messageTemplate: stage.template,
             createdBy: 'seed-demo',
@@ -696,15 +1131,23 @@ async function ensureHeroAutomations(
           stage.anchor === 'PURCHASE_DATE'
             ? purchase.purchaseDate
             : (purchase.warrantyExpiresAt ?? addMonths(new Date(), 6));
+        const scheduledDate = addDays(base, stage.offsetDays);
+        // P0-2: nunca crear una automatización "Programada" con fecha pasada
+        // (para héroes con garantía vencida el journey ya fue cubierto por la
+        // conversión de recompra en generateFlagshipAutomations).
+        if (scheduledDate.getTime() <= Date.now()) {
+          continue;
+        }
         await prisma.automation.create({
           data: {
             organizationId: orgId,
             purchaseId: purchase.id,
             campaignId: flagshipCampaignId,
             commercialCycleId: cycle.id,
-            scheduledDate: addDays(base, stage.offsetDays),
+            scheduledDate,
             status: 'SCHEDULED',
             priority: 0,
+            stageName: stage.name,
             messageTemplate: stage.template,
             createdBy: 'seed-demo',
           },
@@ -715,11 +1158,107 @@ async function ensureHeroAutomations(
   }
 }
 
+type ConvMsg = {
+  dir: 'in' | 'out-auto' | 'out-manual';
+  text: string;
+  minsAgo: number;
+  replyTo?: boolean; // escenario D: respuesta atribuida a la automatización.
+};
+
+// Matriz de escenarios (Fase 5, T18): la demo representa los flujos reales de
+// conversación (empresa inicia, cliente inicia, respuesta a automatización,
+// respuesta negativa, precio→oportunidad, compra, no contactar, manual).
+const CONV_SCENARIOS: Record<string, ConvMsg[]> = {
+  'DEMO-0001': [
+    // A. Empresa inicia → cliente responde
+    { dir: 'out-auto', text: 'Hola Carlos, queremos confirmar que todo esté funcionando correctamente con su batería.', minsAgo: 300 },
+    { dir: 'in', text: 'Sí, todo bien, gracias.', minsAgo: 295 },
+  ],
+  'DEMO-0002': [
+    // B. Empresa inicia → cliente no responde
+    { dir: 'out-auto', text: 'Hola María, queremos confirmar que todo esté funcionando correctamente con su batería.', minsAgo: 600 },
+  ],
+  'DEMO-0003': [
+    // C. Cliente inicia → asesor responde
+    { dir: 'in', text: 'Hola, quiero cotizar una batería para mi camioneta. ¿Me pueden ayudar?', minsAgo: 240 },
+    { dir: 'out-manual', text: '¡Hola Luis! Claro, con gusto. ¿Qué modelo de vehículo tienes?', minsAgo: 238 },
+    { dir: 'in', text: 'Es una Silverado. ¿Cuánto cuesta la AGM?', minsAgo: 236 },
+  ],
+  'DEMO-0004': [
+    // D. Cliente responde a una automatización (atribuida)
+    { dir: 'out-auto', text: 'Hola Ana, tu batería completó la mitad de su garantía. Te recomendamos una revisión gratuita.', minsAgo: 180 },
+    { dir: 'in', text: 'Sí, quiero agendar la revisión por favor.', minsAgo: 175, replyTo: true },
+  ],
+  'DEMO-0005': [
+    // E. Cliente responde negativamente
+    { dir: 'out-auto', text: 'Hola Jorge, tu batería tiene la garantía próxima a vencer. Te invitamos a una revisión preventiva.', minsAgo: 120 },
+    { dir: 'in', text: 'Por ahora no necesito cambiarla, gracias.', minsAgo: 118 },
+  ],
+  'DEMO-0006': [
+    // F. Cliente solicita precio → oportunidad comercial
+    { dir: 'out-auto', text: 'Hola Diana, tu batería está en plena garantía. Te recordamos la revisión gratuita de alternador y voltaje.', minsAgo: 90 },
+    { dir: 'in', text: '¿Cuánto vale una batería de caja 42? ¿Hacen financiación?', minsAgo: 88 },
+  ],
+  'DEMO-0007': [
+    // G. Cliente compra (la venta se registra desde la conversación)
+    { dir: 'in', text: 'Necesito una batería nueva urgente, se me dañó la de mi carro.', minsAgo: 45 },
+    { dir: 'out-manual', text: '¡Hola Pedro! Tenemos disponibilidad hoy. ¿Cuál es el vehículo?', minsAgo: 43 },
+    { dir: 'in', text: 'Es un Duster. ¿La tienen para hoy?', minsAgo: 41 },
+  ],
+  'DEMO-0008': [
+    // H. Cliente solicita no recibir mensajes (opt-out)
+    { dir: 'out-auto', text: 'Hola Sofía, tu batería tiene la garantía próxima a vencer. Te invitamos a una revisión preventiva.', minsAgo: 60 },
+    { dir: 'in', text: 'Por favor no me escriban más, no estoy interesada.', minsAgo: 58 },
+  ],
+  'DEMO-0009': [
+    // I. Conversación manual iniciada por el asesor
+    { dir: 'out-manual', text: 'Hola Andrés, vimos que tu garantía vence pronto. ¿Quieres que te reservemos una revisión?', minsAgo: 30 },
+    { dir: 'in', text: 'Gracias, me avisas cuándo puedo pasar.', minsAgo: 28 },
+  ],
+};
+
+const GENERIC_CONVERSATIONS: ConvMsg[][] = [
+  [
+    { dir: 'in', text: 'Hola, ¿me pueden dar más información sobre el cambio de batería?', minsAgo: 400 },
+    { dir: 'out-manual', text: '¡Hola! Con gusto te asesoramos. ¿Qué vehículo tienes?', minsAgo: 398 },
+  ],
+  [
+    { dir: 'out-auto', text: 'Hola, gracias por confiar en nosotros. ¿Todo funciona correctamente con tu batería?', minsAgo: 500 },
+    { dir: 'in', text: 'Sí, todo perfecto.', minsAgo: 497 },
+  ],
+  [
+    { dir: 'in', text: 'Necesito una batería para un taxi, ¿qué me recomiendan?', minsAgo: 700 },
+  ],
+];
+
 async function ensureHeroConversations(
   orgId: string,
-  heroes: Array<{ id: string; uuid: string; name: string }>,
+  heroes: Array<{ id: string; uuid: string; name: string; codcli: string }>,
 ): Promise<void> {
+  const flagship = await prisma.campaign.findFirst({
+    where: { organizationId: orgId, name: 'Journey Postventa — Garantía 12 meses' },
+    select: { uuid: true },
+  });
+  const automation = await prisma.automation.findFirst({
+    where: {
+      organizationId: orgId,
+      deletedAt: null,
+      campaignId: { not: null },
+      status: 'EXECUTED',
+    },
+    orderBy: { executedDate: 'desc' },
+    select: { uuid: true },
+  });
+  const campaignUuid = flagship?.uuid ?? null;
+  const automationUuid = automation?.uuid ?? null;
+
+  let genericIndex = 0;
   for (const hero of heroes) {
+    const heroSpec = HEROES.find((h) => h.codcli === hero.codcli) ?? null;
+    const scenario =
+      CONV_SCENARIOS[heroSpec?.codcli ?? ''] ??
+      GENERIC_CONVERSATIONS[genericIndex++ % GENERIC_CONVERSATIONS.length];
+
     const existingConv = await prisma.conversation.findFirst({
       where: {
         organizationId: orgId,
@@ -739,46 +1278,134 @@ async function ensureHeroConversations(
       },
       select: { id: true },
     });
-    const msgs = [
-      {
-        type: 'INCOMING',
-        direction: 'INBOUND',
-        content: `Hola, me llegó el recordatorio de la garantía de mi batería. ¿Me pueden dar más información?`,
-        status: 'SENT',
-        providerMessageId: `demo-in-${hero.uuid}`,
-      },
-      {
-        type: 'MANUAL',
-        direction: 'OUTBOUND',
-        content: `¡Hola ${hero.name}! Claro, con gusto. Tu garantía sigue activa y podemos programar una revisión gratuita.`,
-        status: 'SENT',
-        providerMessageId: `demo-out-${hero.uuid}`,
-      },
-      {
-        type: 'INCOMING',
-        direction: 'INBOUND',
-        content: 'Perfecto, agendo la cita para la próxima semana. Gracias.',
-        status: 'SENT',
-        providerMessageId: `demo-in2-${hero.uuid}`,
-      },
-    ];
-    for (const msg of msgs) {
+
+    for (let i = 0; i < scenario.length; i++) {
+      const msg = scenario[i];
+      const createdAt = new Date(Date.now() - msg.minsAgo * 60_000);
+      const isOut = msg.dir !== 'in';
       await prisma.message.create({
         data: {
           organizationId: orgId,
           conversationId: conversation.id,
-          type: msg.type as never,
-          direction: msg.direction as never,
-          content: msg.content,
-          status: msg.status as never,
-          providerMessageId: msg.providerMessageId,
+          type: (msg.dir === 'out-auto'
+            ? 'AUTOMATIC'
+            : msg.dir === 'out-manual'
+              ? 'OUTGOING'
+              : 'INCOMING') as never,
+          direction: isOut ? 'OUTBOUND' : 'INBOUND',
+          content: msg.text,
+          status: 'SENT',
+          providerMessageId: `demo-${hero.uuid}-${i}`,
           providerConversationId: `demo-conv-${hero.uuid}`,
-          sentAt: new Date(),
+          sentAt: createdAt,
+          createdAt,
+          ...(msg.replyTo
+            ? {
+                inReplyToCampaignId: campaignUuid,
+                inReplyToAutomationId: automationUuid,
+              }
+            : {}),
         },
       });
     }
-    console.log(`  ✓ Hero conversation for ${hero.uuid} (3 messages)`);
+    console.log(
+      `  ✓ Hero conversation for ${hero.uuid} (${scenario.length} mensajes)`,
+    );
   }
+}
+
+// Demo activity (P0-3): registros de auditoría de negocio para que el feed del
+// dashboard muestre eventos comerciales legibles, sin IDs internos. El backend
+// humaniza las acciones; aquí solo se referencia la automatización real para
+// que la descripción se enriquezca con el nombre del cliente.
+async function seedDemoActivity(orgId: string): Promise<void> {
+  const automations = await prisma.automation.findMany({
+    where: {
+      organizationId: orgId,
+      deletedAt: null,
+      status: 'EXECUTED',
+      campaignId: { not: null },
+    },
+    orderBy: { executedDate: 'desc' },
+    take: 3,
+    select: { uuid: true },
+  });
+
+  const entries: Array<{
+    module: string;
+    action: string;
+    description: string | null;
+    metadata?: Record<string, unknown>;
+  }> = [
+    { module: 'purchases', action: 'purchase.create', description: 'Compra registrada' },
+    { module: 'campaigns', action: 'campaign.activate', description: 'Campaña activada' },
+    ...automations.map((automation) => ({
+      module: 'whatsapp' as const,
+      action: 'automation.executed' as const,
+      description: null,
+      metadata: { automationId: automation.uuid },
+    })),
+    { module: 'whatsapp', action: 'message.send', description: 'Mensaje enviado al cliente' },
+    { module: 'conversations', action: 'conversation.opened', description: 'Conversación abierta' },
+  ];
+
+  const now = Date.now();
+  await prisma.audit.createMany({
+    data: entries.map((entry, index) => ({
+      organizationId: orgId,
+      module: entry.module,
+      action: entry.action,
+      description: entry.description ?? null,
+      metadata: entry.metadata,
+      createdAt: new Date(now - index * 60_000),
+    })),
+  });
+  console.log(`  ✓ Demo activity seeded (${entries.length} eventos de negocio)`);
+}
+
+// ---------------------------------------------------------------------------
+// Fase 2: Biblioteca de copy (150 piezas: 50 plantillas × 3 tonos).
+// Se leen desde templates-seed.json generado por parse-biblioteca.mjs
+// desde specs/Biblioteca/biblioteca.md.
+// ---------------------------------------------------------------------------
+const here = dirname(fileURLToPath(import.meta.url));
+
+interface TemplateSeedRow {
+  code: string;
+  name: string;
+  group: string;
+  category: string;
+  tone: string;
+  angle: string;
+  goal: string | null;
+  recommendedUse: string | null;
+  body: string;
+}
+
+async function seedTemplates(orgId: string): Promise<void> {
+  const raw: TemplateSeedRow[] = JSON.parse(
+    readFileSync(join(here, 'templates-seed.json'), 'utf8'),
+  );
+  await prisma.template.deleteMany({ where: { organizationId: orgId } });
+  const BATCH = 50;
+  for (let i = 0; i < raw.length; i += BATCH) {
+    const chunk = raw.slice(i, i + BATCH);
+    await prisma.template.createMany({
+      data: chunk.map((t) => ({
+        organizationId: orgId,
+        code: t.code,
+        name: t.name,
+        group: t.group,
+        category: t.category as TemplateCategory,
+        tone: t.tone as TemplateTone,
+        angle: t.angle as TemplateAngle,
+        goal: t.goal,
+        recommendedUse: t.recommendedUse,
+        body: t.body,
+      })),
+    });
+  }
+  console.log(`  ✓ Biblioteca de copy sembrada (${raw.length} plantillas)`);
 }
 
 async function main() {
@@ -794,24 +1421,24 @@ async function main() {
   const orgId = org.id;
   console.log(`Using organization: ${org.name} (${orgId})`);
 
+  await resetDemoOrg(orgId);
   await ensureAdminPassword();
 
   await hideDemoNoise(orgId);
 
   const heroes = await ensureHeroes(orgId);
-  const productIds = await ensureWarrantyProducts(orgId);
-  await ensureHeroPurchases(orgId, heroes, productIds);
-  await backfillWarranty(orgId);
+  const productPool = await ensureProductPool(orgId);
+  await ensureHeroPurchases(orgId, heroes, productPool);
 
   const sequenceIds = await ensureSequences(orgId);
   const campaigns = await ensureCampaigns(orgId, sequenceIds);
 
-  const flagshipName = 'Campaña Demo — Garantía 12 meses';
+  const flagshipName = 'Journey Postventa — Garantía 12 meses';
   const flagship = campaigns.find((c) => c.name === flagshipName);
   const seq12 = await prisma.followUpSequence.findFirst({
     where: {
       organizationId: orgId,
-      name: 'Secuencia Demo — Garantía 12 meses',
+      name: 'Secuencia Demo — Journey Garantía 12 meses',
       deletedAt: null,
     },
     select: {
@@ -841,6 +1468,8 @@ async function main() {
   }
 
   await ensureHeroConversations(orgId, heroes);
+  await seedDemoActivity(orgId);
+  await seedTemplates(orgId);
 
   console.log('Seed demo data complete.');
 }

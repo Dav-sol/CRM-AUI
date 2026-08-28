@@ -39,6 +39,11 @@ export class QueryConversationsDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(120)
+  name?: string; // customer name, case-insensitive contains
+
+  @IsOptional()
+  @IsString()
   @MaxLength(64)
   customerId?: string;
 

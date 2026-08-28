@@ -8,9 +8,16 @@ import { WhatsappWebhookController } from './whatsapp.webhook.controller';
 import { WhatsappScheduler } from './whatsapp.scheduler';
 import { WhatsappService } from './whatsapp.service';
 import { MetaWhatsAppProvider, WHATSAPP_PROVIDER } from './whatsapp.provider';
+import { PancakeModule } from './pancake/pancake.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, ConfigModule, ScheduleModule.forRoot()],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    ConfigModule,
+    ScheduleModule.forRoot(),
+    PancakeModule,
+  ],
   controllers: [WhatsappController, WhatsappWebhookController],
   providers: [
     WhatsappService,

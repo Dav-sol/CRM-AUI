@@ -31,6 +31,11 @@ export type CreateProductBody = {
   category?: string;
   /** Warranty duration in months (catalog values). Defaults to the product catalog when absent. */
   warrantyMonths?: CreateProductBodyWarrantyMonths;
+  /**
+     * Precio de referencia del catálogo (COP).
+     * @minimum 0
+     */
+  price?: number;
   /** Defaults to ACTIVE. */
   status?: CreateProductBodyStatus;
   /** Only accepted for PLATFORM_OWNER; required for them. Organization users must not send it (400 VALIDATION_ERROR). */

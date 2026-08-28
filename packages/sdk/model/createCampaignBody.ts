@@ -11,6 +11,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { CreateCampaignBodySegment } from './createCampaignBodySegment';
+import type { CreateCampaignBodyStagesItem } from './createCampaignBodyStagesItem';
 import type { CreateCampaignBodyType } from './createCampaignBodyType';
 
 /**
@@ -36,6 +37,12 @@ export type CreateCampaignBody = {
   template: string;
   /** At least one criterion required when present. */
   segment?: CreateCampaignBodySegment;
+  /**
+     * Etapas inline del timeline (Fase 1). Excluyente con followUpSequenceId:
+     * no se puede enviar una secuencia y etapas a la vez.
+     * @maxItems 20
+     */
+  stages?: CreateCampaignBodyStagesItem[];
   /** Optional scheduled start (automations are scheduled for max(startAt, now)). */
   startAt?: string;
 };

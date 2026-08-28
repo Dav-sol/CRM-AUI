@@ -42,3 +42,9 @@
 
 - name: FollowUpSequences
   description: Follow-up sequences for warranty management
+
+- name: Templates
+  description: Reusable copy templates for campaigns and messages (biblioteca de copy)
+
+- name: Reports
+  description: Analytics and reporting for management

@@ -59,7 +59,7 @@ export function ReplyBox({ onSend }: ReplyBoxProps) {
       setContent("");
       textareaRef.current?.focus();
     } catch {
-      toast.error("No se pudo enviar el mensaje. Intentalo nuevamente.");
+      toast.error("No se pudo enviar el mensaje. Inténtalo nuevamente.");
     } finally {
       setSending(false);
     }

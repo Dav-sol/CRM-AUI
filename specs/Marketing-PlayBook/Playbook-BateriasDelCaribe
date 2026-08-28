@@ -1,0 +1,894 @@
+# Playbook de Marketing y Campañas — Automatize It Platform
+
+## 1. Objetivo
+
+Automatize It Platform debe utilizar WhatsApp como un sistema de **seguimiento inteligente del ciclo de vida del cliente y de la batería**, no como una herramienta de envío masivo.
+
+La regla central es:
+
+> **No contactar a una persona si no existe una razón comercial concreta para hacerlo.**
+
+El sistema debe priorizar:
+
+1. Satisfacción y experiencia posterior a la compra.
+2. Fidelización.
+3. Mantenimiento y prevención.
+4. Visitas al taller/fabricante cuando correspondan.
+5. Renovación o recompra cuando exista una oportunidad real.
+6. Reactivación de clientes antiguos.
+7. Medición de resultados y rentabilidad.
+
+Las campañas deben ser **útiles, oportunas, personalizadas y medibles**.
+
+---
+
+# 2. Principios de marketing
+
+## 2.1. No competir principalmente por descuentos
+
+Automatize It Platform trabaja con un negocio que opera con **precio distribuidor**, por lo que las campañas no deben depender de promociones agresivas.
+ 
+La propuesta de valor debe centrarse en:
+
+* Servicio.
+* Prevención.
+* Diagnóstico.
+* Recordatorios oportunos.
+* Garantía.
+* Confianza.
+* Facilidad para volver a comprar.
+* Atención personalizada.
+* Servicio del taller.
+* Conveniencia.
+
+Las ofertas solo deben utilizarse cuando exista una razón comercial clara y cuando los datos demuestren que mejoran el resultado.
+
+---
+
+## 2.2. Priorizar el win rate
+
+No se debe asumir que más mensajes = más ventas.
+
+El sistema debe aprender qué combinación genera mejores resultados:
+
+* Momento del contacto.
+* Tipo de cliente.
+* Marca.
+* Producto.
+* Edad de la batería.
+* Garantía.
+* Tipo de mensaje.
+* Número de contactos.
+* Respuesta.
+* Cotización.
+* Compra.
+
+La optimización debe buscar:
+
+> **Mayor conversión con el menor número de mensajes necesarios.**
+
+---
+
+# 3. Datos mínimos necesarios
+
+Cada cliente debe poder segmentarse utilizando, como mínimo:
+
+* Nombre.
+* Teléfono.
+* Marca de batería.
+* Producto/referencia.
+* Garantía.
+* Fecha de compra.
+* Fecha de vencimiento de garantía.
+* Cliente nuevo/recurrente.
+* Historial de compras.
+* Respuesta a campañas.
+* Último contacto.
+* Última campaña recibida.
+* Última respuesta.
+* Cotizaciones.
+* Compras posteriores.
+* Etiquetas relevantes.
+* Notas comerciales.
+
+Cuando exista información suficiente, el sistema debe poder calcular:
+
+* Probabilidad de recompra.
+* Antigüedad de la batería.
+* Cercanía al vencimiento.
+* Potencial comercial.
+* Nivel de interacción.
+* Último contacto comercial.
+* Oportunidad de seguimiento.
+
+---
+
+# 4. Arquitectura general de journeys
+
+Las campañas deben organizarse principalmente como **journeys de ciclo de vida**, no como campañas aisladas.
+
+Los journeys principales son:
+
+1. Postventa.
+2. Fidelización.
+3. Mantenimiento/previsión.
+4. Garantía.
+5. Recompra.
+6. Reactivación.
+7. Solicitud de reseña/recomendación.
+8. Seguimiento comercial.
+9. Campañas especiales.
+
+Cada journey debe tener:
+
+* Objetivo.
+* Segmento.
+* Evento disparador.
+* Condición de entrada.
+* Etapas.
+* Mensaje por etapa.
+* Condiciones de salida.
+* Reglas de frecuencia.
+* Reglas de cancelación.
+* Métricas.
+* Criterio de éxito.
+
+---
+
+# 5. Journey A — Postventa inmediata
+
+## Objetivo
+
+Asegurar que el cliente quede satisfecho después de comprar y abrir la puerta a futuras interacciones.
+
+## D0 — Confirmación y satisfacción
+
+El contacto inicial debe ser configurable.
+
+Contenido recomendado:
+
+* Agradecimiento por la compra.
+* Confirmación de que la batería fue instalada/adquirida.
+* Pregunta breve de satisfacción.
+* Recomendaciones básicas de cuidado.
+* Garantía como opción configurable.
+
+### Opción configurable: explicación de garantía
+
+El asesor normalmente explica la garantía personalmente, pero el creador de campañas debe permitir incluir automáticamente:
+
+* Duración.
+* Fecha de vencimiento.
+* Condiciones relevantes.
+* Lugar donde debe realizarse una revisión relacionada con garantía.
+
+No debe ser obligatorio enviar el mensaje si el asesor ya realizó esa explicación.
+
+---
+
+# 6. Journey B — Recomendación + Google Review
+
+## Objetivo
+
+Convertir una experiencia positiva en reputación y adquisición futura.
+
+La solicitud debe ser:
+
+> **Recomendada por defecto, pero configurable.**
+
+No debe enviarse automáticamente a todos sin condiciones.
+
+## Condición recomendada
+
+Enviar únicamente cuando:
+
+* El cliente haya tenido una compra exitosa.
+* No exista una señal negativa reciente.
+* No haya recibido anteriormente una solicitud equivalente, salvo que corresponda según la política definida.
+* El cliente no esté en una situación comercial sensible.
+
+## Secuencia
+
+### Etapa 1 — Satisfacción
+
+Preguntar cómo fue la experiencia.
+
+### Etapa 2 — Recomendación / reseña
+
+Si la interacción es positiva, solicitar:
+
+* Reseña en Google.
+* Recomendación.
+* Eventualmente, referencia de conocidos.
+
+La campaña debe poder medir:
+
+* Entregados.
+* Respondidos.
+* Reseñas/clics cuando sea técnicamente posible.
+* Clientes referidos.
+* Ventas provenientes de referencias.
+
+---
+
+# 7. Journey C — Revisión de mitad de garantía
+
+## Objetivo
+
+Generar una interacción útil antes de que exista un problema.
+
+La revisión debe estar asociada a la garantía efectiva de cada compra.
+
+## Regla
+
+La mitad del ciclo debe calcularse dinámicamente según:
+
+* 12 meses.
+* 15 meses.
+* 18 meses.
+* 24 meses.
+
+No deben utilizarse fechas fijas iguales para todos.
+
+## Mensaje
+
+El objetivo no es vender.
+
+Debe recomendar una:
+
+> **Revisión gratuita de alternador y voltaje.**
+
+## Importante
+
+Las revisiones relacionadas con garantía deben realizarse en:
+
+> **La fábrica/taller del fabricante correspondiente.**
+
+Esto debe aparecer claramente cuando aplique.
+
+---
+
+# 8. Journey D — Revisión avanzada cerca del final de garantía
+
+Debe existir como etapa configurable.
+
+## Objetivo
+
+Detectar una oportunidad antes del vencimiento sin asumir que la batería necesariamente necesita reemplazo.
+
+Puede recomendarse una revisión en:
+
+> **Taller propio.**
+
+Esta etapa debe ser configurable porque no todos los negocios tendrán la misma capacidad operativa.
+
+Debe utilizarse especialmente cuando los datos demuestren que una revisión cercana al vencimiento mejora:
+
+* Retención.
+* Visitas.
+* Diagnósticos.
+* Recompras.
+* Relación con el cliente.
+
+---
+
+# 9. Journey E — Prevención antes del vencimiento
+
+## Objetivo
+
+Preparar al cliente para la finalización de la garantía.
+
+La fecha debe calcularse a partir de:
+
+> `warrantyExpiresAt`
+
+No desde una fecha aproximada.
+
+## Ventanas recomendadas
+
+La secuencia debe poder manejar diferentes garantías:
+
+| Garantía | Mitad de ciclo |    D-60 |    D-30 |
+| -------- | -------------: | ------: | ------: |
+| 12 meses |          Mes 6 | Día -60 | Día -30 |
+| 15 meses |          Mes 8 | Día -60 | Día -30 |
+| 18 meses |          Mes 9 | Día -60 | Día -30 |
+| 24 meses |         Mes 12 | Día -60 | Día -30 |
+
+Las etapas deben ser configurables.
+
+---
+
+# 10. Journey F — Recompra
+
+## Objetivo
+
+Convertir una oportunidad real de renovación en una venta.
+
+### Regla comercial importante
+
+No asumir que:
+
+> "Venció la garantía = debe comprar otra batería inmediatamente."
+
+El negocio ha observado que muchos clientes compran **después de vencida la garantía**, porque las baterías suelen durar más que el período de garantía.
+
+Por lo tanto:
+
+> **El vencimiento de garantía es una señal comercial, no necesariamente el momento exacto de recompra.**
+
+El sistema debe distinguir:
+
+* Garantía próxima a vencer.
+* Garantía vencida.
+* Batería potencialmente próxima a renovación.
+* Cliente que ya compró nuevamente.
+* Cliente que respondió pero no compró.
+* Cliente que no interactuó.
+
+---
+
+# 11. Etapas vencidas al activar una campaña
+
+Si una campaña se activa cuando una etapa ya pasó, no debe enviarse simplemente el mensaje original fuera de contexto.
+
+Ejemplo:
+
+Una etapa D-60 se activa cuando ya estamos varios meses después de ese momento.
+
+No tendría sentido enviar:
+
+> "Tu batería está a 60 días de vencer."
+
+## Regla
+
+Las etapas vencidas deben convertirse en una:
+
+> **Oportunidad de recompra/renovación.**
+
+El mensaje debe utilizar:
+
+1. `templateOnPast` de la etapa, si existe.
+2. `campaign.template` como fallback.
+
+La fecha efectiva debe ser `now`.
+
+Debe evitarse generar múltiples mensajes de recompra para la misma compra cuando varias etapas históricas ya vencieron.
+
+Debe seleccionarse la oportunidad más avanzada/relevante según las reglas del journey.
+
+---
+
+# 12. Journey G — Post-garantía
+
+Este journey es especialmente importante para el negocio.
+
+## Objetivo
+
+Capturar clientes cuya batería continuó funcionando después de la garantía.
+
+No debe tratarse como un "cliente perdido" simplemente porque venció la garantía.
+
+Debe existir una estrategia de seguimiento posterior.
+
+La plataforma debe poder identificar:
+
+> "Cliente con batería fuera de garantía y potencial de renovación."
+
+El momento óptimo debe validarse con datos históricos.
+
+---
+
+# 13. Journey H — Reactivación
+
+## Segmento
+
+Clientes inactivos, especialmente:
+
+> Clientes con más de 24 meses desde la última compra.
+
+Puede segmentarse por:
+
+* Marca.
+* Producto.
+* Vehículo.
+* Antigüedad.
+* Historial de compras.
+* Respuesta anterior.
+
+## Objetivo
+
+No enviar publicidad genérica.
+
+El mensaje debe tener una razón:
+
+* Posible renovación.
+* Revisión.
+* Recordatorio.
+* Nuevo producto relevante.
+* Seguimiento de una necesidad anterior.
+
+---
+
+# 14. Reglas de frecuencia
+
+Regla general:
+
+> **Máximo 3 mensajes comerciales cada 60 días.**
+
+Pero esta regla debe ser contextual.
+
+Las campañas relacionadas directamente con:
+
+* Garantía.
+* Recompra.
+* Seguridad/previsión.
+* Eventos transaccionales.
+
+pueden tener reglas diferentes cuando exista una razón operacional clara.
+
+## Regla fundamental
+
+Nunca enviar dos mensajes comerciales demasiado cerca.
+
+El sistema debe considerar:
+
+* Último mensaje.
+* Tipo de campaña.
+* Tipo de journey.
+* Última respuesta.
+* Estado del cliente.
+* Próxima automatización.
+
+---
+
+# 15. Reglas de cancelación
+
+Las automatizaciones no deben ejecutarse ciegamente.
+
+Ejemplos:
+
+### Si el cliente compra nuevamente
+
+Cancelar oportunidades de recompra relacionadas con la batería anterior.
+
+Pero:
+
+> Si el cliente tiene varias garantías/compras activas, las campañas correspondientes a las demás compras deben continuar.
+
+### Si responde
+
+La automatización debe poder cambiar el estado del seguimiento.
+
+### Si solicita no recibir mensajes
+
+Debe detenerse el contacto comercial.
+
+### Si existe una venta reciente
+
+Evitar mensajes comerciales redundantes.
+
+---
+
+# 16. Prioridad comercial
+
+El sistema debe priorizar siempre:
+
+> **Clientes con alta probabilidad de recompra.**
+
+La prioridad debe considerar:
+
+* Antigüedad.
+* Garantía.
+* Historial.
+* Marca.
+* Producto.
+* Respuesta previa.
+* Cotización.
+* Compra histórica.
+* Interacción reciente.
+* Tiempo desde último contacto.
+
+---
+
+# 17. Reglas de decisión del sistema
+
+Las reglas base deben ser:
+
+> **"Prioriza siempre clientes con alta probabilidad de recompra."**
+
+> **"Nunca envíes dos mensajes comerciales demasiado cerca."**
+
+> **"No contactes a alguien si no existe una razón comercial concreta para hacerlo."**
+
+> **"Una garantía vencida no significa automáticamente que el cliente necesite comprar."**
+
+> **"Una compra nueva debe actualizar y reevaluar automáticamente los seguimientos existentes."**
+
+---
+
+# 18. Campañas manuales
+
+Las campañas manuales deben permitir al responsable de marketing seleccionar:
+
+* Segmento.
+* Producto.
+* Marca.
+* Garantía.
+* Antigüedad.
+* Historial.
+* Estado.
+* Última compra.
+* Respuesta.
+* Etiquetas.
+
+Pero el sistema debe advertir si el segmento viola reglas de frecuencia o contiene clientes con seguimiento activo incompatible.
+
+---
+
+# 19. Campañas automáticas
+
+Una campaña automática debe:
+
+1. Tener un objetivo.
+2. Tener un segmento.
+3. Tener un journey.
+4. Tener condiciones de entrada.
+5. Tener mensajes.
+6. Tener reglas de salida.
+7. Tener reglas de frecuencia.
+8. Tener métricas.
+9. Ser aprobada por una persona.
+10. Ejecutarse automáticamente una vez aprobada.
+
+---
+
+# 20. Aprobación humana
+
+En V1:
+
+> **Marketing define y aprueba las campañas.**
+
+La plataforma ejecuta.
+
+No debe inventar campañas automáticamente sin aprobación.
+
+## V2
+
+La plataforma puede incorporar una IA que recomiende campañas basándose en un cuestionario estructurado de marketing.
+
+La IA podría proponer:
+
+* Segmento.
+* Timing.
+* Mensajes.
+* Número de etapas.
+* Objetivo.
+* Probabilidad estimada.
+* Riesgo de saturación.
+* Variante recomendada.
+
+Pero la aprobación final debe seguir siendo humana.
+
+---
+
+# 21. Variables de personalización
+
+Los mensajes deben poder utilizar variables como:
+
+* `{customerName}`
+* `{productName}`
+* `{organizationName}`
+* Marca.
+* Garantía.
+* Fecha de vencimiento.
+* Fecha de compra.
+
+No deben utilizarse variables internas o identificadores técnicos visibles para el cliente.
+
+---
+
+# 22. Español
+
+Toda la experiencia comercial debe utilizar:
+
+> **Español neutro.**
+
+Evitar:
+
+* Voseo.
+* Modismos regionales innecesarios.
+* Frases excesivamente informales.
+* Traducciones literales extrañas.
+
+El tono debe ser:
+
+* Profesional.
+* Cercano.
+* Claro.
+* Humano.
+* Comercial sin ser agresivo.
+
+---
+
+# 23. Métricas obligatorias
+
+Cada campaña debe medir:
+
+* Entregados.
+* Respondidos.
+* Cotizaciones.
+* Compras.
+* Costo.
+* Ingresos.
+* ROI.
+
+Cuando sea posible:
+
+* Tasa de respuesta.
+* Tasa de cotización.
+* Tasa de conversión.
+* Ingreso por mensaje.
+* Costo por conversación.
+* Costo por venta.
+* Tiempo hasta compra.
+* Recompra atribuida.
+* Valor generado por campaña.
+
+---
+
+# 24. Economía de WhatsApp
+
+Los mensajes enviados mediante WhatsApp deben tratarse como un recurso con costo.
+
+Por ello:
+
+> **No enviar mensajes solo porque existe una automatización programada.**
+
+Antes del envío debe existir una justificación comercial.
+
+El sistema debe considerar el costo de Meta y compararlo contra:
+
+* Respuestas.
+* Cotizaciones.
+* Ventas.
+* Ingresos.
+* ROI.
+
+La plataforma debe mostrar el costo estimado y, cuando sea posible, el costo real.
+
+---
+
+# 25. Control de presupuesto
+
+El sistema debe permitir:
+
+* Presupuesto diario.
+* Presupuesto mensual.
+* Costo acumulado.
+* Costo estimado de automatizaciones próximas.
+* Alertas de consumo.
+* Alertas de campañas con bajo rendimiento.
+
+Si existe un método de pago asociado, el sistema debe:
+
+1. Advertir antes de alcanzar el límite.
+2. Mostrar el costo estimado.
+3. Preguntar antes de una acción que pueda generar un cargo significativo.
+4. Intentar el cobro cuando corresponda y exista autorización/configuración para ello.
+
+---
+
+# 26. Dashboard comercial
+
+El dashboard debe mostrar información accionable, no simplemente estadísticas.
+
+Ejemplo:
+
+* **17** clientes requieren seguimiento.
+* **8** garantías vencen en 30 días.
+* **12** oportunidades de recompra hoy.
+* **4** campañas activas.
+* **23** automatizaciones próximas.
+* **$X** en ventas potenciales.
+
+También puede incorporar:
+
+* Clientes de alta probabilidad de recompra.
+* Campañas con mejor ROI.
+* Campañas con peor rendimiento.
+* Costo de WhatsApp.
+* Ventas atribuidas.
+* Seguimientos atrasados.
+* Clientes sin contacto reciente.
+
+---
+
+# 27. Acciones rápidas
+
+Desde un cliente, el sistema debe permitir:
+
+* Ver compras.
+* Ver garantía.
+* Ver producto.
+* Ver próximas automatizaciones.
+* Pausar seguimiento.
+* Etiquetar cliente.
+* Registrar venta.
+* Agregar nota.
+
+Estas acciones deben estar ordenadas por importancia comercial.
+
+---
+
+# 28. Flujo ideal del cliente
+
+## Compra
+
+**Compra → D0 → satisfacción → recomendación/reseña → garantía → mitad de garantía → revisión → pre-vencimiento → posible renovación → post-garantía → recompra → nuevo ciclo.**
+
+El ciclo debe reiniciarse correctamente cuando existe una nueva compra.
+
+---
+
+# 29. Ejemplo — Batería de 12 meses
+
+### D0
+
+Agradecimiento + satisfacción.
+
+### D0 / posterior
+
+Solicitud de reseña/recomendación si corresponde.
+
+### Mes 6
+
+Revisión de alternador y voltaje en fábrica/taller del fabricante.
+
+### Mes 10 / D-60
+
+Recordatorio preventivo y diagnóstico.
+
+### Mes 11 / D-30
+
+Preparación para renovación.
+
+### Mes 12
+
+Vencimiento de garantía.
+
+### Después del vencimiento
+
+Seguimiento de oportunidad de recompra, sin asumir que la batería debe reemplazarse inmediatamente.
+
+### Etapa posterior
+
+Nueva oportunidad de renovación según comportamiento histórico.
+
+---
+
+# 30. Ejemplo — Batería de 24 meses
+
+### D0
+
+Satisfacción + garantía configurable.
+
+### Mes 12
+
+Revisión intermedia en fábrica/taller del fabricante.
+
+### Mes 22 / D-60
+
+Prevención.
+
+### Mes 23 / D-30
+
+Preparación para renovación.
+
+### Mes 24
+
+Vencimiento.
+
+### Post-garantía
+
+Seguimiento de renovación según probabilidad y comportamiento.
+
+---
+
+# 31. Catálogo
+
+El catálogo debe organizarse por **marca**.
+
+Actualmente existen aproximadamente:
+
+> **86 modelos de baterías.**
+
+La interfaz no debe presentar una lista larga y plana.
+
+Debe mostrar:
+
+**Marca → modelos → referencia → garantía → disponibilidad/datos relevantes.**
+
+La organización debe facilitar encontrar rápidamente una batería concreta.
+
+El catálogo oficial debe utilizarse como fuente de verdad antes de modificar o eliminar referencias.
+
+---
+
+# 32. Automatizaciones
+
+La sección de automatizaciones debe priorizar lo que importa ahora.
+
+## "Todas"
+
+Debe mostrar:
+
+> **Las automatizaciones más recientes primero.**
+
+No presentar listas históricas largas y aburridas como vista principal.
+
+La interfaz debe priorizar:
+
+1. Próximas a ejecutarse.
+2. Recompra.
+3. Garantías próximas a vencer.
+4. Seguimientos activos.
+5. Recientes.
+6. Historial completo bajo demanda.
+
+Cada automatización debe mostrar contexto:
+
+* Cliente.
+* Producto.
+* Campaña.
+* Mensaje.
+* Fecha.
+* Estado.
+
+No mostrar IDs internos innecesarios.
+
+---
+
+# 33. Filosofía de producto
+
+Automatize It Platform no debe ser:
+
+> "Un sistema que manda mensajes automáticamente."
+
+Debe ser:
+
+> **"Un sistema que identifica el momento correcto para contactar al cliente y ejecuta el seguimiento correcto con el menor número de mensajes necesarios."**
+
+La automatización es el mecanismo.
+
+El valor real está en:
+
+> **Timing + contexto + relevancia + seguimiento + medición.**
+
+---
+
+# 34. Principio final
+
+Toda campaña debe poder responder cinco preguntas:
+
+### 1. ¿Por qué estamos contactando a esta persona?
+
+Si no hay una respuesta clara, no se envía.
+
+### 2. ¿Por qué ahora?
+
+Debe existir una razón temporal o comercial.
+
+### 3. ¿Qué queremos que haga?
+
+Una sola acción principal.
+
+### 4. ¿Qué hacemos después de su respuesta?
+
+Debe existir un siguiente paso.
+
+### 5. ¿Cómo sabemos si funcionó?
+
+Debe existir una métrica comercial.
+
+Si una campaña no puede responder estas cinco preguntas, **no está lista para ser activada**.

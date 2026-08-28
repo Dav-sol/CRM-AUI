@@ -1,0 +1,1 @@
+export { QuotesIndexPage as default } from "./list-page";

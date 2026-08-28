@@ -1,0 +1,654 @@
+/templates:
+  get:
+    tags:
+      - Templates
+
+    summary: List templates of the organization
+
+    description: |
+      Returns a paginated list of templates ordered by code, name.
+      Supports filtering by category, tone, angle, group, and free-text search.
+
+    operationId: listTemplates
+
+    security:
+      - bearerAuth: []
+
+    parameters:
+
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+
+      - name: search
+        in: query
+        required: false
+        description: Case-insensitive match over name, goal, recommendedUse, or body.
+        schema:
+          type: string
+
+      - name: category
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+            - CAMPAIGN
+            - FOLLOW_UP
+            - QUICK_REPLY
+
+      - name: tone
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+            - PROFESSIONAL
+            - CARIBE_COMMERCIAL
+            - CARIBE_AUTHENTIC
+
+      - name: angle
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+            - TRUST
+            - PREVENTION
+            - REPURCHASE
+            - LOYALTY
+            - CONVERSATION
+            - CALM
+
+      - name: group
+        in: query
+        required: false
+        description: Exact match on the commercial group name.
+        schema:
+          type: string
+
+      - name: sort
+        in: query
+        required: false
+        description: Field sorted by; "-" prefix means descending. Defaults to code,name.
+        schema:
+          type: string
+          pattern: "^-?(code|name|group|category|tone|angle|createdAt|updatedAt)$"
+
+    responses:
+
+      "200":
+        description: Paginated template list
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Template/TemplateListResponse.yaml"
+
+      "400":
+        description: Validation error
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string
+
+      "500":
+        description: Internal error
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string
+
+  post:
+    tags:
+      - Templates
+
+    summary: Create a template
+
+    description: |
+      Creates a new template for the organization. Validates that body
+      only uses supported variables ({customerName}, {productName},
+      {organizationName}, {brand}, {warrantyExpiresAt}, {purchaseDate}).
+      OPERADOR is not allowed (403).
+
+    operationId: createTemplate
+
+    security:
+      - bearerAuth: []
+
+    requestBody:
+
+      required: true
+
+      content:
+
+        application/json:
+
+          schema:
+            $ref: "../components/schemas/Template/CreateTemplateRequest.yaml"
+
+    responses:
+
+      "201":
+        description: Template created
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Template/TemplateResponse.yaml"
+
+      "400":
+        description: Validation error
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string
+
+      "403":
+        description: OPERADOR is read-only
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string
+
+      "500":
+        description: Internal error
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string
+
+/templates/{id}:
+  parameters:
+
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+
+  get:
+    tags:
+      - Templates
+
+    summary: Get a template by id
+
+    description: |
+      Returns a single template. Returns 404 TEMPLATE_NOT_FOUND for unknown
+      ids, soft-deleted templates, or templates of another organization.
+
+    operationId: getTemplate
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Template detail
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Template/TemplateResponse.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string
+
+      "404":
+        description: Template not found
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string
+
+      "500":
+        description: Internal error
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string
+
+  patch:
+    tags:
+      - Templates
+
+    summary: Update a template
+
+    description: |
+      Updates mutable fields of a template (name, group, category, tone,
+      angle, goal, recommendedUse, body). At least one field must be provided.
+      Validates body variables if body is updated.
+      OPERADOR is not allowed (403).
+
+    operationId: updateTemplate
+
+    security:
+      - bearerAuth: []
+
+    requestBody:
+
+      required: true
+
+      content:
+
+        application/json:
+
+          schema:
+            $ref: "../components/schemas/Template/UpdateTemplateRequest.yaml"
+
+    responses:
+
+      "200":
+        description: Template updated
+
+        content:
+
+          application/json:
+
+            schema:
+              $ref: "../components/schemas/Template/TemplateResponse.yaml"
+
+      "400":
+        description: Validation error
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string
+
+      "403":
+        description: OPERADOR is read-only
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string
+
+      "404":
+        description: Template not found
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string
+
+      "500":
+        description: Internal error
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string
+
+  delete:
+    tags:
+      - Templates
+
+    summary: Soft-delete a template
+
+    description: |
+      Soft-deletes a template setting deletedAt; history is preserved
+      and the record is hidden from queries. OPERADOR is not allowed (403).
+
+    operationId: deleteTemplate
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Template soft-deleted
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              required:
+                - data
+              properties:
+                data:
+                  type: object
+                  required:
+                    - success
+                  properties:
+                    success:
+                      type: boolean
+                      example: true
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string
+
+      "403":
+        description: OPERADOR is read-only
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string
+
+      "404":
+        description: Template not found
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string
+
+      "500":
+        description: Internal error
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string

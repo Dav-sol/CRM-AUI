@@ -14,8 +14,38 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
 
 export interface ProductListResult {
-  data: Product[];
+  data: ProductItem[];
   meta: { page: number; limit: number; total: number; pages: number };
+}
+
+export interface ProductItem {
+  id: string;
+  uuid: string;
+  organizationId: string;
+  code: string;
+  name: string;
+  category: string | null;
+  status: Product['status'];
+  warrantyMonths: number | null;
+  price: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+function toProductItem(product: Product): ProductItem {
+  return {
+    id: product.id,
+    uuid: product.uuid,
+    organizationId: product.organizationId,
+    code: product.code,
+    name: product.name,
+    category: product.category,
+    status: product.status,
+    warrantyMonths: product.warrantyMonths,
+    price: product.price ? product.price.toNumber() : null,
+    createdAt: product.createdAt,
+    updatedAt: product.updatedAt,
+  };
 }
 
 const SORT_FIELDS = new Set([
@@ -59,16 +89,17 @@ export class ProductsService {
     ]);
 
     return {
-      data: products,
+      data: products.map(toProductItem),
       meta: { page, limit, total, pages: Math.ceil(total / limit) },
     };
   }
 
-  async findById(user: AuthUser, id: string): Promise<Product | null> {
-    return this.findScoped(user, id);
+  async findById(user: AuthUser, id: string): Promise<ProductItem | null> {
+    const product = await this.findScoped(user, id);
+    return product ? toProductItem(product) : null;
   }
 
-  async create(user: AuthUser, dto: CreateProductDto): Promise<Product> {
+  async create(user: AuthUser, dto: CreateProductDto): Promise<ProductItem> {
     const organizationId = await this.resolveOrganizationId(user, dto);
 
     const existing = await this.prisma.product.findFirst({
@@ -99,6 +130,8 @@ export class ProductsService {
           name: dto.name,
           category: dto.category ?? null,
           warrantyMonths: dto.warrantyMonths,
+          price:
+            dto.price !== undefined ? new Prisma.Decimal(dto.price) : undefined,
           status: dto.status ?? undefined,
           createdBy: user.id,
         },
@@ -111,7 +144,7 @@ export class ProductsService {
         organizationId,
         description: `product created code=${product.code}`,
       });
-      return product;
+      return toProductItem(product);
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -140,7 +173,7 @@ export class ProductsService {
     user: AuthUser,
     id: string,
     dto: UpdateProductDto,
-  ): Promise<Product> {
+  ): Promise<ProductItem> {
     const product = await this.findScoped(user, id);
     if (!product) {
       await this.auditService.record({
@@ -162,6 +195,8 @@ export class ProductsService {
         name: dto.name ?? undefined,
         category: dto.category ?? undefined,
         warrantyMonths: dto.warrantyMonths ?? undefined,
+        price:
+          dto.price !== undefined ? new Prisma.Decimal(dto.price) : undefined,
         status: dto.status ?? undefined,
         updatedBy: user.id,
       },
@@ -175,7 +210,7 @@ export class ProductsService {
       organizationId: product.organizationId,
       description: `product updated code=${product.code}`,
     });
-    return updated;
+    return toProductItem(updated);
   }
 
   async remove(user: AuthUser, id: string): Promise<Product> {

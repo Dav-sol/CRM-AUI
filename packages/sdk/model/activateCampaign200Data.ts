@@ -17,4 +17,14 @@ export type ActivateCampaign200Data = {
   status: ActivateCampaign200DataStatus;
   automationCount: number;
   startedAt: string;
+  /**
+     * Fase 4: clientes del segmento omitidos por el tope
+     * 3 comerciales / 60 días.
+     */
+  skippedByLimit?: number;
+  /**
+     * Fase 4: clientes del segmento omitidos por distancia
+     * mínima entre mensajes comerciales (JOURNEYS_MIN_DAYS_BETWEEN_COMMERCIAL).
+     */
+  skippedByFrequency?: number;
 };

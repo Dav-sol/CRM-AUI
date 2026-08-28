@@ -31,6 +31,11 @@ export type UpdateProductBody = {
   category?: string;
   /** Warranty duration in months (catalog values). */
   warrantyMonths?: UpdateProductBodyWarrantyMonths;
+  /**
+     * Precio de referencia del catálogo (COP).
+     * @minimum 0
+     */
+  price?: number;
   /** No transitions workflow in v1. */
   status?: UpdateProductBodyStatus;
 };

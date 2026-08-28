@@ -16,6 +16,7 @@ export type GetDashboardActionable200DataUpcomingAutomationsItem = {
   scheduledDate: string;
   status: string;
   customerName: string;
+  customerUuid: string;
   productName: string;
   /** @nullable */
   campaignName?: string | null;

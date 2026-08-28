@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   CalendarClock,
+  FileText,
   MessageSquareText,
   RefreshCcw,
   ShoppingCart,
@@ -16,6 +17,7 @@ import { toast } from "sonner";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { CampaignsPanel } from "@/components/dashboard/campaigns-panel";
 import { KpiCard } from "@/components/dashboard/kpi-card";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,10 +28,17 @@ import {
   apiDashboardCampaigns,
   apiDashboardSummary,
 } from "@/lib/api";
-import { formatDateTime, formatNumber, formatRelative } from "@/lib/format";
+import {
+  formatCurrency, formatDateTime, formatNumber, formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type Actionable = Awaited<ReturnType<typeof apiDashboardActionable>>;
+type DashboardRange = {
+  from?: string;
+  to?: string;
+  compareFrom?: string;
+  compareTo?: string;
+};
 
 export default function DashboardPage() {
   const [summary, setSummary] = useState<Awaited<
@@ -43,16 +52,23 @@ export default function DashboardPage() {
   > | null>(null);
   const [actionable, setActionable] = useState<Actionable | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [range, setRange] = useState<DashboardRange>({});
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       try {
+        const params = {
+          ...(range.from ? { from: range.from } : {}),
+          ...(range.to ? { to: range.to } : {}),
+          ...(range.compareFrom ? { compareFrom: range.compareFrom } : {}),
+          ...(range.compareTo ? { compareTo: range.compareTo } : {}),
+        };
         const [summaryData, activityData, campaignsData, actionableData] =
           await Promise.all([
-            apiDashboardSummary(),
-            apiDashboardActivity(),
+            apiDashboardSummary(params),
+            apiDashboardActivity(params),
             apiDashboardCampaigns(),
             apiDashboardActionable(),
           ]);
@@ -80,7 +96,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [range.from, range.to, range.compareFrom, range.compareTo]);
 
   return (
     <div className="w-full space-y-5 p-4 lg:p-5">
@@ -91,13 +107,16 @@ export default function DashboardPage() {
             Qué está pasando y qué requiere tu atención hoy.
           </p>
         </div>
-        <Link
-          href="/conversations"
-          className={buttonVariants({ variant: "outline" })}
-        >
-          <MessageSquareText />
-          Ver conversaciones
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangePicker value={range} onChange={setRange} />
+          <Link
+            href="/conversations"
+            className={buttonVariants({ variant: "outline" })}
+          >
+            <MessageSquareText />
+            Ver conversaciones
+          </Link>
+        </div>
       </div>
 
       {error && (
@@ -108,14 +127,16 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
         <div>
           {summary ? (
             <KpiCard
               icon={Users}
-              label="Clientes"
-              value={formatNumber(summary.customers.total)}
-              hint={`${formatNumber(summary.customers.newThisMonth)} nuevos este mes`}
+              label="Clientes nuevos"
+              value={formatNumber(summary.customers.newInRange)}
+              hint={`${formatNumber(summary.customers.total)} clientes en total`}
+              delta={summary.customers.newDelta}
+              href="/customers"
             />
           ) : (
             <Skeleton className="h-32 w-full" />
@@ -126,8 +147,24 @@ export default function DashboardPage() {
             <KpiCard
               icon={ShoppingCart}
               label="Compras"
-              value={formatNumber(summary.purchases.total)}
+              value={formatNumber(summary.purchases.inRange)}
               hint={`${formatNumber(summary.purchases.thisMonth)} este mes`}
+              delta={summary.purchases.countDelta}
+              href="/purchases"
+            />
+          ) : (
+            <Skeleton className="h-32 w-full" />
+          )}
+        </div>
+        <div>
+          {summary ? (
+            <KpiCard
+              icon={ShoppingCart}
+              label="Ingresos"
+              value={`$${formatCurrency(summary.purchases.value)}`}
+              hint="Suma de compras en el período"
+              delta={summary.purchases.valueDelta}
+              href="/purchases"
             />
           ) : (
             <Skeleton className="h-32 w-full" />
@@ -138,8 +175,10 @@ export default function DashboardPage() {
             <KpiCard
               icon={MessageSquareText}
               label="Mensajes enviados"
-              value={formatNumber(summary.messages.sent)}
+              value={formatNumber(summary.messages.sentInRange)}
               hint={`${formatNumber(summary.messages.pending)} en cola`}
+              delta={summary.messages.sentDelta}
+              href="/conversations"
             />
           ) : (
             <Skeleton className="h-32 w-full" />
@@ -149,9 +188,24 @@ export default function DashboardPage() {
           {summary ? (
             <KpiCard
               icon={Workflow}
-              label="Conversaciones activas"
-              value={formatNumber(summary.conversations.open)}
-              hint={`${formatNumber(summary.campaigns.active)} campañas activas`}
+              label="Automatizaciones ejecutadas"
+              value={formatNumber(summary.automations.executedInRange)}
+              hint={`${formatNumber(summary.automations.scheduled)} programadas`}
+              delta={summary.automations.executedDelta}
+              href="/automations"
+            />
+          ) : (
+            <Skeleton className="h-32 w-full" />
+          )}
+        </div>
+        <div>
+          {actionable ? (
+            <KpiCard
+              icon={FileText}
+              label="Cotizaciones abiertas"
+              value={formatNumber(actionable.openQuotes.length)}
+              hint="Borradores y enviadas sin cerrar"
+              href="/quotes"
             />
           ) : (
             <Skeleton className="h-32 w-full" />
@@ -183,6 +237,7 @@ export default function DashboardPage() {
                     .filter(Boolean)
                     .join(" · "),
                   when: formatRelative(item.scheduledDate),
+                  href: "/automations",
                 }))}
                 href="/automations"
               />
@@ -195,20 +250,26 @@ export default function DashboardPage() {
                   headline: item.customerName,
                   detail: item.productName,
                   when: `Vence ${formatDateTime(item.warrantyExpiresAt)}`,
+                  href: item.customerUuid
+                    ? `/customers/${item.customerUuid}`
+                    : "/customers?warrantyExpiringInDays=30",
                 }))}
-                href="/purchases"
+                href="/customers?warrantyExpiringInDays=30"
               />
               <ActionableColumn
                 icon={<RefreshCcw className="size-4 text-emerald-500" />}
-                title="Ventana de recompra"
-                empty="Sin clientes en ventana de recompra."
+                title="Ventas potenciales"
+                empty="Sin oportunidades de recompra."
                 items={actionable.repurchaseWindow.map((item) => ({
                   key: `${item.purchaseId}-rep`,
                   headline: item.customerName,
-                  detail: item.productName,
+                  detail: `${item.productName} · potencial $${formatCurrency(item.potentialValue)}`,
                   when: `Garantía vencida ${formatRelative(item.warrantyExpiresAt)}`,
+                  href: item.customerUuid
+                    ? `/customers/${item.customerUuid}`
+                    : "/customers?warrantyExpiredInDays=365",
                 }))}
-                href="/campaigns"
+                href="/customers?warrantyExpiredInDays=365"
               />
             </div>
           )}
@@ -257,7 +318,7 @@ function ActionableColumn({
   icon: React.ReactNode;
   title: string;
   empty: string;
-  items: Array<{ key: string; headline: string; detail: string; when: string }>;
+  items: Array<{ key: string; headline: string; detail: string; when: string; href?: string }>;
   href: string;
 }) {
   return (
@@ -271,19 +332,21 @@ function ActionableColumn({
       ) : (
         <ul className="mt-2 space-y-1.5">
           {items.map((item) => (
-            <li
-              key={item.key}
-              className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2"
-            >
-              <div className="flex items-baseline justify-between gap-2">
-                <p className="truncate text-sm font-medium">{item.headline}</p>
-                <span className="shrink-0 text-[11px] text-muted-foreground">
-                  {item.when}
-                </span>
-              </div>
-              <p className="truncate text-xs text-muted-foreground">
-                {item.detail || "—"}
-              </p>
+            <li key={item.key}>
+              <Link
+                href={item.href ?? href}
+                className="block rounded-lg border border-border/60 bg-muted/30 px-3 py-2 transition-colors hover:border-primary/40 hover:bg-muted"
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="truncate text-sm font-medium">{item.headline}</p>
+                  <span className="shrink-0 text-[11px] text-muted-foreground">
+                    {item.when}
+                  </span>
+                </div>
+                <p className="truncate text-xs text-muted-foreground">
+                  {item.detail || "—"}
+                </p>
+              </Link>
             </li>
           ))}
         </ul>

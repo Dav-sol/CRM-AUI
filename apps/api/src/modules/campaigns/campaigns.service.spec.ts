@@ -1,6 +1,7 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuthUser } from '../../core/decorators/current-user.decorator';
@@ -41,6 +42,12 @@ function campaignRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
+// Activation requires APPROVED (playbook §20); this builds an approved campaign
+// while still allowing tests to override the status explicitly.
+function approvedCampaign(overrides: Record<string, unknown> = {}) {
+  return campaignRow({ status: 'APPROVED', ...overrides });
+}
+
 function sequenceTransaction(
   purchase: { id: string; customerId: string; purchaseDate: string },
   warrantyExpiresAt: Date | null,
@@ -71,6 +78,7 @@ function sequenceTransaction(
     automation: {
       createMany: jest.fn(),
       create: jest.fn().mockResolvedValue({}),
+      count: jest.fn().mockResolvedValue(0),
     },
   };
 }
@@ -100,6 +108,8 @@ describe('CampaignsService', () => {
       update: jest.Mock;
     };
     purchase: { findMany: jest.Mock };
+    message: { count: jest.Mock };
+    quote: { aggregate: jest.Mock };
     followUpSequence: { findFirst: jest.Mock };
     $transaction: jest.Mock;
   };
@@ -129,7 +139,14 @@ describe('CampaignsService', () => {
         create: jest.fn(),
         update: jest.fn(),
       },
-      purchase: { findMany: jest.fn() },
+      purchase: { findMany: jest.fn(), count: jest.fn().mockResolvedValue(5) },
+      message: { count: jest.fn().mockResolvedValue(0) },
+      quote: {
+        aggregate: jest.fn().mockResolvedValue({
+          _count: { _all: 0, purchaseId: 0 },
+          _sum: { value: null },
+        }),
+      },
       followUpSequence: { findFirst: jest.fn() },
       $transaction: jest.fn(async (fns: unknown) => {
         if (typeof fns === 'function') return fns(prisma);
@@ -140,6 +157,7 @@ describe('CampaignsService', () => {
     };
     auditService = { record: jest.fn().mockResolvedValue(undefined) };
     eventEmitter = { emit: jest.fn() };
+    prisma.automation.count.mockResolvedValue(0);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -147,6 +165,14 @@ describe('CampaignsService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: AuditIdentityService, useValue: auditService },
         { provide: EventEmitter2, useValue: eventEmitter },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key: string) =>
+              key === 'journeys.maxCommercialPer60d' ? 3 : null,
+            ),
+          },
+        },
       ],
     }).compile();
 
@@ -325,10 +351,22 @@ describe('CampaignsService', () => {
             name: 'Secuencia Garantía 12',
             warrantyMonths: 12,
             stages: [
-              { id: 'st-1' },
-              { id: 'st-2' },
-              { id: 'st-3' },
-              { id: 'st-4' },
+              {
+                id: 'st-1',
+                name: 'Bienvenida',
+                anchor: 'PURCHASE_DATE',
+                offsetDays: 0,
+                template: 'Hola {customerName}',
+                templateOnPast: null,
+              },
+              {
+                id: 'st-2',
+                name: 'Revisión mitad',
+                anchor: 'WARRANTY_EXPIRY',
+                offsetDays: -180,
+                template: 'Revisión gratuita',
+                templateOnPast: 'Recompra',
+              },
             ],
           },
         }),
@@ -343,7 +381,25 @@ describe('CampaignsService', () => {
         uuid: 'seq-uuid-1',
         name: 'Secuencia Garantía 12',
         warrantyMonths: 12,
-        stageCount: 4,
+        stageCount: 2,
+        stages: [
+          {
+            uuid: 'st-1',
+            name: 'Bienvenida',
+            anchor: 'PURCHASE_DATE',
+            offsetDays: 0,
+            template: 'Hola {customerName}',
+            templateOnPast: null,
+          },
+          {
+            uuid: 'st-2',
+            name: 'Revisión mitad',
+            anchor: 'WARRANTY_EXPIRY',
+            offsetDays: -180,
+            template: 'Revisión gratuita',
+            templateOnPast: 'Recompra',
+          },
+        ],
       });
     });
   });
@@ -352,9 +408,7 @@ describe('CampaignsService', () => {
     it('rejects an empty body (at least one field required)', async () => {
       prisma.campaign.findFirst.mockResolvedValue(campaignRow());
 
-      await expect(
-        service.update(orgUser, 'cu-1', {} as never),
-      ).rejects.toMatchObject({
+      await expect(service.update(orgUser, 'cu-1', {})).rejects.toMatchObject({
         response: {
           error: {
             code: 'VALIDATION_ERROR',
@@ -365,7 +419,7 @@ describe('CampaignsService', () => {
       expect(prisma.campaign.update).not.toHaveBeenCalled();
     });
 
-    it('updates only while DRAFT', async () => {
+    it('updates while DRAFT', async () => {
       prisma.campaign.findFirst.mockResolvedValue(campaignRow());
       prisma.campaign.update.mockResolvedValue({
         ...campaignRow(),
@@ -396,9 +450,49 @@ describe('CampaignsService', () => {
       expect(result.name).toBe('Nuevo');
     });
 
-    it('rejects updates when not DRAFT', async () => {
+    it('allows ACTIVE campaigns to update template fields', async () => {
       prisma.campaign.findFirst.mockResolvedValue(
         campaignRow({ status: 'ACTIVE' }),
+      );
+      prisma.campaign.update.mockResolvedValue({
+        ...campaignRow({ status: 'ACTIVE' }),
+        template: 'Updated template',
+      });
+
+      const result = await service.update(orgUser, 'cu-1', {
+        template: 'Updated template',
+      });
+
+      expect(prisma.campaign.update).toHaveBeenCalledWith({
+        where: { id: 'c-1' },
+        data: expect.objectContaining({
+          template: 'Updated template',
+        }) as object,
+      });
+      expect(result.name).toBe('Campaña repetición');
+    });
+
+    it('rejects segment/stages/startAt changes on ACTIVE campaigns', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        campaignRow({ status: 'ACTIVE' }),
+      );
+
+      await expect(
+        service.update(orgUser, 'cu-1', { segment: { city: 'Quito' } }),
+      ).rejects.toMatchObject({
+        response: {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: expect.stringContaining('ACTIVE'),
+          },
+        },
+      });
+      expect(prisma.campaign.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects updates on PAUSED campaigns', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        campaignRow({ status: 'PAUSED' }),
       );
 
       await expect(
@@ -421,8 +515,45 @@ describe('CampaignsService', () => {
   });
 
   describe('activate (US5, FR-006)', () => {
+    it('rejects activation with unknown message variables (P0.2)', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        approvedCampaign({
+          template: 'Hola {customerName} {raro}',
+          followUpSequenceId: null,
+          followUpSequence: null,
+        }),
+      );
+
+      await expect(service.activate(orgUser, 'cu-1')).rejects.toMatchObject({
+        response: {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: expect.stringContaining('Invalid message variables'),
+          },
+        },
+      });
+    });
+
+    it('rejects activation when the segment has no audience (P0.2)', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        approvedCampaign({
+          followUpSequenceId: null,
+          followUpSequence: null,
+        }),
+      );
+      prisma.purchase.count.mockResolvedValue(0);
+
+      await expect(service.activate(orgUser, 'cu-1')).rejects.toMatchObject({
+        response: {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: expect.stringContaining('without an audience'),
+          },
+        },
+      });
+    });
     it('activates campaign and generates automations inside a transaction', async () => {
-      prisma.campaign.findFirst.mockResolvedValue(campaignRow());
+      prisma.campaign.findFirst.mockResolvedValue(approvedCampaign());
       let txRef:
         | {
             commercialCycle: { create: jest.Mock; update: jest.Mock };
@@ -458,6 +589,7 @@ describe('CampaignsService', () => {
               update: jest.fn(),
             },
             automation: {
+              count: jest.fn().mockResolvedValue(0),
               createMany: jest.fn().mockResolvedValue({ count: 2 }),
             },
           };
@@ -473,6 +605,8 @@ describe('CampaignsService', () => {
         status: 'ACTIVE',
         automationCount: 2,
         startedAt: expect.any(Date) as unknown,
+        skippedByLimit: 0,
+        skippedByFrequency: 0,
       });
       expect(txRef?.commercialCycle.create).toHaveBeenNthCalledWith(1, {
         data: {
@@ -519,7 +653,7 @@ describe('CampaignsService', () => {
     it('generates one automation per stage with the stage template snapshot (HG-FUS-02)', async () => {
       const warrantyExpires = new Date('2027-08-01T12:00:00.000Z');
       prisma.campaign.findFirst.mockResolvedValue(
-        campaignRow({
+        approvedCampaign({
           followUpSequence: {
             uuid: 'fus-1',
             warrantyMonths: 12,
@@ -544,7 +678,7 @@ describe('CampaignsService', () => {
       );
       let txRef:
         | {
-            purchase: { findMany: jest.Mock };
+purchase: { findMany: jest.Mock; count: jest.Mock };
             automation: { create: jest.Mock; createMany: jest.Mock };
           }
         | undefined;
@@ -580,6 +714,7 @@ describe('CampaignsService', () => {
               update: jest.fn(),
             },
             automation: {
+              count: jest.fn().mockResolvedValue(0),
               createMany: jest.fn(),
               create: jest.fn().mockResolvedValue({}),
             },
@@ -630,7 +765,7 @@ describe('CampaignsService', () => {
 
     it('skips purchases without warrantyExpiresAt in sequence campaigns', async () => {
       prisma.campaign.findFirst.mockResolvedValue(
-        campaignRow({
+        approvedCampaign({
           followUpSequence: {
             uuid: 'fus-1',
             warrantyMonths: 12,
@@ -679,6 +814,7 @@ describe('CampaignsService', () => {
               update: jest.fn(),
             },
             automation: {
+              count: jest.fn().mockResolvedValue(0),
               createMany: jest.fn(),
               create: jest.fn().mockResolvedValue({}),
             },
@@ -696,7 +832,7 @@ describe('CampaignsService', () => {
 
     it('generates PURCHASE_DATE stages even when warrantyExpiresAt is null (HG-SEM-05)', async () => {
       prisma.campaign.findFirst.mockResolvedValue(
-        campaignRow({
+        approvedCampaign({
           followUpSequence: {
             uuid: 'fus-1',
             warrantyMonths: 12,
@@ -751,7 +887,7 @@ describe('CampaignsService', () => {
 
     it('converts a past WARRANTY_EXPIRY stage into an immediate repurchase automation using templateOnPast (HG-SEM-03)', async () => {
       prisma.campaign.findFirst.mockResolvedValue(
-        campaignRow({
+        approvedCampaign({
           followUpSequence: {
             uuid: 'fus-1',
             warrantyMonths: 12,
@@ -795,9 +931,65 @@ describe('CampaignsService', () => {
       expect(call.data.scheduledDate.getTime()).toBeLessThanOrEqual(Date.now());
     });
 
+    it('substitutes later post-warranty recompra stages when a conversion fires (F4)', async () => {
+      const warrantyExpired = new Date(Date.now() - 30 * 86_400_000);
+      prisma.campaign.findFirst.mockResolvedValue(
+        approvedCampaign({
+          followUpSequence: {
+            uuid: 'fus-1',
+            warrantyMonths: 12,
+            stages: [
+              {
+                uuid: 'st-1',
+                name: 'Vencimiento',
+                anchor: 'WARRANTY_EXPIRY',
+                offsetDays: 0,
+                template: 'vence hoy',
+                templateOnPast: 'renovación',
+              },
+              {
+                uuid: 'st-2',
+                name: 'Post-garantía +90',
+                anchor: 'WARRANTY_EXPIRY',
+                offsetDays: 90,
+                template: 'renovación post-garantía',
+                templateOnPast: null,
+              },
+            ],
+          },
+        }),
+      );
+      let txAutomationCreate: jest.Mock | undefined;
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = sequenceTransaction(
+            {
+              id: 'pu-1',
+              customerId: 'cu-a',
+              purchaseDate: '2026-01-01T12:00:00.000Z',
+            },
+            warrantyExpired,
+          );
+          txAutomationCreate = tx.automation.create;
+          return fn(tx);
+        },
+      );
+
+      const result = await service.activate(orgUser, 'cu-1');
+
+      // One renovation contact only: the conversion, not the +90 stage.
+      expect(result.automationCount).toBe(1);
+      expect(txAutomationCreate).toHaveBeenCalledTimes(1);
+      const [call] = txAutomationCreate!.mock.calls[0] as [
+        { data: { messageTemplate: string; purpose: string } },
+      ];
+      expect(call.data.messageTemplate).toBe('renovación');
+      expect(call.data.purpose).toBe('COMMERCIAL');
+    });
+
     it('falls back to campaign.template when templateOnPast is missing', async () => {
       prisma.campaign.findFirst.mockResolvedValue(
-        campaignRow({
+        approvedCampaign({
           followUpSequence: {
             uuid: 'fus-1',
             warrantyMonths: 12,
@@ -840,7 +1032,7 @@ describe('CampaignsService', () => {
 
     it('dedupes multiple past WARRANTY_EXPIRY stages into a single repurchase automation per purchase', async () => {
       prisma.campaign.findFirst.mockResolvedValue(
-        campaignRow({
+        approvedCampaign({
           followUpSequence: {
             uuid: 'fus-1',
             warrantyMonths: 12,
@@ -894,7 +1086,7 @@ describe('CampaignsService', () => {
 
     it('omits past PURCHASE_DATE stages without generating a repurchase', async () => {
       prisma.campaign.findFirst.mockResolvedValue(
-        campaignRow({
+        approvedCampaign({
           followUpSequence: {
             uuid: 'fus-1',
             warrantyMonths: 12,
@@ -936,7 +1128,7 @@ describe('CampaignsService', () => {
     it('uses startAt as the reference: past WARRANTY_EXPIRY stages become repurchase at startAt', async () => {
       const startAt = new Date('2026-10-01T12:00:00.000Z');
       prisma.campaign.findFirst.mockResolvedValue(
-        campaignRow({
+        approvedCampaign({
           startAt,
           followUpSequence: {
             uuid: 'fus-1',
@@ -981,7 +1173,7 @@ describe('CampaignsService', () => {
     });
 
     it('reuses an existing ACTIVE cycle for the purchase', async () => {
-      prisma.campaign.findFirst.mockResolvedValue(campaignRow());
+      prisma.campaign.findFirst.mockResolvedValue(approvedCampaign());
       let txRef:
         | {
             commercialCycle: { create: jest.Mock; update: jest.Mock };
@@ -1013,6 +1205,7 @@ describe('CampaignsService', () => {
               update: jest.fn(),
             },
             automation: {
+              count: jest.fn().mockResolvedValue(0),
               createMany: jest.fn().mockResolvedValue({ count: 1 }),
             },
           };
@@ -1031,7 +1224,7 @@ describe('CampaignsService', () => {
     });
 
     it('reopens a CANCELLED cycle to ACTIVE before attaching the automation', async () => {
-      prisma.campaign.findFirst.mockResolvedValue(campaignRow());
+      prisma.campaign.findFirst.mockResolvedValue(approvedCampaign());
       let txRef:
         | {
             commercialCycle: { create: jest.Mock; update: jest.Mock };
@@ -1063,6 +1256,7 @@ describe('CampaignsService', () => {
               update: jest.fn().mockResolvedValue({ id: 'cy-1' }),
             },
             automation: {
+              count: jest.fn().mockResolvedValue(0),
               createMany: jest.fn().mockResolvedValue({ count: 1 }),
             },
           };
@@ -1089,7 +1283,7 @@ describe('CampaignsService', () => {
 
     it('rejects activation when not DRAFT', async () => {
       prisma.campaign.findFirst.mockResolvedValue(
-        campaignRow({ status: 'ACTIVE' }),
+        approvedCampaign({ status: 'ACTIVE' }),
       );
 
       await expect(service.activate(orgUser, 'cu-1')).rejects.toMatchObject({
@@ -1106,9 +1300,7 @@ describe('CampaignsService', () => {
     });
 
     it('rejects segments exceeding the automation limit', async () => {
-      prisma.campaign.findFirst.mockResolvedValue(
-        campaignRow({ status: 'DRAFT' }),
-      );
+      prisma.campaign.findFirst.mockResolvedValue(approvedCampaign());
       prisma.$transaction.mockImplementation(
         async (fn: (tx: unknown) => Promise<unknown>) => {
           const purchases = Array.from({ length: 5001 }, (_, i) => ({
@@ -1122,6 +1314,7 @@ describe('CampaignsService', () => {
             },
             purchase: { findMany: jest.fn().mockResolvedValue(purchases) },
             automation: { createMany: jest.fn() },
+            count: jest.fn().mockResolvedValue(0),
           };
           return fn(tx);
         },
@@ -1213,6 +1406,7 @@ describe('CampaignsService', () => {
               updateMany: jest.fn().mockResolvedValue({ count: 1 }),
             },
             automation: {
+              count: jest.fn().mockResolvedValue(0),
               updateMany: jest.fn().mockResolvedValue({ count: 3 }),
             },
           };
@@ -1264,7 +1458,11 @@ describe('CampaignsService', () => {
 
       const result = await service.previewSegment(orgUser, 'cu-1');
 
-      expect(result).toEqual({ count: 1 });
+      expect(result).toEqual({
+        count: 1,
+        estimatedAutomations: 1,
+        estimatedCost: 400,
+      });
       expect(auditService.record).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'campaign.preview_segment' }),
       );
@@ -1283,7 +1481,11 @@ describe('CampaignsService', () => {
 
       const result = await service.previewSegment(orgUser, 'cu-1', {});
 
-      expect(result).toEqual({ count: 1 });
+      expect(result).toEqual({
+        count: 1,
+        estimatedAutomations: 1,
+        estimatedCost: 400,
+      });
       expect(prisma.purchase.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
@@ -1322,7 +1524,11 @@ describe('CampaignsService', () => {
           }) as object,
         }),
       );
-      expect(result).toEqual({ count: 0 });
+      expect(result).toEqual({
+        count: 0,
+        estimatedAutomations: 0,
+        estimatedCost: 0,
+      });
     });
 
     it('rejects preview for unknown campaigns', async () => {
@@ -1527,7 +1733,10 @@ describe('CampaignsService', () => {
     it('activates successfully when segment has both productId and warrantyMonths', async () => {
       prisma.campaign.findFirst
         .mockResolvedValueOnce(
-          campaignRow({ followUpSequenceId: null, followUpSequence: null }),
+          approvedCampaign({
+            followUpSequenceId: null,
+            followUpSequence: null,
+          }),
         )
         .mockResolvedValueOnce(null);
       prisma.campaign.updateMany.mockResolvedValue({ count: 1 });
@@ -1554,7 +1763,7 @@ describe('CampaignsService', () => {
       ];
       prisma.campaign.findFirst
         .mockResolvedValueOnce(
-          campaignRow({
+          approvedCampaign({
             followUpSequenceId: 'seq-1',
             followUpSequence: {
               uuid: 'seq-uuid-1',
@@ -1577,6 +1786,312 @@ describe('CampaignsService', () => {
 
       await expect(service.activate(orgUser, 'cu-1')).rejects.toMatchObject({
         response: { error: { code: 'SEGMENT_TOO_LARGE' } },
+      });
+    });
+  });
+
+  describe('approve (playbook §20)', () => {
+    it('rejects approval when the template has unknown variables (P0.2)', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        campaignRow({ template: 'Hola {customerName} {desconocida}' }),
+      );
+
+      await expect(service.approve(orgUser, 'cu-1')).rejects.toMatchObject({
+        response: {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: expect.stringContaining('Invalid message variables'),
+          },
+        },
+      });
+      expect(prisma.campaign.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects approval when there are no messages (P0.2)', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        campaignRow({ template: '', templateD3: '', templateD180: '', templateD365: '' }),
+      );
+
+      await expect(service.approve(orgUser, 'cu-1')).rejects.toMatchObject({
+        response: {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: expect.stringContaining('no messages'),
+          },
+        },
+      });
+    });
+
+    it('rejects approval when the segment has no audience (P0.2)', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(campaignRow());
+      prisma.purchase.count.mockResolvedValue(0);
+
+      await expect(service.approve(orgUser, 'cu-1')).rejects.toMatchObject({
+        response: {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: expect.stringContaining('without an audience'),
+          },
+        },
+      });
+    });
+
+    it('approves a DRAFT campaign, audits and emits CampaignUpdated', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(campaignRow());
+      prisma.campaign.update.mockResolvedValue({
+        ...campaignRow(),
+        status: 'APPROVED',
+        updatedAt: new Date(),
+      });
+
+      const result = await service.approve(orgUser, 'cu-1');
+
+      expect(result.status).toBe('APPROVED');
+      expect(prisma.campaign.update).toHaveBeenCalledWith({
+        where: { id: 'c-1' },
+        data: { status: 'APPROVED' },
+      });
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'campaign.approved',
+          outcome: 'success',
+          organizationId: 'org-1',
+        }),
+      );
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'CampaignUpdated',
+        expect.objectContaining({
+          payload: expect.objectContaining({ campaignId: 'cu-1' }) as object,
+        }),
+      );
+    });
+
+    it('rejects approving a non-DRAFT campaign', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        campaignRow({ status: 'ACTIVE' }),
+      );
+
+      await expect(service.approve(orgUser, 'cu-1')).rejects.toMatchObject({
+        response: { error: { code: 'VALIDATION_ERROR' } },
+      });
+      expect(prisma.campaign.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects approving an unknown campaign', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(null);
+
+      await expect(service.approve(orgUser, 'cu-1')).rejects.toMatchObject({
+        response: { error: { code: 'CAMPAIGN_NOT_FOUND' } },
+      });
+    });
+  });
+
+  // Fase 1: etapas inline del timeline del editor (Campaign.stages Json).
+  describe('inline stages (Fase 1)', () => {
+    const inlineStages = [
+      {
+        name: 'Bienvenida',
+        anchor: 'PURCHASE_DATE' as const,
+        offsetDays: 0,
+        template: 'Hola {customerName}, tu {productName}…',
+      },
+      {
+        anchor: 'WARRANTY_EXPIRY' as const,
+        offsetDays: -30,
+        template: '{customerName}, tu garantía vence pronto',
+        templateOnPast: 'Oferta de renovación para {customerName}',
+      },
+    ];
+
+    it('creates a campaign with inline stages', async () => {
+      prisma.followUpSequence.findFirst.mockResolvedValue(null);
+      prisma.campaign.create.mockResolvedValue(campaignRow());
+
+      await service.create(orgUser, {
+        name: 'Con etapas',
+        template: 'Hola {customerName}',
+        type: 'AUTOMATIC',
+        stages: inlineStages,
+      });
+
+      expect(prisma.campaign.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ stages: inlineStages }) as object,
+      });
+    });
+
+    it('rejects create combining followUpSequenceId with inline stages', async () => {
+      prisma.followUpSequence.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.create(orgUser, {
+          name: 'Inválida',
+          template: 'Hola {customerName}',
+          type: 'AUTOMATIC',
+          followUpSequenceId: 'seq-1',
+          stages: inlineStages,
+        }),
+      ).rejects.toMatchObject({
+        response: { error: { code: 'VALIDATION_ERROR' } },
+      });
+      expect(prisma.campaign.create).not.toHaveBeenCalled();
+    });
+
+    it('persists stage changes on update (DRAFT/APPROVED)', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        campaignRow({
+          status: 'APPROVED',
+          followUpSequenceId: null,
+          followUpSequence: null,
+        }),
+      );
+      prisma.campaign.update.mockResolvedValue(campaignRow());
+
+      await service.update(orgUser, 'cu-1', { stages: inlineStages });
+
+      expect(prisma.campaign.update).toHaveBeenCalledWith({
+        where: { id: 'c-1' },
+        data: expect.objectContaining({ stages: inlineStages }) as object,
+      });
+    });
+
+    it('clears inline stages on update with an empty array', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        campaignRow({ followUpSequenceId: null, followUpSequence: null }),
+      );
+      prisma.campaign.update.mockResolvedValue(campaignRow());
+
+      await service.update(orgUser, 'cu-1', { stages: [] });
+
+      expect(prisma.campaign.update).toHaveBeenCalledWith({
+        where: { id: 'c-1' },
+        data: expect.objectContaining({ stages: [] }) as object,
+      });
+    });
+
+    it('rejects update adding inline stages to a campaign with a sequence', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        campaignRow({ followUpSequenceId: 7, followUpSequence: null }),
+      );
+
+      await expect(
+        service.update(orgUser, 'cu-1', { stages: inlineStages }),
+      ).rejects.toMatchObject({
+        response: { error: { code: 'VALIDATION_ERROR' } },
+      });
+      expect(prisma.campaign.update).not.toHaveBeenCalled();
+    });
+
+    it('activates with inline stages generating one automation per stage', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        approvedCampaign({
+          followUpSequenceId: null,
+          followUpSequence: null,
+          stages: [
+            {
+              name: 'D0',
+              anchor: 'PURCHASE_DATE',
+              offsetDays: 0,
+              template: 'Hola {customerName}',
+              templateOnPast: null,
+            },
+            {
+              name: 'Pre-vencimiento',
+              anchor: 'WARRANTY_EXPIRY',
+              offsetDays: -30,
+              template: 'Garantía de {productName}',
+              templateOnPast: null,
+            },
+          ],
+        }),
+      );
+      let createCalls: Array<Record<string, unknown>> = [];
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = {
+            campaign: {
+              updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+            },
+            purchase: {
+              findMany: jest.fn(
+                (args?: { select?: Record<string, unknown> }): Promise<unknown> => {
+                  if (args?.select && 'warrantyExpiresAt' in args.select) {
+                    return Promise.resolve([
+                      {
+                        id: 'pu-1',
+                        warrantyExpiresAt: new Date('2027-08-01T00:00:00.000Z'),
+                      },
+                    ]);
+                  }
+                  return Promise.resolve([
+                    {
+                      id: 'pu-1',
+                      customerId: 'cus-1',
+                      purchaseDate: new Date('2026-08-01T12:00:00.000Z'),
+                    },
+                  ]);
+                },
+              ),
+            },
+            commercialCycle: {
+              findMany: jest.fn().mockResolvedValue([]),
+              create: jest.fn().mockResolvedValue({ id: 'cy-1' }),
+              update: jest.fn(),
+            },
+            automation: {
+              count: jest.fn().mockResolvedValue(0),
+              create: jest
+                .fn()
+                .mockImplementation(async ({ data }: { data: Record<string, unknown> }) => {
+                  createCalls.push(data);
+                  return { id: 'au-1' };
+                }),
+            },
+          };
+          return fn(tx);
+        },
+      );
+
+      const result = await service.activate(orgUser, 'cu-1');
+
+      expect(result.status).toBe('ACTIVE');
+      // La etapa PURCHASE_DATE +0 quedó en el pasado (compra 2026-08-01 <
+      // referencia hoy) → omitida (HG-SEM-03). Solo se genera la etapa de
+      // vencimiento −30 días.
+      expect(result.automationCount).toBe(1);
+      expect(createCalls).toHaveLength(1);
+      expect(createCalls[0].scheduledDate).toEqual(
+        new Date('2027-07-02T00:00:00.000Z'),
+      );
+      expect(createCalls[0].purpose).toBe('TRANSACTIONAL');
+      expect(createCalls[0].messageTemplate).toBe(
+        'Garantía de {productName}',
+      );
+    });
+
+    it('rejects activation when inline stages contain invalid variables', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        approvedCampaign({
+          followUpSequenceId: null,
+          followUpSequence: null,
+          stages: [
+            {
+              name: 'Mala',
+              anchor: 'PURCHASE_DATE',
+              offsetDays: 0,
+              template: 'Hola {variableDesconocida}',
+              templateOnPast: null,
+            },
+          ],
+        }),
+      );
+
+      await expect(service.activate(orgUser, 'cu-1')).rejects.toMatchObject({
+        response: {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: expect.stringContaining('Invalid message variables'),
+          },
+        },
       });
     });
   });

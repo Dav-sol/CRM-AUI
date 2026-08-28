@@ -23,6 +23,11 @@ properties:
     enum: [12, 15, 18, 24]
     description: Warranty duration in months (catalog values).
 
+  price:
+    type: number
+    minimum: 0
+    description: Precio de referencia del catálogo (COP).
+
   status:
     type: string
     enum:

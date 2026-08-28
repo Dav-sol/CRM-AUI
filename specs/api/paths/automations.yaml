@@ -267,6 +267,18 @@
             - ERROR
             - PAUSED
 
+      - name: purpose
+        in: query
+        required: false
+        description: |
+          Anti-spam classification (playbook §14): COMMERCIAL counts against the
+          3/60d limit; TRANSACTIONAL (warranty/post-purchase) never does.
+        schema:
+          type: string
+          enum:
+            - TRANSACTIONAL
+            - COMMERCIAL
+
       - name: commercialCycleId
         in: query
         required: false
@@ -285,6 +297,15 @@
         in: query
         required: false
         description: uuid of the customer that owns the triggering purchase.
+        schema:
+          type: string
+
+      - name: search
+        in: query
+        required: false
+        description: |
+          Free-text search over the customer name or product name
+          (case-insensitive contains).
         schema:
           type: string
 

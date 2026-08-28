@@ -15,6 +15,10 @@ import { cn } from "@/lib/utils";
 export type CustomerFilters = {
   page?: number;
   search?: string;
+  status?: string;
+  createdFrom?: string;
+  createdTo?: string;
+  sort?: string;
   refreshKey?: number;
 };
 
@@ -35,6 +39,18 @@ export function useCustomers(filters: CustomerFilters) {
       const params: CustomerListParams = { page: filters.page ?? 1, limit: 20 };
       if (filters.search?.trim()) {
         params.search = filters.search.trim();
+      }
+      if (filters.status) {
+        params.status = filters.status as NonNullable<CustomerListParams>["status"];
+      }
+      if (filters.createdFrom) {
+        params.createdFrom = filters.createdFrom;
+      }
+      if (filters.createdTo) {
+        params.createdTo = filters.createdTo;
+      }
+      if (filters.sort) {
+        params.sort = filters.sort;
       }
       try {
         const data = await apiListCustomers(params);
@@ -60,7 +76,15 @@ export function useCustomers(filters: CustomerFilters) {
     return () => {
       cancelled = true;
     };
-  }, [filters.page, filters.search, filters.refreshKey]);
+  }, [
+    filters.page,
+    filters.search,
+    filters.status,
+    filters.createdFrom,
+    filters.createdTo,
+    filters.sort,
+    filters.refreshKey,
+  ]);
 
   return { items, meta, error };
 }
@@ -149,8 +173,8 @@ export function CustomerList({ items, error }: CustomerListProps) {
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">
-                {customer.name}
-                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                {customer.name}{" "}
+                <span className="text-xs font-normal text-muted-foreground">
                   {customer.codcli}
                 </span>
               </p>

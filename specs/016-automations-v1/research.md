@@ -34,7 +34,7 @@ On `PurchaseImported`: `findUnique({ where: { purchaseId } })` on CommercialCycl
 
 ## R-009 — AU-003 semantics (design)
 
-"Si un cliente realiza una nueva compra antes de finalizar el ciclo anterior" (03:199-205). Interpretation (Q6): for the purchase's customer, find an ACTIVE cycle via that customer's purchases (`purchase.customerId`). If ACTIVE cycle exists: update its PENDING/SCHEDULED automations → CANCELLED (updateMany, predicate on status), set cycle → CANCELLED + `endDate = now`; then create new ACTIVE cycle + 3 automations. All in one transaction (NR-004). **INFERENCIA**: the spec says "pendientes del ciclo anterior" (pending automations) — EXECUTED are never touched (AU-004).
+"Si un cliente realiza una nueva compra antes de finalizar el ciclo anterior" (03:199-205). Interpretation (Q6), as refined by the Marketing Playbook §15 ("Una compra nueva no debe destruir automáticamente otros ciclos válidos del cliente"): each purchase creates its OWN cycle. On a new purchase the system does NOT touch the customer's previous ACTIVE cycle — those automations may belong to another purchase/warranty still valid. **Change applied 2026-08-24**: `createCycleFromPurchase` no longer finds/cancels the customer's ACTIVE cycle; it only creates the new cycle + 3 AU-001 automations (purpose TRANSACTIONAL, anti-spam playbook §14) inside one transaction. Cancelling what is truly obsolete on a recompra (e.g. same product replaced) is a human decision (V2), not a blanket rule. Idempotency (P2002 on `purchaseId`) preserved (NR-006).
 
 ## R-010 — Cadence calculation (design, HG-5)
 

@@ -40,4 +40,12 @@ search?: string;
  * @pattern ^-?(createdAt|updatedAt|name|status|type|startAt)$
  */
 sort?: string;
+/**
+ * Lower bound on createdAt (ISO date or date-only, whole-day inclusive).
+ */
+createdFrom?: string;
+/**
+ * Upper bound on createdAt (ISO date or date-only, whole-day inclusive).
+ */
+createdTo?: string;
 };

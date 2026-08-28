@@ -37,12 +37,28 @@ import type { CreatePurchaseBodyWarrantyMonths } from "@automatize-it/sdk/model/
 
 type CreatePurchaseSheetProps = {
   onCreated?: () => void;
+  // "Registrar venta" desde una conversación o cotización (Fase 2/P0-C):
+  // preselecciona cliente/producto/valor y atribuye la venta al origen.
+  initialCustomerId?: string;
+  sourceConversationId?: string;
+  quoteId?: string;
+  initialProductId?: string;
+  initialValue?: string;
+  triggerLabel?: string;
 };
 
 const selectClass =
   "flex h-9 w-full items-center justify-between rounded-lg border border-input bg-background px-3 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40";
 
-export function CreatePurchaseSheet({ onCreated }: CreatePurchaseSheetProps) {
+export function CreatePurchaseSheet({
+  onCreated,
+  initialCustomerId,
+  sourceConversationId,
+  quoteId,
+  initialProductId,
+  initialValue,
+  triggerLabel = "Nueva compra",
+}: CreatePurchaseSheetProps) {
   const [open, setOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [customers, setCustomers] = useState<CustomerItem[] | null>(null);
@@ -54,6 +70,8 @@ export function CreatePurchaseSheet({ onCreated }: CreatePurchaseSheetProps) {
     handleSubmit,
     reset,
     control,
+    getValues,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<PurchaseFormInput, unknown, PurchaseFormValues>({
     resolver: zodResolver(purchaseSchema),
@@ -99,6 +117,23 @@ export function CreatePurchaseSheet({ onCreated }: CreatePurchaseSheetProps) {
         }
         setCustomers(customerData.data);
         setProducts(productData.data);
+        if (
+          initialCustomerId &&
+          customerData.data.some(
+            (customer) => customer.id === initialCustomerId,
+          )
+        ) {
+          setValue("customerId", initialCustomerId);
+        }
+        if (
+          initialProductId &&
+          productData.data.some((product) => product.id === initialProductId)
+        ) {
+          setValue("productId", initialProductId);
+        }
+        if (initialValue) {
+          setValue("value", initialValue);
+        }
       } catch (error) {
         if (cancelled) {
           return;
@@ -115,7 +150,19 @@ export function CreatePurchaseSheet({ onCreated }: CreatePurchaseSheetProps) {
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, initialCustomerId, initialProductId, initialValue, setValue]);
+
+  // Auto-fill value from product price when value is empty
+  useEffect(() => {
+    if (!open || !selectedProduct) return;
+    const currentValue = getValues("value");
+    if (currentValue) return;
+    const price = (selectedProduct as unknown as { price?: number | null })
+      .price;
+    if (price != null) {
+      setValue("value", String(price), { shouldValidate: false });
+    }
+  }, [open, selectedProduct, getValues, setValue]);
 
   async function onSubmit(values: PurchaseFormValues) {
     setSubmitError(null);
@@ -130,6 +177,8 @@ export function CreatePurchaseSheet({ onCreated }: CreatePurchaseSheetProps) {
         status: values.status,
         warrantyMonths: values.warrantyMonths as
           CreatePurchaseBodyWarrantyMonths | undefined,
+        sourceConversationId,
+        quoteId,
       });
       toast.success("Compra registrada correctamente");
       setOpen(false);
@@ -161,7 +210,7 @@ export function CreatePurchaseSheet({ onCreated }: CreatePurchaseSheetProps) {
         }}
       >
         <Plus />
-        Nueva compra
+        {triggerLabel}
       </SheetTrigger>
       <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-md">
         <SheetHeader className="border-b border-border/60">

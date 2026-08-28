@@ -49,6 +49,13 @@
             - CLOSED
             - ARCHIVED
 
+      - name: name
+        in: query
+        required: false
+        description: Free-text search over the customer name (case-insensitive contains).
+        schema:
+          type: string
+
       - name: assigned
         in: query
         required: false

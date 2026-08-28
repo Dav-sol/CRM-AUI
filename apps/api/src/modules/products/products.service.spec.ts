@@ -26,6 +26,27 @@ const platformUser: AuthUser = {
   role: 'PLATFORM_OWNER',
 };
 
+function mockProduct(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'pr-1',
+    uuid: 'uuid-1',
+    organizationId: 'org-1',
+    code: 'P-100',
+    name: 'Test Product',
+    category: null,
+    warrantyMonths: null,
+    price: null,
+    status: 'ACTIVE' as const,
+    createdBy: 'u-1',
+    updatedBy: null,
+    deletedAt: null,
+    deletedBy: null,
+    createdAt: new Date('2025-01-01'),
+    updatedAt: new Date('2025-01-01'),
+    ...overrides,
+  };
+}
+
 describe('ProductsService', () => {
   let service: ProductsService;
   let prisma: {
@@ -67,7 +88,7 @@ describe('ProductsService', () => {
   describe('findAll (US1)', () => {
     it('scopes the query to the organization user and returns pagination meta', async () => {
       prisma.product.count.mockResolvedValue(25);
-      prisma.product.findMany.mockResolvedValue([{ id: 'pr-1' }]);
+      prisma.product.findMany.mockResolvedValue([mockProduct()]);
 
       const result = await service.findAll(orgUser, {});
 
@@ -80,10 +101,8 @@ describe('ProductsService', () => {
         skip: 0,
         take: 20,
       });
-      expect(result).toEqual({
-        data: [{ id: 'pr-1' }],
-        meta: { page: 1, limit: 20, total: 25, pages: 2 },
-      });
+      expect(result.data).toHaveLength(1);
+      expect(result.meta).toEqual({ page: 1, limit: 20, total: 25, pages: 2 });
     });
 
     it('applies page and limit to skip/take and meta', async () => {
@@ -242,18 +261,18 @@ describe('ProductsService', () => {
 
   describe('findById (US2)', () => {
     it('finds a product within the organization scope', async () => {
-      prisma.product.findFirst.mockResolvedValue({ id: 'pr-1' });
+      prisma.product.findFirst.mockResolvedValue(mockProduct());
 
       const result = await service.findById(orgUser, 'pr-1');
 
       expect(prisma.product.findFirst).toHaveBeenCalledWith({
         where: { id: 'pr-1', organizationId: 'org-1', deletedAt: null },
       });
-      expect(result).toEqual({ id: 'pr-1' });
+      expect(result).toMatchObject({ id: 'pr-1', price: null });
     });
 
     it('lets PLATFORM_OWNER find any product', async () => {
-      prisma.product.findFirst.mockResolvedValue({ id: 'pr-1' });
+      prisma.product.findFirst.mockResolvedValue(mockProduct());
 
       await service.findById(platformUser, 'pr-1');
 
@@ -274,7 +293,7 @@ describe('ProductsService', () => {
 
     it('creates a product for an organization user with createdBy from JWT', async () => {
       prisma.product.findFirst.mockResolvedValue(null);
-      prisma.product.create.mockResolvedValue({ id: 'pr-1', code: 'P-100' });
+      prisma.product.create.mockResolvedValue(mockProduct());
 
       const result = await service.create(orgUser, validDto);
 
@@ -299,7 +318,7 @@ describe('ProductsService', () => {
         organizationId: 'org-1',
         description: 'product created code=P-100',
       });
-      expect(result).toEqual({ id: 'pr-1', code: 'P-100' });
+      expect(result).toMatchObject({ id: 'pr-1', code: 'P-100', price: null });
     });
 
     it('persists an explicit status and category on create', async () => {
@@ -461,10 +480,7 @@ describe('ProductsService', () => {
         code: 'P-100',
         organizationId: 'org-1',
       });
-      prisma.product.update.mockResolvedValue({
-        id: 'pr-1',
-        status: 'INACTIVE',
-      });
+      prisma.product.update.mockResolvedValue(mockProduct({ status: 'INACTIVE' }));
 
       const result = await service.update(orgUser, 'pr-1', {
         name: 'Batería Z Plus',
@@ -489,16 +505,12 @@ describe('ProductsService', () => {
         organizationId: 'org-1',
         description: 'product updated code=P-100',
       });
-      expect(result).toEqual({ id: 'pr-1', status: 'INACTIVE' });
+      expect(result).toMatchObject({ id: 'pr-1', status: 'INACTIVE' });
     });
 
     it('persists warrantyMonths on update', async () => {
-      prisma.product.findFirst.mockResolvedValue({
-        id: 'pr-1',
-        code: 'P-100',
-        organizationId: 'org-1',
-      });
-      prisma.product.update.mockResolvedValue({ id: 'pr-1' });
+      prisma.product.findFirst.mockResolvedValue(mockProduct());
+      prisma.product.update.mockResolvedValue(mockProduct());
 
       await service.update(orgUser, 'pr-1', { warrantyMonths: 24 });
 
@@ -610,27 +622,27 @@ describe('ProductsService', () => {
 
       await expect(
         svc.create(orgUser, { code: 'P-100', name: 'Batería X' }),
-      ).resolves.toEqual({ id: 'pr-1' });
+      ).resolves.toMatchObject({ id: 'pr-1' });
     });
 
     it('never breaks update when the audit record fails', async () => {
-      prisma.product.findFirst.mockResolvedValue({ id: 'pr-1' });
-      prisma.product.update.mockResolvedValue({ id: 'pr-1' });
+      prisma.product.findFirst.mockResolvedValue(mockProduct());
+      prisma.product.update.mockResolvedValue(mockProduct());
 
       const svc = await serviceWithFailingAudit();
 
-      await expect(svc.update(orgUser, 'pr-1', { name: 'X' })).resolves.toEqual(
-        { id: 'pr-1' },
-      );
+      await expect(
+        svc.update(orgUser, 'pr-1', { name: 'X' }),
+      ).resolves.toMatchObject({ id: 'pr-1' });
     });
 
     it('never breaks delete when the audit record fails', async () => {
-      prisma.product.findFirst.mockResolvedValue({ id: 'pr-1' });
-      prisma.product.update.mockResolvedValue({ id: 'pr-1' });
+      prisma.product.findFirst.mockResolvedValue(mockProduct());
+      prisma.product.update.mockResolvedValue(mockProduct());
 
       const svc = await serviceWithFailingAudit();
 
-      await expect(svc.remove(orgUser, 'pr-1')).resolves.toEqual({
+      await expect(svc.remove(orgUser, 'pr-1')).resolves.toMatchObject({
         id: 'pr-1',
       });
     });

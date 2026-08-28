@@ -1,16 +1,17 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { CreateCampaignSheet } from "@/components/campaigns/create-campaign-sheet";
 import { FollowUpRecommendations } from "@/components/campaigns/recommender";
 import {
   CampaignList,
   useCampaigns,
   type CampaignFilters,
 } from "@/components/campaigns/campaign-list";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -18,24 +19,48 @@ import { cn } from "@/lib/utils";
 const STATUS_TABS: { label: string; value: CampaignFilters["status"] }[] = [
   { label: "Todas", value: undefined },
   { label: "Borradores", value: "DRAFT" },
+  { label: "Aprobadas", value: "APPROVED" },
   { label: "Activas", value: "ACTIVE" },
   { label: "Pausadas", value: "PAUSED" },
   { label: "Finalizadas", value: "FINISHED" },
   { label: "Canceladas", value: "CANCELLED" },
 ];
 
+const selectClass =
+  "h-8 rounded-md border border-border/60 bg-background px-2 text-xs text-foreground outline-none transition-colors focus:border-primary/50";
+
 export function CampaignsIndexPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const autoOpenPreset = searchParams.get("preset");
+  const presetParam = searchParams.get("preset");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<CampaignFilters["status"]>(undefined);
+  const [type, setType] = useState("");
+  const [sort, setSort] = useState("");
+  const [from, setFrom] = useState<string | undefined>();
+  const [to, setTo] = useState<string | undefined>();
   const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
-  const { items, meta, error } = useCampaigns({ page, search, status, refreshKey });
+  const { items, meta, error } = useCampaigns({
+    page,
+    search,
+    status,
+    type,
+    sort,
+    createdFrom: from,
+    createdTo: to,
+    refreshKey,
+  });
 
   const totalPages = meta?.pages ?? 1;
+
+  // Fase 1: el recomendador enlaza con ?preset=…; ahora abre el editor full-page.
+  useEffect(() => {
+    if (presetParam) {
+      router.replace(`/campaigns/editor?preset=${encodeURIComponent(presetParam)}`);
+    }
+  }, [presetParam, router]);
 
   function applySearch(event: React.FormEvent) {
     event.preventDefault();
@@ -44,10 +69,10 @@ export function CampaignsIndexPage() {
   }
 
   return (
-    <div className="flex h-full w-full flex-col p-4 lg:p-5">
+    <div className="w-full space-y-5 p-4 lg:p-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Seguimientos</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Campañas</h1>
           <p className="text-sm text-muted-foreground">
             {meta
               ? `${meta.total} seguimientos`
@@ -58,16 +83,15 @@ export function CampaignsIndexPage() {
           <Button variant="outline" onClick={() => setRefreshKey((k) => k + 1)}>
             Actualizar
           </Button>
-          <CreateCampaignSheet
-            key={autoOpenPreset ?? "manual"}
-            autoOpenPreset={autoOpenPreset}
-            onAutoClose={() => router.replace("/campaigns")}
-            onCreated={() => setRefreshKey((k) => k + 1)}
-          />
+          <Link
+            href="/campaigns/editor"
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/80"
+          >
+            <Plus className="size-4" />
+            Crear campaña
+          </Link>
         </div>
       </div>
-
-      <FollowUpRecommendations />
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <form onSubmit={applySearch} className="relative w-full max-w-xs">
@@ -117,9 +141,48 @@ export function CampaignsIndexPage() {
             Limpiar búsqueda
           </Button>
         )}
+        <select
+          value={type}
+          onChange={(event) => {
+            setType(event.target.value);
+            setPage(1);
+          }}
+          className={cn(selectClass, "appearance-none")}
+          aria-label="Filtrar por tipo"
+        >
+          <option value="">Tipo</option>
+          <option value="AUTOMATIC">Automática</option>
+          <option value="MANUAL">Manual</option>
+          <option value="REPURCHASE">Recompra</option>
+          <option value="SPECIAL">Especial</option>
+        </select>
+        <select
+          value={sort}
+          onChange={(event) => {
+            setSort(event.target.value);
+            setPage(1);
+          }}
+          className={cn(selectClass, "appearance-none")}
+          aria-label="Ordenar campañas"
+        >
+          <option value="">Orden</option>
+          <option value="-createdAt">Creada (nueva → vieja)</option>
+          <option value="createdAt">Creada (vieja → nueva)</option>
+          <option value="-startAt">Inicio (nuevo → viejo)</option>
+          <option value="name">Nombre (A → Z)</option>
+          <option value="status">Estado</option>
+        </select>
+        <DateRangePicker
+          value={{ from, to }}
+          onChange={(range) => {
+            setFrom(range.from);
+            setTo(range.to);
+            setPage(1);
+          }}
+        />
       </div>
 
-      <div className="mt-4 min-h-0 flex-1 overflow-y-auto rounded-lg border border-border/60">
+      <div className="mt-4">
         <CampaignList
           items={items}
           error={error}
@@ -156,6 +219,10 @@ export function CampaignsIndexPage() {
           </div>
         </div>
       )}
+
+      <div className="mt-6">
+        <FollowUpRecommendations />
+      </div>
     </div>
   );
 }

@@ -20,6 +20,7 @@ export class WhatsappScheduler {
       return;
     }
     try {
+      await this.whatsappService.expireStuckExecuting();
       await this.whatsappService.executeDueAutomations();
     } catch (error) {
       this.logger.error(

@@ -17,6 +17,8 @@ import { cn } from "@/lib/utils";
 export type ConversationFilters = {
   status?: "OPEN" | "CLOSED" | "ARCHIVED";
   assigned?: boolean;
+  name?: string;
+  sort?: string;
 };
 
 export function useConversations(
@@ -37,6 +39,12 @@ export function useConversations(
       }
       if (filters.assigned === true) {
         params.assigned = "true";
+      }
+      if (filters.name?.trim()) {
+        params.name = filters.name.trim();
+      }
+      if (filters.sort) {
+        params.sort = filters.sort;
       }
       try {
         const data = await apiListConversations(params);
@@ -60,7 +68,7 @@ export function useConversations(
     return () => {
       cancelled = true;
     };
-  }, [filters.status, filters.assigned, refreshKey]);
+  }, [filters.status, filters.assigned, filters.name, filters.sort, refreshKey]);
 
   return { items, error };
 }
@@ -133,17 +141,12 @@ export function ConversationList({
         >
           {item.customer?.name
             ? item.customer.name.charAt(0).toUpperCase()
-            : item.customerId
-              ? item.customerId.slice(0, 2).toUpperCase()
-              : "?"}
+            : "?"}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-2">
             <p className="truncate text-sm font-medium">
-              {item.customer?.name ??
-                (item.customerId
-                  ? `Cliente #${item.customerId.slice(0, 8)}`
-                  : "Cliente sin vincular")}
+              {item.customer?.name ?? "Cliente sin vincular"}
               {item.customer?.status === "PENDING" && (
                 <span className="ml-1.5 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-600">
                   Pendiente de vinculación

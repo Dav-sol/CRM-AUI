@@ -16,6 +16,7 @@ export type ListCampaignsStatus = typeof ListCampaignsStatus[keyof typeof ListCa
 
 export const ListCampaignsStatus = {
   DRAFT: 'DRAFT',
+  APPROVED: 'APPROVED',
   ACTIVE: 'ACTIVE',
   PAUSED: 'PAUSED',
   FINISHED: 'FINISHED',

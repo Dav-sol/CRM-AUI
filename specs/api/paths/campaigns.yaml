@@ -191,6 +191,7 @@
           type: string
           enum:
             - DRAFT
+            - APPROVED
             - ACTIVE
             - PAUSED
             - FINISHED
@@ -222,6 +223,19 @@
         schema:
           type: string
           pattern: "^-?(createdAt|updatedAt|name|status|type|startAt)$"
+
+      - name: createdFrom
+        in: query
+        required: false
+        description: Lower bound on createdAt (ISO date or date-only, whole-day inclusive).
+        schema:
+          type: string
+      - name: createdTo
+        in: query
+        required: false
+        description: Upper bound on createdAt (ISO date or date-only, whole-day inclusive).
+        schema:
+          type: string
 
     responses:
 
@@ -380,12 +394,15 @@
     tags:
       - Campaigns
 
-    summary: Update a campaign (DRAFT only)
+    summary: Update a campaign (DRAFT, APPROVED, or ACTIVE)
 
     description: |
-      Partially updates the campaign. Only allowed while the campaign is
-      DRAFT (FR-004); any other state returns 400 VALIDATION_ERROR. At
-      least one field must be provided; the segment, when present, must
+      Partially updates the campaign. Allowed while DRAFT, APPROVED, or ACTIVE.
+      On DRAFT/APPROVED all fields may be modified. On ACTIVE only name,
+      description, and template fields (template, templateD3, templateD180,
+      templateD365) are editable; modifying segment, stages, startAt, type, or
+      followUpSequenceId on an ACTIVE campaign returns 400 VALIDATION_ERROR.
+      At least one field must be provided; the segment, when present, must
       include at least one criterion.
 
     operationId: updateCampaign
@@ -439,9 +456,11 @@
                       type: string
                       enum:
                         - DRAFT
+                        - APPROVED
+                        - ACTIVE
 
       "400":
-        description: "Campaign not DRAFT, empty body or segment without criteria (VALIDATION_ERROR)"
+        description: "Campaign not editable, empty body or segment without criteria (VALIDATION_ERROR)"
 
         content:
 
@@ -464,7 +483,7 @@
                       example: VALIDATION_ERROR
                     message:
                       type: string
-                      example: Campaign can only be updated while DRAFT
+                      example: Campaign can only be updated while DRAFT, APPROVED, or ACTIVE
 
       "401":
         description: Missing or invalid access token
@@ -534,11 +553,13 @@
     summary: Activate a campaign
 
     description: |
-      Transitions DRAFT → ACTIVE and generates one SCHEDULED automation
+      Transitions APPROVED → ACTIVE and generates one SCHEDULED automation
       per qualifying customer (deduplicated, most recent purchase first),
-      batched inside a single transaction (FR-006). Segments resolving to
-      more than MAX_AUTOMATIONS_PER_CAMPAIGN (5.000) return 400
-      SEGMENT_TOO_LARGE and leave the campaign in DRAFT.
+      batched inside a single transaction (FR-006). Activation requires the
+      campaign to be APPROVED (playbook §20: marketing approves before the
+      platform executes). Segments resolving to more than
+      MAX_AUTOMATIONS_PER_CAMPAIGN (5.000) return 400 SEGMENT_TOO_LARGE and
+      leave the campaign in APPROVED.
 
     operationId: activateCampaign
 
@@ -590,9 +611,21 @@
                       type: string
                       format: date-time
 
+                    skippedByLimit:
+                      type: integer
+                      description: |
+                        Fase 4: clientes del segmento omitidos por el tope
+                        3 comerciales / 60 días.
+
+                    skippedByFrequency:
+                      type: integer
+                      description: |
+                        Fase 4: clientes del segmento omitidos por distancia
+                        mínima entre mensajes comerciales (JOURNEYS_MIN_DAYS_BETWEEN_COMMERCIAL).
+
       "400":
         description: |
-          Campaign is not in DRAFT state (VALIDATION_ERROR) or segment
+          Campaign is not APPROVED (VALIDATION_ERROR) or segment
           exceeds the automation limit (SEGMENT_TOO_LARGE)
 
         content:
@@ -617,6 +650,146 @@
                     message:
                       type: string
                       example: Segment exceeds the limit of 5000 automations
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized
+
+      "404":
+        description: "Unknown or cross-tenant campaign (CAMPAIGN_NOT_FOUND)"
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: CAMPAIGN_NOT_FOUND
+                    message:
+                      type: string
+                      example: Campaign not found
+
+/campaigns/{uuid}/approve:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Campaign uuid
+
+  post:
+    tags:
+      - Campaigns
+
+    summary: Approve a campaign for activation
+
+    description: |
+      Transitions DRAFT → APPROVED (playbook §20: marketing defines and
+      approves campaigns; the platform executes). Activation requires
+      APPROVED. All authenticated organization roles may approve (HG-3).
+
+    operationId: approveCampaign
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Campaign approved
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              required:
+                - data
+
+              properties:
+
+                data:
+
+                  type: object
+
+                  required:
+                    - uuid
+                    - status
+
+                  properties:
+
+                    uuid:
+                      type: string
+
+                    status:
+                      type: string
+                      enum:
+                        - APPROVED
+
+      "400":
+        description: |
+          Campaign is not in DRAFT state (VALIDATION_ERROR)
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: VALIDATION_ERROR
+                    message:
+                      type: string
+                      example: Only DRAFT campaigns can be approved
 
       "401":
         description: Missing or invalid access token
@@ -1209,3 +1382,79 @@
                     message:
                       type: string
                       example: Campaign not found
+/campaigns/segment-preview:
+  post:
+    tags:
+      - Campaigns
+
+    summary: Stateless segment preview for the campaign creator
+
+    description: |
+      Dry-run resolution of an audience without an existing campaign (Fase 3).
+      Returns the qualifying customers, the estimated generated automations
+      (customers × stages when a followUpSequence is referenced) and the
+      estimated WhatsApp cost (COP). No automations are created, no PII is
+      returned.
+
+    operationId: previewCampaignSegmentDraft
+
+    security:
+      - bearerAuth: []
+
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              segment:
+                $ref: "../components/schemas/Campaign/CampaignSegment.yaml"
+              followUpSequenceId:
+                type: string
+                description: uuid of a follow-up sequence to estimate stages (optional).
+              type:
+                type: string
+                enum: [AUTOMATIC, MANUAL, REPURCHASE, SPECIAL]
+                description: |
+                  Tipo de campaña para estimar la tarifa por propósito
+                  (transaccional vs comercial, Fase P0.2).
+
+    responses:
+
+      "200":
+        description: Estimated audience and cost
+
+        content:
+
+          application/json:
+
+            schema:
+
+              $ref: "../components/schemas/Campaign/SegmentPreviewResponse.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                error:
+                  type: object
+                  required:
+                    - code
+                    - message
+                  properties:
+                    code:
+                      type: string
+                      example: UNAUTHORIZED
+                    message:
+                      type: string
+                      example: Unauthorized

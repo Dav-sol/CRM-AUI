@@ -43,7 +43,7 @@ describe("ReplyBox: feedback de error al enviar", () => {
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
     expect(toast.error).toHaveBeenCalledTimes(1);
     expect(toast.error).toHaveBeenCalledWith(
-      "No se pudo enviar el mensaje. Intentalo nuevamente.",
+      "No se pudo enviar el mensaje. Inténtalo nuevamente.",
     );
     expect(textarea).toHaveValue("Hola cliente");
     expect(screen.getByRole("button", { name: "Enviar mensaje" })).toBeEnabled();

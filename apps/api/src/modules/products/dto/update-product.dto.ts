@@ -2,6 +2,7 @@ import {
   IsEnum,
   IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   Max,
@@ -46,6 +47,11 @@ export class UpdateProductDto {
   @Max(24)
   @IsIn([12, 15, 18, 24])
   warrantyMonths?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  price?: number;
 
   @IsOptional()
   @IsEnum(ProductStatus)

@@ -11,6 +11,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { GetCampaign200DataFollowUpSequence } from './getCampaign200DataFollowUpSequence';
+import type { GetCampaign200DataStagesItem } from './getCampaign200DataStagesItem';
 
 /**
  * Full campaign representation including template and counts.
@@ -27,12 +28,12 @@ export type GetCampaign200Data = (({
   /** Informational in v1; does not drive behavior. */
   type: 'AUTOMATIC' | 'MANUAL' | 'REPURCHASE' | 'SPECIAL';
   /**
-     * Lifecycle. DRAFT → ACTIVE (activate), ACTIVE ↔ PAUSED,
-     * ACTIVE/PAUSED/DRAFT → CANCELLED, ACTIVE → FINISHED (automatic when
-     * no SCHEDULED automations remain). FINISHED and CANCELLED are
-     * terminal.
+     * Lifecycle. DRAFT → APPROVED (approve, playbook §20) → ACTIVE (activate),
+     * ACTIVE ↔ PAUSED, DRAFT/APPROVED/ACTIVE/PAUSED → CANCELLED, ACTIVE →
+     * FINISHED (automatic when no SCHEDULED automations remain). FINISHED and
+     * CANCELLED are terminal. Activation requires APPROVED.
      */
-  status: 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'FINISHED' | 'CANCELLED';
+  status: 'DRAFT' | 'APPROVED' | 'ACTIVE' | 'PAUSED' | 'FINISHED' | 'CANCELLED';
   /**
      * Scheduled start; automations are scheduled for max(startAt, now).
      * @nullable
@@ -82,7 +83,7 @@ export type GetCampaign200Data = (({
   automationCount: number;
   /** Total EXECUTED automations. */
   executedCount: number;
-}) & {
+}) & ({
   /**
      * Message template, 1..4096 chars, free text with
      * {customerName}/{productName}/{organizationName} placeholders.
@@ -90,8 +91,43 @@ export type GetCampaign200Data = (({
   template: string;
   updatedAt: string;
   /**
+     * Etapas inline del timeline (Fase 1), cuando la campaña no usa secuencia.
+     * Vacío si no hay etapas propias.
+     */
+  stages?: GetCampaign200DataStagesItem[];
+  /**
      * Follow-up sequence linked to the campaign, when present.
      * @nullable
      */
   followUpSequence?: GetCampaign200DataFollowUpSequence;
-};
+  /**
+     * Mensajes OUTBOUND automáticos de la campaña enviados (SENT/DELIVERED/READ).
+     * Atribución de entrega (Fase 2).
+     */
+  delivered?: number;
+  /**
+     * Mensajes INBOUND atribuidos a esta campaña (respuestas del cliente).
+     * Atribución de respuestas (Fase 2).
+     */
+  responded?: number;
+  /** Cotizaciones atribuidas a esta campaña (Fase P0-D). */
+  quotes?: number;
+  /**
+     * Ventas atribuidas a esta campaña (cotizaciones aceptadas con compra
+     * vinculada).
+     */
+  sales?: number;
+  /** Suma de los valores de las ventas atribuidas a esta campaña. */
+  revenue?: number;
+  /**
+     * Costo estimado de WhatsApp = mensajes enviados × tarifa configurada
+     * (WHATSAPP_MESSAGE_COST). Estimado, no facturación.
+     */
+  whatsappCost?: number;
+  /**
+     * Retorno estimado = (revenue − whatsappCost) / whatsappCost. Null si no
+     * hay costo.
+     * @nullable
+     */
+  roi?: number | null;
+});

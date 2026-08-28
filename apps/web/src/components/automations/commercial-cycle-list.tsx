@@ -133,9 +133,9 @@ export function CommercialCycleList({ items, error, onSelect }: CommercialCycleL
           }}
         >
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">Ciclo {cycle.uuid.slice(0, 8)}</p>
+            <p className="truncate text-sm font-medium">Ciclo comercial</p>
             <p className="mt-0.5 truncate text-xs text-muted-foreground">
-              Inicia {formatDate(cycle.startDate)} · compra {cycle.purchaseId.slice(0, 8)}
+              Inicia {formatDate(cycle.startDate)}
               {cycle.endDate ? ` · finaliza ${formatDate(cycle.endDate)}` : ""}
             </p>
           </div>
@@ -225,7 +225,7 @@ function CycleDetailContent({ detail }: { detail: CommercialCycleDetail }) {
       </div>
       <div className="space-y-1">
         <span className="text-muted-foreground">Compra</span>
-        <p className="font-medium">{detail.purchaseId.slice(0, 8)}</p>
+        <p className="font-medium">Factura vinculada</p>
       </div>
       <div className="space-y-2">
         <span className="text-muted-foreground">
@@ -245,7 +245,7 @@ function CycleDetailContent({ detail }: { detail: CommercialCycleDetail }) {
                     {formatDateTime(automation.scheduledDate)}
                   </p>
                   <p className="truncate text-xs text-muted-foreground">
-                    {automation.uuid.slice(0, 8)}
+                    {automation.stageName ?? automation.campaign?.name ?? "Mensaje de seguimiento"}
                   </p>
                 </div>
                 <AutomationMiniBadge status={automation.status} />

@@ -11,6 +11,7 @@ import {
   useConversations,
 } from "@/components/conversations/conversation-list";
 import { ConversationInfoPanel } from "@/components/conversations/info-panel";
+import { CreatePurchaseSheet } from "@/components/purchases/create-purchase-sheet";
 import { ReplyBox } from "@/components/conversations/reply-box";
 import { StatusBadge } from "@/components/conversations/status-badge";
 import { Thread } from "@/components/conversations/thread";
@@ -71,7 +72,7 @@ export default function ConversationDetailPage() {
     }
   }, [uuid]);
 
-  useEffect(() => {
+useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
@@ -249,6 +250,12 @@ export default function ConversationDetailPage() {
                 />
               </SheetContent>
             </Sheet>
+            <CreatePurchaseSheet
+              initialCustomerId={conversation.customerId ?? undefined}
+              sourceConversationId={uuid}
+              triggerLabel="Registrar venta"
+              onCreated={refresh}
+            />
             <StatusBadge status={conversation.status} />
           </div>
         </div>

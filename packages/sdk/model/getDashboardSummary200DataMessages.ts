@@ -16,4 +16,11 @@ export type GetDashboardSummary200DataMessages = {
   sent: number;
   /** Messages with status QUEUED. */
   pending: number;
+  /** Messages sent inside the selected range. */
+  sentInRange: number;
+  /**
+     * Percent change of sentInRange vs the previous period.
+     * @nullable
+     */
+  sentDelta: number | null;
 };

@@ -83,7 +83,7 @@ export function Header({ collapsed, onToggleSidebar }: HeaderProps) {
           )}
           title="Organización activa"
         >
-          {user?.organizationId ? `Org ${user.organizationId.slice(0, 8)}` : "Plataforma"}
+          {user?.organizationId ? "Organización" : "Plataforma"}
         </span>
 
         <Tooltip>

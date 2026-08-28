@@ -39,6 +39,21 @@ export function formatNumber(value: number | null | undefined): string {
   return new Intl.NumberFormat("es-ES").format(value);
 }
 
+// Fase 6 (T21): moneda centralizada (COP es-ES, 2 decimales). Reemplaza los
+// formateos manuales dispersos ($X.XXX vs XXXX).
+export function formatCurrency(
+  value: number | null | undefined,
+  decimals = 0,
+): string {
+  if (value === null || value === undefined) {
+    return "—";
+  }
+  return new Intl.NumberFormat("es-ES", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value);
+}
+
 export function formatPhone(value: string | null | undefined): string {
   if (!value) {
     return "—";

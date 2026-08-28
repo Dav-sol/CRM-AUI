@@ -53,6 +53,18 @@ properties:
     enum: [12, 15, 18, 24]
     description: Optional override of product warranty duration in months (catalog values).
 
+  sourceConversationId:
+    type: string
+    description: |
+      Atribución de ventas (Fase 2): uuid de la conversación que originó la
+      venta. Al registrarse, la compra crea su propio ciclo (AU-003).
+
+  quoteId:
+    type: string
+    description: |
+      Atribución de ventas (Fase P0-C): uuid de la cotización aceptada que
+      originó la venta. La cotización queda vinculada (ACEPTADA + purchaseId).
+
   organizationId:
     type: string
     description: Only accepted for PLATFORM_OWNER; required for them. Organization users must not send it (400 VALIDATION_ERROR).

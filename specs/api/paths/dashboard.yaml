@@ -17,6 +17,37 @@
     security:
       - bearerAuth: []
 
+    parameters:
+      - name: from
+        in: query
+        required: false
+        description: |
+          Range start (ISO date or date-only). When absent, defaults to the
+          current UTC calendar month. Range KPIs (newInRange, inRange,
+          executedInRange, sentInRange, value) are bounded by this range.
+        schema:
+          type: string
+      - name: to
+        in: query
+        required: false
+        description: Range end (ISO date or date-only); when absent, defaults to now.
+        schema:
+          type: string
+      - name: compareFrom
+        in: query
+        required: false
+        description: |
+          Previous-period start for deltas (Google Ads style). When present
+          with compareTo, every range KPI also returns a % delta vs this period.
+        schema:
+          type: string
+      - name: compareTo
+        in: query
+        required: false
+        description: Previous-period end for deltas.
+        schema:
+          type: string
+
     responses:
 
       "200":
@@ -129,6 +160,32 @@
     security:
       - bearerAuth: []
 
+    parameters:
+      - name: from
+        in: query
+        required: false
+        description: Filter activity newer than this instant (ISO date or date-only).
+        schema:
+          type: string
+      - name: to
+        in: query
+        required: false
+        description: Filter activity older than this instant.
+        schema:
+          type: string
+      - name: compareFrom
+        in: query
+        required: false
+        description: Accepted for symmetry with /dashboard/summary; ignored here.
+        schema:
+          type: string
+      - name: compareTo
+        in: query
+        required: false
+        description: Accepted for symmetry with /dashboard/summary; ignored here.
+        schema:
+          type: string
+
     responses:
 
       "200":
@@ -210,6 +267,7 @@
                     - upcomingAutomations
                     - expiringWarranties
                     - repurchaseWindow
+                    - openQuotes
 
                   properties:
 
@@ -222,6 +280,7 @@
                           - scheduledDate
                           - status
                           - customerName
+                          - customerUuid
                           - productName
                         properties:
                           uuid:
@@ -232,6 +291,8 @@
                           status:
                             type: string
                           customerName:
+                            type: string
+                          customerUuid:
                             type: string
                           productName:
                             type: string
@@ -246,12 +307,15 @@
                         required:
                           - purchaseId
                           - customerName
+                          - customerUuid
                           - productName
                           - warrantyExpiresAt
                         properties:
                           purchaseId:
                             type: string
                           customerName:
+                            type: string
+                          customerUuid:
                             type: string
                           productName:
                             type: string
@@ -266,16 +330,46 @@
                         required:
                           - purchaseId
                           - customerName
+                          - customerUuid
                           - productName
                           - warrantyExpiresAt
+                          - potentialValue
                         properties:
                           purchaseId:
                             type: string
                           customerName:
                             type: string
+                          customerUuid:
+                            type: string
                           productName:
                             type: string
                           warrantyExpiresAt:
+                            type: string
+                            format: date-time
+                          potentialValue:
+                            type: number
+
+                    openQuotes:
+                      type: array
+                      items:
+                        type: object
+                        required:
+                          - uuid
+                          - customerName
+                          - value
+                          - createdAt
+                        properties:
+                          uuid:
+                            type: string
+                          customerName:
+                            type: string
+                          value:
+                            type: number
+                          sentAt:
+                            type: string
+                            format: date-time
+                            nullable: true
+                          createdAt:
                             type: string
                             format: date-time
 

@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsDateString,
   IsEnum,
   IsOptional,
@@ -16,6 +18,7 @@ import {
   CampaignSegmentDto,
   SegmentHasCriterionConstraint,
 } from './campaign-segment.dto';
+import { CampaignStageDto } from './campaign-stage.dto';
 
 export class CreateCampaignDto {
   @IsString()
@@ -63,6 +66,13 @@ export class CreateCampaignDto {
   @ValidateNested()
   @Type(() => CampaignSegmentDto)
   segment?: CampaignSegmentDto; // ≥1 criterion required when present (HG-7)
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => CampaignStageDto)
+  stages?: CampaignStageDto[]; // etapas inline del timeline (sin secuencia)
 
   @IsOptional()
   @IsDateString()

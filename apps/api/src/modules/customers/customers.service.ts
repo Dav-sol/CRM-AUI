@@ -19,6 +19,44 @@ export interface CustomerListResult {
   meta: { page: number; limit: number; total: number; pages: number };
 }
 
+export interface CustomerTimeline {
+  customer: { uuid: string; name: string; status: string };
+  purchases: Array<{
+    uuid: string;
+    invoiceNumber: string;
+    purchaseDate: string;
+    quantity: number;
+    value: number;
+    warrantyMonths: number | null;
+    warrantyExpiresAt: string | null;
+    status: string;
+    product: { uuid: string; name: string; code: string };
+    automations: Array<{
+      uuid: string;
+      stageName: string | null;
+      scheduledDate: string;
+      executedDate: string | null;
+      status: string;
+      purpose: string;
+      messagePreview: string | null;
+    }>;
+  }>;
+  quotes: Array<{
+    uuid: string;
+    value: number;
+    status: string;
+    createdAt: string;
+    sentAt: string | null;
+  }>;
+  conversations: Array<{
+    uuid: string;
+    channel: string;
+    status: string;
+    messageCount: number;
+    createdAt: string;
+  }>;
+}
+
 const SORT_FIELDS = new Set([
   'name',
   'codcli',
@@ -46,6 +84,24 @@ export class CustomersService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const where = this.buildListWhere(user, query);
+
+    // P0.1: cliente recurrente = con 2+ compras (se resuelve por groupBy porque
+    // Prisma no filtra por conteo de relación dentro de where).
+    if (query.recurrent === 'true') {
+      const groups = await this.prisma.purchase.groupBy({
+        by: ['customerId'],
+        where: {
+          deletedAt: null,
+          organizationId: user.organizationId ?? undefined,
+        },
+        _count: { _all: true },
+      });
+      where.id = {
+        in: groups
+          .filter((group) => group._count._all >= 2)
+          .map((group) => group.customerId),
+      };
+    }
 
     const [total, customers] = await Promise.all([
       this.prisma.customer.count({ where }),
@@ -214,6 +270,61 @@ export class CustomersService {
     return updated;
   }
 
+  // Fase 5 (T19): opt-out "No contactar" (playbook §15). Detiene envíos
+  // comerciales/automatizaciones (scheduler y campañas respetan noContactAt).
+  async noContact(
+    user: AuthUser,
+    id: string,
+    reason?: string,
+  ): Promise<Customer> {
+    const customer = await this.findScoped(user, id);
+    if (!customer) {
+      throw new NotFoundException({
+        error: { code: 'CUSTOMER_NOT_FOUND', message: 'Customer not found' },
+      });
+    }
+    const updated = await this.prisma.customer.update({
+      where: { id: customer.id },
+      data: {
+        noContactAt: new Date(),
+        noContactReason: reason?.trim() || null,
+        updatedBy: user.id,
+      },
+    });
+    await this.auditService.record({
+      module: MODULE,
+      action: 'customer.no_contact',
+      outcome: 'success',
+      userId: user.id,
+      organizationId: customer.organizationId,
+      description: `customer opted out of contact codcli=${customer.codcli}`,
+      metadata: { reason: reason ?? null },
+    });
+    return updated;
+  }
+
+  async allowContact(user: AuthUser, id: string): Promise<Customer> {
+    const customer = await this.findScoped(user, id);
+    if (!customer) {
+      throw new NotFoundException({
+        error: { code: 'CUSTOMER_NOT_FOUND', message: 'Customer not found' },
+      });
+    }
+    const updated = await this.prisma.customer.update({
+      where: { id: customer.id },
+      data: { noContactAt: null, noContactReason: null, updatedBy: user.id },
+    });
+    await this.auditService.record({
+      module: MODULE,
+      action: 'customer.allow_contact',
+      outcome: 'success',
+      userId: user.id,
+      organizationId: customer.organizationId,
+      description: `customer re-enabled contact codcli=${customer.codcli}`,
+    });
+    return updated;
+  }
+
   async remove(user: AuthUser, id: string): Promise<Customer> {
     const customer = await this.findScoped(user, id);
     if (!customer) {
@@ -244,6 +355,109 @@ export class CustomersService {
       description: `customer soft-deleted codcli=${customer.codcli}`,
     });
     return deleted;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Timeline (Customer 360)
+  // ---------------------------------------------------------------------------
+
+  async findTimeline(
+    user: AuthUser,
+    id: string,
+  ): Promise<CustomerTimeline | null> {
+    const customer = await this.findScoped(user, id);
+    if (!customer) return null;
+
+    const organizationId = user.organizationId ?? undefined;
+
+    const purchases = await this.prisma.purchase.findMany({
+      where: {
+        customerId: customer.id,
+        organizationId,
+        deletedAt: null,
+        status: { not: 'CANCELLED' },
+      },
+      include: {
+        product: { select: { uuid: true, name: true, code: true } },
+        automations: {
+          where: { deletedAt: null },
+          orderBy: { scheduledDate: 'asc' },
+          include: {
+            messages: {
+              where: { deletedAt: null },
+              orderBy: { createdAt: 'asc' },
+              take: 1,
+              select: { content: true, status: true, sentAt: true },
+            },
+          },
+        },
+      },
+      orderBy: { purchaseDate: 'desc' },
+    });
+
+    const quotes = await this.prisma.quote.findMany({
+      where: {
+        customerId: customer.id,
+        organizationId,
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const conversations = await this.prisma.conversation.findMany({
+      where: {
+        customerId: customer.id,
+        organizationId,
+        deletedAt: null,
+      },
+      include: {
+        _count: { select: { messages: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      customer: {
+        uuid: customer.uuid,
+        name: customer.name,
+        status: customer.status,
+      },
+      purchases: purchases.map((p) => ({
+        uuid: p.uuid,
+        invoiceNumber: p.invoiceNumber,
+        purchaseDate: p.purchaseDate.toISOString(),
+        quantity: p.quantity,
+        value: Number(p.value),
+        warrantyMonths: p.warrantyMonths,
+        warrantyExpiresAt: p.warrantyExpiresAt?.toISOString() ?? null,
+        status: p.status,
+        product: p.product,
+        automations: p.automations.map((a) => ({
+          uuid: a.uuid,
+          stageName: a.stageName ?? null,
+          scheduledDate: a.scheduledDate.toISOString(),
+          executedDate: a.executedDate?.toISOString() ?? null,
+          status: a.status,
+          purpose: a.purpose,
+          messagePreview:
+            a.messages[0]?.content ?? a.messageTemplate ?? null,
+        })),
+      })),
+      quotes: quotes.map((q) => ({
+        uuid: q.uuid,
+        value: Number(q.value),
+        status: q.status,
+        createdAt: q.createdAt.toISOString(),
+        sentAt: q.sentAt?.toISOString() ?? null,
+      })),
+      conversations: conversations.map((c) => ({
+        uuid: c.uuid,
+        channel: c.channel,
+        status: c.status,
+        messageCount: c._count.messages,
+        createdAt: c.createdAt.toISOString(),
+      })),
+    };
   }
 
   private findScoped(
@@ -298,6 +512,40 @@ export class CustomersService {
       if (query.createdTo) {
         where.createdAt.lte = new Date(query.createdTo);
       }
+    }
+    // P0.1: filtros de drill-down comercial (garantías, compras, contacto).
+    if (query.warrantyExpiringInDays) {
+      const now = new Date();
+      const until = new Date(
+        now.getTime() + query.warrantyExpiringInDays * 86_400_000,
+      );
+      where.purchases = {
+        some: {
+          deletedAt: null,
+          warrantyExpiresAt: { gte: now, lte: until },
+        },
+      };
+    }
+    if (query.warrantyExpiredInDays) {
+      const now = new Date();
+      const since = new Date(
+        now.getTime() - query.warrantyExpiredInDays * 86_400_000,
+      );
+      where.purchases = {
+        some: {
+          deletedAt: null,
+          warrantyExpiresAt: { gte: since, lte: now },
+        },
+      };
+    }
+    if (query.hasPurchases === 'true') {
+      where.purchases = { some: { deletedAt: null } };
+    }
+    if (query.hasPurchases === 'false') {
+      where.purchases = { none: { deletedAt: null } };
+    }
+    if (query.noContact === 'true') {
+      where.noContactAt = { not: null };
     }
     return where;
   }

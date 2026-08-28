@@ -1,0 +1,208 @@
+/quotes:
+  post:
+    tags: [Quotes]
+    summary: Create a quote (DRAFT)
+    description: Crea una cotización en estado BORRADOR (Fase P0-C).
+    operationId: createQuote
+    security: [{ bearerAuth: [] }]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              conversationId: { type: string }
+              customerId: { type: string }
+              campaignId: { type: string }
+              productId: { type: string }
+              quantity: { type: integer, minimum: 1 }
+              value: { type: number, minimum: 0 }
+              note: { type: string }
+            required: [value]
+    responses:
+      "201":
+        description: Quote created
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data: { $ref: "../components/schemas/Quote/Quote.yaml" }
+      "401":
+        description: Missing or invalid access token
+
+  get:
+    tags: [Quotes]
+    summary: List quotes
+    description: Filtra por customerId/conversationId/status. Las ENVIADA viejas pasan a VENCIDA automáticamente.
+    operationId: listQuotes
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - name: customerId
+        in: query
+        schema: { type: string }
+      - name: conversationId
+        in: query
+        schema: { type: string }
+      - name: status
+        in: query
+        schema: { type: string, enum: [DRAFT, ENVIADA, ACEPTADA, RECHAZADA, VENCIDA] }
+      - name: page
+        in: query
+        schema: { type: integer, minimum: 1 }
+      - name: limit
+        in: query
+        schema: { type: integer, minimum: 1, maximum: 100 }
+    responses:
+      "200":
+        description: Paginated quotes
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: array
+                  items: { $ref: "../components/schemas/Quote/Quote.yaml" }
+                meta:
+                  type: object
+                  properties:
+                    page: { type: integer }
+                    limit: { type: integer }
+                    total: { type: integer }
+                    pages: { type: integer }
+      "401":
+        description: Missing or invalid access token
+
+/quotes/{uuid}:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema: { type: string }
+  get:
+    tags: [Quotes]
+    summary: Get a quote
+    operationId: getQuote
+    security: [{ bearerAuth: [] }]
+    responses:
+      "200":
+        description: Quote
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data: { $ref: "../components/schemas/Quote/Quote.yaml" }
+      "404":
+        description: "Unknown quote (QUOTE_NOT_FOUND)"
+  patch:
+    tags: [Quotes]
+    summary: Update a quote (DRAFT/ENVIADA only)
+    operationId: updateQuote
+    security: [{ bearerAuth: [] }]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              productId: { type: string }
+              quantity: { type: integer, minimum: 1 }
+              value: { type: number, minimum: 0 }
+              note: { type: string }
+    responses:
+      "200":
+        description: Updated quote
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data: { $ref: "../components/schemas/Quote/Quote.yaml" }
+
+/quotes/{uuid}/send:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema: { type: string }
+  post:
+    tags: [Quotes]
+    summary: Mark a quote as ENVIADA
+    operationId: sendQuote
+    security: [{ bearerAuth: [] }]
+    responses:
+      "200":
+        description: Quote sent
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data: { $ref: "../components/schemas/Quote/Quote.yaml" }
+
+/quotes/{uuid}/accept:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema: { type: string }
+  post:
+    tags: [Quotes]
+    summary: Accept a sent quote (ACEPTADA)
+    operationId: acceptQuote
+    security: [{ bearerAuth: [] }]
+    responses:
+      "200":
+        description: Quote accepted
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data: { $ref: "../components/schemas/Quote/Quote.yaml" }
+
+/quotes/{uuid}/reject:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema: { type: string }
+  post:
+    tags: [Quotes]
+    summary: Reject a sent quote (RECHAZADA)
+    operationId: rejectQuote
+    security: [{ bearerAuth: [] }]
+    responses:
+      "200":
+        description: Quote rejected
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data: { $ref: "../components/schemas/Quote/Quote.yaml" }
+
+/quotes/{uuid}/expire:
+  parameters:
+    - name: uuid
+      in: path
+      required: true
+      schema: { type: string }
+  post:
+    tags: [Quotes]
+    summary: Mark a quote as VENCIDA
+    operationId: expireQuote
+    security: [{ bearerAuth: [] }]
+    responses:
+      "200":
+        description: Quote expired
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data: { $ref: "../components/schemas/Quote/Quote.yaml" }

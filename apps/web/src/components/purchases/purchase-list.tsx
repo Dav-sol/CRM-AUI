@@ -18,6 +18,7 @@ export type PurchaseFilters = {
   status?: PurchaseItem["status"];
   dateFrom?: string;
   dateTo?: string;
+  sort?: string;
   refreshKey?: number;
 };
 
@@ -50,6 +51,9 @@ export function usePurchases(filters: PurchaseFilters) {
       if (filters.dateTo) {
         params.dateTo = filters.dateTo;
       }
+      if (filters.sort) {
+        params.sort = filters.sort;
+      }
       try {
         const data = await apiListPurchases(params);
         if (!cancelled) {
@@ -74,7 +78,7 @@ export function usePurchases(filters: PurchaseFilters) {
     return () => {
       cancelled = true;
     };
-  }, [filters.page, filters.search, filters.status, filters.dateFrom, filters.dateTo, filters.refreshKey]);
+  }, [filters.page, filters.search, filters.status, filters.dateFrom, filters.dateTo, filters.sort, filters.refreshKey]);
 
   return { items, meta, error };
 }

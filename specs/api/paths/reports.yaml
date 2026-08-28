@@ -1,0 +1,331 @@
+/reports/customers:
+  get:
+    tags:
+      - Reports
+    summary: Customer report
+    description: |
+      Returns customer metrics: total, new in period, pending contact,
+      blocked. Supports date range filtering and period grouping.
+    operationId: reportCustomers
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+          format: date
+        description: Start date (inclusive)
+      - name: to
+        in: query
+        schema:
+          type: string
+          format: date
+        description: End date (inclusive)
+      - name: groupBy
+        in: query
+        schema:
+          type: string
+          enum: [day, week, month]
+          default: month
+    responses:
+      "200":
+        description: Customer report
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: object
+                  properties:
+                    summary:
+                      type: object
+                      properties:
+                        total:
+                          type: integer
+                        newInPeriod:
+                          type: integer
+                        pendingContact:
+                          type: integer
+                        blocked:
+                          type: integer
+                    rows:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          label:
+                            type: string
+                          value:
+                            type: number
+      "401":
+        description: Missing or invalid access token
+
+/reports/purchases:
+  get:
+    tags:
+      - Reports
+    summary: Purchase report
+    description: |
+      Returns purchase metrics: total, value, units, avg ticket.
+      Supports date range filtering and period grouping.
+    operationId: reportPurchases
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: groupBy
+        in: query
+        schema:
+          type: string
+          enum: [day, week, month]
+          default: month
+    responses:
+      "200":
+        description: Purchase report
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: object
+                  properties:
+                    summary:
+                      type: object
+                      properties:
+                        total:
+                          type: integer
+                        totalValue:
+                          type: number
+                        unitsInPeriod:
+                          type: integer
+                        valueInPeriod:
+                          type: number
+                        avgTicket:
+                          type: number
+                    rows:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          label:
+                            type: string
+                          value:
+                            type: number
+                          totalValue:
+                            type: number
+      "401":
+        description: Missing or invalid access token
+
+/reports/campaigns:
+  get:
+    tags:
+      - Reports
+    summary: Campaign report
+    description: |
+      Returns campaign metrics: counts by status, sends, deliveries,
+      responses, sales, revenue.
+    operationId: reportCampaigns
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        schema:
+          type: string
+          format: date
+    responses:
+      "200":
+        description: Campaign report
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: object
+                  properties:
+                    summary:
+                      type: object
+                      properties:
+                        total:
+                          type: integer
+                        active:
+                          type: integer
+                        finished:
+                          type: integer
+                        totalSent:
+                          type: integer
+                        totalDelivered:
+                          type: integer
+                        totalResponded:
+                          type: integer
+                        totalSales:
+                          type: integer
+                        totalRevenue:
+                          type: number
+                    rows:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          label:
+                            type: string
+                          value:
+                            type: number
+                          status:
+                            type: string
+                          type:
+                            type: string
+                          delivered:
+                            type: integer
+                          responded:
+                            type: integer
+                          sales:
+                            type: integer
+                          revenue:
+                            type: number
+      "401":
+        description: Missing or invalid access token
+
+/reports/automations:
+  get:
+    tags:
+      - Reports
+    summary: Automation report
+    description: |
+      Returns automation metrics: counts by status, success rate.
+    operationId: reportAutomations
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        schema:
+          type: string
+          format: date
+    responses:
+      "200":
+        description: Automation report
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: object
+                  properties:
+                    summary:
+                      type: object
+                      properties:
+                        total:
+                          type: integer
+                        pending:
+                          type: integer
+                        executed:
+                          type: integer
+                        errors:
+                          type: integer
+                        successRate:
+                          type: number
+                    rows:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          label:
+                            type: string
+                          value:
+                            type: number
+      "401":
+        description: Missing or invalid access token
+
+/reports/messages:
+  get:
+    tags:
+      - Reports
+    summary: Message report
+    description: |
+      Returns message metrics: sent, delivered, read, failed, delivery rate.
+    operationId: reportMessages
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: groupBy
+        in: query
+        schema:
+          type: string
+          enum: [day, week, month]
+          default: day
+    responses:
+      "200":
+        description: Message report
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: object
+                  properties:
+                    summary:
+                      type: object
+                      properties:
+                        total:
+                          type: integer
+                        sent:
+                          type: integer
+                        delivered:
+                          type: integer
+                        read:
+                          type: integer
+                        failed:
+                          type: integer
+                        deliveryRate:
+                          type: number
+                    rows:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          label:
+                            type: string
+                          value:
+                            type: number
+                          sent:
+                            type: number
+                          failed:
+                            type: number
+      "401":
+        description: Missing or invalid access token

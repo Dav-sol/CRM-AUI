@@ -29,6 +29,10 @@ limit?: number;
  */
 status?: ListConversationsStatus;
 /**
+ * Free-text search over the customer name (case-insensitive contains).
+ */
+name?: string;
+/**
  * Filter by assignment: `true` only conversations with an advisor,
  * `false` only unassigned ones (inbox kit 018, FR-004).
  */

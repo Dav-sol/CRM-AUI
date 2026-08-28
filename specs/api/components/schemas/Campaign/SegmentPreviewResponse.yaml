@@ -12,9 +12,23 @@ properties:
 
     required:
       - count
+      - estimatedAutomations
+      - estimatedCost
 
     properties:
 
       count:
         type: integer
         description: Qualifying customers (deduplicated, most recent purchase first).
+
+      estimatedAutomations:
+        type: integer
+        description: |
+          Estimated generated automations: customers × stages (or customers for
+          single-template campaigns). No automations are created (dry-run).
+
+      estimatedCost:
+        type: integer
+        description: |
+          Estimated WhatsApp cost (COP) = estimatedAutomations × configured
+          per-message rate. Estimate only; no billing in v1 (playbook §24).

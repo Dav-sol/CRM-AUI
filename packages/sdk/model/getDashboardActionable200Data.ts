@@ -11,6 +11,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { GetDashboardActionable200DataExpiringWarrantiesItem } from './getDashboardActionable200DataExpiringWarrantiesItem';
+import type { GetDashboardActionable200DataOpenQuotesItem } from './getDashboardActionable200DataOpenQuotesItem';
 import type { GetDashboardActionable200DataRepurchaseWindowItem } from './getDashboardActionable200DataRepurchaseWindowItem';
 import type { GetDashboardActionable200DataUpcomingAutomationsItem } from './getDashboardActionable200DataUpcomingAutomationsItem';
 
@@ -18,4 +19,5 @@ export type GetDashboardActionable200Data = {
   upcomingAutomations: GetDashboardActionable200DataUpcomingAutomationsItem[];
   expiringWarranties: GetDashboardActionable200DataExpiringWarrantiesItem[];
   repurchaseWindow: GetDashboardActionable200DataRepurchaseWindowItem[];
+  openQuotes: GetDashboardActionable200DataOpenQuotesItem[];
 };

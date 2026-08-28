@@ -10,6 +10,7 @@
  *
  * OpenAPI spec version: 1.0.0
  */
+import type { GetCampaign200DataFollowUpSequenceStagesItem } from './getCampaign200DataFollowUpSequenceStagesItem';
 import type { GetCampaign200DataFollowUpSequenceWarrantyMonths } from './getCampaign200DataFollowUpSequenceWarrantyMonths';
 
 /**
@@ -21,4 +22,6 @@ export type GetCampaign200DataFollowUpSequence = {
   name: string;
   warrantyMonths: GetCampaign200DataFollowUpSequenceWarrantyMonths;
   stageCount: number;
+  /** Etapas con su mensaje (Fase P0-A), para el preview real en el detalle. */
+  stages: GetCampaign200DataFollowUpSequenceStagesItem[];
 } | null;

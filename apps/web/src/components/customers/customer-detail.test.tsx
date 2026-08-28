@@ -9,11 +9,18 @@ vi.mock("@/lib/api", async (importOriginal) => {
     apiListPurchases: vi.fn(),
     apiListAutomations: vi.fn(),
     apiListConversations: vi.fn(),
+    apiListQuotes: vi.fn(),
   };
 });
 
 import { CustomerDetailView } from "@/components/customers/customer-detail";
-import { apiGetCustomer, apiListAutomations, apiListConversations, apiListPurchases } from "@/lib/api";
+import {
+  apiGetCustomer,
+  apiListAutomations,
+  apiListConversations,
+  apiListPurchases,
+  apiListQuotes,
+} from "@/lib/api";
 
 const customer = {
   id: "c-1",
@@ -69,17 +76,27 @@ describe("CustomerDetailView", () => {
     vi.mocked(apiListPurchases).mockReset();
     vi.mocked(apiListAutomations).mockReset();
     vi.mocked(apiListConversations).mockReset();
+    vi.mocked(apiListQuotes).mockReset();
+    vi.mocked(apiListQuotes).mockResolvedValue([]);
   });
 
   it("muestra datos del cliente, compras con garantía, automatizaciones y conversaciones", async () => {
     vi.mocked(apiGetCustomer).mockResolvedValue(customer as never);
-    vi.mocked(apiListPurchases).mockResolvedValue({ data: [purchase], meta: { page: 1, limit: 100, total: 1, pages: 1 } } as never);
-    vi.mocked(apiListAutomations).mockResolvedValue({ data: [automation], meta: { page: 1, limit: 50, total: 1, pages: 1 } } as never);
+    vi.mocked(apiListPurchases).mockResolvedValue({
+      data: [purchase],
+      meta: { page: 1, limit: 100, total: 1, pages: 1 },
+    } as never);
+    vi.mocked(apiListAutomations).mockResolvedValue({
+      data: [automation],
+      meta: { page: 1, limit: 50, total: 1, pages: 1 },
+    } as never);
     vi.mocked(apiListConversations).mockResolvedValue([conversation] as never);
 
     render(<CustomerDetailView uuid="cu-1" />);
 
-    await waitFor(() => expect(screen.getByText("Carlos Mendoza")).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByText("Carlos Mendoza")).toBeTruthy(),
+    );
     expect(screen.getByText("Barranquilla")).toBeTruthy();
     expect(screen.getByText("Batería Extrema 850")).toBeTruthy();
     expect(screen.getByText(/12 meses · vence/)).toBeTruthy();
@@ -88,24 +105,42 @@ describe("CustomerDetailView", () => {
 
   it("filtra compras por el id interno del cliente y automatizaciones por uuid", async () => {
     vi.mocked(apiGetCustomer).mockResolvedValue(customer as never);
-    vi.mocked(apiListPurchases).mockResolvedValue({ data: [], meta: { page: 1, limit: 100, total: 0, pages: 0 } } as never);
-    vi.mocked(apiListAutomations).mockResolvedValue({ data: [], meta: { page: 1, limit: 50, total: 0, pages: 0 } } as never);
+    vi.mocked(apiListPurchases).mockResolvedValue({
+      data: [],
+      meta: { page: 1, limit: 100, total: 0, pages: 0 },
+    } as never);
+    vi.mocked(apiListAutomations).mockResolvedValue({
+      data: [],
+      meta: { page: 1, limit: 50, total: 0, pages: 0 },
+    } as never);
     vi.mocked(apiListConversations).mockResolvedValue([] as never);
 
     render(<CustomerDetailView uuid="cu-1" />);
 
     await waitFor(() => expect(apiGetCustomer).toHaveBeenCalledWith("cu-1"));
     await waitFor(() =>
-      expect(apiListPurchases).toHaveBeenCalledWith(expect.objectContaining({ customerId: "c-1", limit: 100 })),
+      expect(apiListPurchases).toHaveBeenCalledWith(
+        expect.objectContaining({ customerId: "c-1", limit: 100 }),
+      ),
     );
-    expect(apiListAutomations).toHaveBeenCalledWith(expect.objectContaining({ customerId: "cu-1", limit: 50 }));
-    expect(apiListConversations).toHaveBeenCalledWith(expect.objectContaining({ customerId: "cu-1", limit: 50 }));
+    expect(apiListAutomations).toHaveBeenCalledWith(
+      expect.objectContaining({ customerId: "cu-1", limit: 50 }),
+    );
+    expect(apiListConversations).toHaveBeenCalledWith(
+      expect.objectContaining({ customerId: "cu-1", limit: 50 }),
+    );
   });
 
   it("muestra estado vacío cuando no hay compras", async () => {
     vi.mocked(apiGetCustomer).mockResolvedValue(customer as never);
-    vi.mocked(apiListPurchases).mockResolvedValue({ data: [], meta: { page: 1, limit: 100, total: 0, pages: 0 } } as never);
-    vi.mocked(apiListAutomations).mockResolvedValue({ data: [], meta: { page: 1, limit: 50, total: 0, pages: 0 } } as never);
+    vi.mocked(apiListPurchases).mockResolvedValue({
+      data: [],
+      meta: { page: 1, limit: 100, total: 0, pages: 0 },
+    } as never);
+    vi.mocked(apiListAutomations).mockResolvedValue({
+      data: [],
+      meta: { page: 1, limit: 50, total: 0, pages: 0 },
+    } as never);
     vi.mocked(apiListConversations).mockResolvedValue([] as never);
 
     render(<CustomerDetailView uuid="cu-1" />);

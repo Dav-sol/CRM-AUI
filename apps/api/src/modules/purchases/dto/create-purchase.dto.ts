@@ -53,5 +53,15 @@ export class CreatePurchaseDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(64)
+  sourceConversationId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  quoteId?: string;
+
+  @IsOptional()
+  @IsString()
   organizationId?: string;
 }

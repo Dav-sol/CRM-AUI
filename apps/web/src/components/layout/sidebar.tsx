@@ -2,9 +2,10 @@
 
 import {
   BarChart3,
+  FileText,
   FileUp,
   LayoutDashboard,
-  ListOrdered,
+  Library,
   Megaphone,
   MessagesSquare,
   Package,
@@ -40,6 +41,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Clientes", icon: Users, href: "/customers", available: true },
   { label: "Compras", icon: ShoppingCart, href: "/purchases", available: true },
   { label: "Productos", icon: Package, href: "/products", available: true },
+  { label: "Cotizaciones", icon: FileText, href: "/quotes", available: true },
   {
     label: "Conversaciones",
     icon: MessagesSquare,
@@ -48,19 +50,15 @@ const NAV_ITEMS: NavItem[] = [
   },
   { label: "Campañas", icon: Megaphone, href: "/campaigns", available: true },
   {
-    label: "Seguimientos",
-    icon: ListOrdered,
-    href: "/follow-up-sequences",
-    available: true,
-  },
-  {
     label: "Automatizaciones",
     icon: Workflow,
     href: "/automations",
     available: true,
   },
   { label: "Importaciones", icon: FileUp, href: "/imports", available: true },
-  { label: "Reportes", icon: BarChart3, available: false },
+  { label: "Biblioteca", icon: Library, href: "/library", available: true },
+  { label: "Mensajes", icon: Megaphone, href: "/messages", available: true },
+  { label: "Reportes", icon: BarChart3, href: "/reports", available: true },
   { label: "Configuración", icon: Settings, available: false },
 ];
 

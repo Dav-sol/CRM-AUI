@@ -14,4 +14,14 @@
 export type PreviewCampaignSegment200Data = {
   /** Qualifying customers (deduplicated, most recent purchase first). */
   count: number;
+  /**
+     * Estimated generated automations: customers × stages (or customers for
+     * single-template campaigns). No automations are created (dry-run).
+     */
+  estimatedAutomations: number;
+  /**
+     * Estimated WhatsApp cost (COP) = estimatedAutomations × configured
+     * per-message rate. Estimate only; no billing in v1 (playbook §24).
+     */
+  estimatedCost: number;
 };

@@ -10,6 +10,9 @@
  *
  * OpenAPI spec version: 1.0.0
  */
+import type { ListCustomersHasPurchases } from './listCustomersHasPurchases';
+import type { ListCustomersNoContact } from './listCustomersNoContact';
+import type { ListCustomersRecurrent } from './listCustomersRecurrent';
 import type { ListCustomersStatus } from './listCustomersStatus';
 
 export type ListCustomersParams = {
@@ -38,4 +41,30 @@ createdTo?: string;
  * @pattern ^-?(name|codcli|city|status|createdAt|updatedAt)$
  */
 sort?: string;
+/**
+ * Clientes con alguna compra cuya garantía vence dentro de los
+ * próximos N días (drill-down del dashboard, P0.1).
+ * @minimum 1
+ * @maximum 730
+ */
+warrantyExpiringInDays?: number;
+/**
+ * Clientes con alguna compra cuya garantía venció hace hasta N días
+ * (ventana de recompra, P0.1).
+ * @minimum 1
+ * @maximum 1825
+ */
+warrantyExpiredInDays?: number;
+/**
+ * Filtra clientes con ("true") o sin ("false") compras.
+ */
+hasPurchases?: ListCustomersHasPurchases;
+/**
+ * Solo clientes que solicitaron no recibir comunicaciones.
+ */
+noContact?: ListCustomersNoContact;
+/**
+ * Solo clientes con 2 o más compras (recurrentes).
+ */
+recurrent?: ListCustomersRecurrent;
 };

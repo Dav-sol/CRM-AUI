@@ -31,6 +31,19 @@ properties:
       uuid of the automation that produced the message, or null for manual
       and inbound messages.
 
+  inReplyToCampaignId:
+    type: string
+    nullable: true
+    description: |
+      Atribución de respuestas (Fase 2): uuid de la campaña a la que responde
+      un mensaje entrante (origen resuelto desde la última automatización
+      OUTBOUND reciente de la conversación).
+
+  inReplyToCampaignName:
+    type: string
+    nullable: true
+    description: Nombre de la campaña de origen (para el badge "Respondió a …").
+
   type:
     type: string
     enum:

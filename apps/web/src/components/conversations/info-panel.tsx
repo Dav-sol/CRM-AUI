@@ -206,8 +206,9 @@ export function ConversationInfoPanel({
               </>
             ) : customerId ? (
               <>
-                Cliente #
-                <span className="font-medium">{customerId.slice(0, 8)}</span>
+                <span className="text-muted-foreground">
+                  Cliente sin nombre vinculado
+                </span>
               </>
             ) : (
               <span className="text-muted-foreground">

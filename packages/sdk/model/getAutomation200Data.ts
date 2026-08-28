@@ -44,6 +44,7 @@ export type GetAutomation200Data = ({
 } | null;
   /** @nullable */
   customer?: {
+  uuid: string;
   name: string;
   /** @nullable */
   phone?: string | null;
@@ -55,6 +56,12 @@ export type GetAutomation200Data = ({
      * @nullable
      */
   messageTemplate?: string | null;
+  /**
+     * Human-readable reason of the automation (Fase 4), e.g. "Revisión mitad
+     * de garantía", "Seguimiento postventa (Día 3)" or "Recompra / renovación".
+     * @nullable
+     */
+  stageName?: string | null;
   createdAt: string;
 }) & ({
   organizationId: string;
@@ -65,4 +72,9 @@ export type GetAutomation200Data = ({
   campaignId: string | null;
   purchase: GetAutomation200DataPurchase;
   customer: GetAutomation200DataCustomer;
+  /**
+     * Fase P0-A: mensaje ya personalizado (variables {customerName},
+     * {productName}, {organizationName} renderizadas con los datos reales).
+     */
+  renderedMessage?: string;
 });

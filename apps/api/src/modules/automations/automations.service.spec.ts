@@ -195,7 +195,7 @@ describe('AutomationsService', () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
-    it('cancels the previous ACTIVE cycle and its pending automations (AU-003)', async () => {
+    it('creates a new cycle for a re-purchase WITHOUT cancelling the previous cycle (playbook §15)', async () => {
       prisma.commercialCycle.findUnique.mockResolvedValueOnce(null);
       prisma.purchase.findUnique.mockResolvedValue({
         id: 'pu-2',
@@ -205,30 +205,15 @@ describe('AutomationsService', () => {
         purchaseDate: baseDate,
       });
       prisma.commercialCycle.findFirst.mockResolvedValue({ id: 'cc-old' });
-      let cancelledOld = false;
+      let cycleCancelled = false;
       prisma.$transaction.mockImplementation(
         async (fn: (tx: unknown) => Promise<unknown>) => {
           const tx = {
             automation: {
-              findMany: jest.fn().mockResolvedValue([
-                {
-                  uuid: 'au-old-1',
-                  purchaseId: 'pu-2',
-                  commercialCycleId: 'cc-old',
-                  scheduledDate: baseDate,
-                  status: 'SCHEDULED',
-                },
-                {
-                  uuid: 'au-old-2',
-                  purchaseId: 'pu-2',
-                  commercialCycleId: 'cc-old',
-                  scheduledDate: baseDate,
-                  status: 'PENDING',
-                },
-              ]),
+              findMany: jest.fn().mockResolvedValue([]),
               updateMany: jest.fn().mockImplementation(() => {
-                cancelledOld = true;
-                return Promise.resolve({ count: 2 });
+                cycleCancelled = true;
+                return Promise.resolve({ count: 0 });
               }),
               create: jest.fn().mockResolvedValue({
                 id: 'a-2',
@@ -239,11 +224,12 @@ describe('AutomationsService', () => {
                 scheduledDate: baseDate,
                 status: 'SCHEDULED',
                 priority: 0,
+                purpose: 'TRANSACTIONAL',
               }),
             },
             commercialCycle: {
               update: jest.fn().mockImplementation(() => {
-                cancelledOld = true;
+                cycleCancelled = true;
                 return Promise.resolve({});
               }),
               create: jest.fn().mockResolvedValue({
@@ -263,43 +249,35 @@ describe('AutomationsService', () => {
         uuid: 'au-2',
         status: 'SCHEDULED',
       });
-      prisma.commercialCycle.findUnique.mockResolvedValue({
-        id: 'cc-old',
-        uuid: 'ccu-old',
-        endDate: new Date(),
-      });
 
       await service.onPurchaseImported({
         payload: { purchaseId: 'pu-2' },
       });
 
-      expect(cancelledOld).toBe(true);
-      expect(auditService.record).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'automation.cycle.cancelled',
-          outcome: 'success',
-        }),
+      // The previous ACTIVE cycle is NOT cancelled: its journey stays valid.
+      expect(cycleCancelled).toBe(false);
+      expect(auditService.record).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'automation.cycle.cancelled' }),
       );
-      expect(eventEmitter.emit).toHaveBeenCalledWith(
+      expect(eventEmitter.emit).not.toHaveBeenCalledWith(
         'CommercialCycleCancelled',
+        expect.anything(),
+      );
+      expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+        'AutomationCancelled',
+        expect.anything(),
+      );
+      // The new cycle + its transactional automations are created.
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'CommercialCycleStarted',
         expect.objectContaining({
-          payload: expect.objectContaining({ cycleId: 'ccu-old' }) as object,
+          payload: expect.objectContaining({ cycleId: 'ccu-2' }) as object,
         }),
       );
       expect(eventEmitter.emit).toHaveBeenCalledWith(
-        'AutomationCancelled',
+        'AutomationCreated',
         expect.objectContaining({
-          payload: expect.objectContaining({
-            automationId: 'au-old-1',
-          }) as object,
-        }),
-      );
-      expect(eventEmitter.emit).toHaveBeenCalledWith(
-        'AutomationCancelled',
-        expect.objectContaining({
-          payload: expect.objectContaining({
-            automationId: 'au-old-2',
-          }) as object,
+          payload: expect.objectContaining({ automationId: 'au-2' }) as object,
         }),
       );
     });

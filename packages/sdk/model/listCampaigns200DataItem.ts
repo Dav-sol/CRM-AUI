@@ -26,12 +26,12 @@ export type ListCampaigns200DataItem = ({
   /** Informational in v1; does not drive behavior. */
   type: 'AUTOMATIC' | 'MANUAL' | 'REPURCHASE' | 'SPECIAL';
   /**
-     * Lifecycle. DRAFT → ACTIVE (activate), ACTIVE ↔ PAUSED,
-     * ACTIVE/PAUSED/DRAFT → CANCELLED, ACTIVE → FINISHED (automatic when
-     * no SCHEDULED automations remain). FINISHED and CANCELLED are
-     * terminal.
+     * Lifecycle. DRAFT → APPROVED (approve, playbook §20) → ACTIVE (activate),
+     * ACTIVE ↔ PAUSED, DRAFT/APPROVED/ACTIVE/PAUSED → CANCELLED, ACTIVE →
+     * FINISHED (automatic when no SCHEDULED automations remain). FINISHED and
+     * CANCELLED are terminal. Activation requires APPROVED.
      */
-  status: 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'FINISHED' | 'CANCELLED';
+  status: 'DRAFT' | 'APPROVED' | 'ACTIVE' | 'PAUSED' | 'FINISHED' | 'CANCELLED';
   /**
      * Scheduled start; automations are scheduled for max(startAt, now).
      * @nullable

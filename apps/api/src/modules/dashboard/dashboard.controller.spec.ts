@@ -59,8 +59,8 @@ describe('DashboardController', () => {
 
   it('wraps summary in the data envelope', async () => {
     service.summary.mockResolvedValue({ customers: { total: 1 } });
-    const result = await controller.summary(user);
-    expect(service.summary).toHaveBeenCalledWith(user);
+    const result = await controller.summary(user, {});
+    expect(service.summary).toHaveBeenCalledWith(user, {});
     expect(result).toEqual({
       data: expect.objectContaining({ customers: { total: 1 } }) as object,
     });
@@ -75,8 +75,8 @@ describe('DashboardController', () => {
 
   it('wraps activity in the data envelope', async () => {
     service.activity.mockResolvedValue([]);
-    const result = await controller.activity(user);
-    expect(service.activity).toHaveBeenCalledWith(user);
+    const result = await controller.activity(user, {});
+    expect(service.activity).toHaveBeenCalledWith(user, {});
     expect(result).toEqual({ data: [] });
   });
 });

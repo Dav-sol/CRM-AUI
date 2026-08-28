@@ -26,6 +26,18 @@ export type SendManualMessage201Data = ({
      */
   automationId: string | null;
   /**
+     * Atribución de respuestas (Fase 2): uuid de la campaña a la que responde
+     * un mensaje entrante (origen resuelto desde la última automatización
+     * OUTBOUND reciente de la conversación).
+     * @nullable
+     */
+  inReplyToCampaignId?: string | null;
+  /**
+     * Nombre de la campaña de origen (para el badge "Respondió a …").
+     * @nullable
+     */
+  inReplyToCampaignName?: string | null;
+  /**
      * Message origin. AUTOMATIC (execution engine), MANUAL (REST manual
      * send), INCOMING (webhook) and OUTGOING (agent replies, inbox kit 018).
      */

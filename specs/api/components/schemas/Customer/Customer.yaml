@@ -61,6 +61,19 @@ properties:
       - PENDING
     description: BLOCKED is reserved and inert in v1.
 
+  noContactAt:
+    type: string
+    format: date-time
+    nullable: true
+    description: |
+      Fase 5 (T19): fecha del opt-out "No contactar". Cuando está presente, el
+      cliente no recibe envíos comerciales ni automatizaciones.
+
+  noContactReason:
+    type: string
+    nullable: true
+    description: Motivo del opt-out, cuando fue registrado.
+
   createdAt:
     type: string
     format: date-time

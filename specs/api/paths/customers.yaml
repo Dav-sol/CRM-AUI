@@ -80,6 +80,52 @@
           type: string
           pattern: "^-?(name|codcli|city|status|createdAt|updatedAt)$"
 
+      - name: warrantyExpiringInDays
+        in: query
+        required: false
+        description: |
+          Clientes con alguna compra cuya garantía vence dentro de los
+          próximos N días (drill-down del dashboard, P0.1).
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 730
+
+      - name: warrantyExpiredInDays
+        in: query
+        required: false
+        description: |
+          Clientes con alguna compra cuya garantía venció hace hasta N días
+          (ventana de recompra, P0.1).
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1825
+
+      - name: hasPurchases
+        in: query
+        required: false
+        description: Filtra clientes con ("true") o sin ("false") compras.
+        schema:
+          type: string
+          enum: ["true", "false"]
+
+      - name: noContact
+        in: query
+        required: false
+        description: Solo clientes que solicitaron no recibir comunicaciones.
+        schema:
+          type: string
+          enum: ["true"]
+
+      - name: recurrent
+        in: query
+        required: false
+        description: Solo clientes con 2 o más compras (recurrentes).
+        schema:
+          type: string
+          enum: ["true"]
+
     responses:
 
       "200":
@@ -691,3 +737,161 @@
                     message:
                       type: string
                       example: Customer not found
+/customers/{id}/no-contact:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+
+  post:
+    tags:
+      - Customers
+
+    summary: Opt-out "No contactar"
+
+    description: |
+      Fase 5 (T19): marca al cliente para que no reciba envíos comerciales ni
+      automatizaciones (playbook §15). El scheduler y las campañas respetan el
+      opt-out. Se registra la fecha y un motivo opcional.
+
+    operationId: customerNoContact
+
+    security:
+      - bearerAuth: []
+
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              reason:
+                type: string
+                maxLength: 300
+                description: Motivo del opt-out (opcional).
+
+    responses:
+
+      "200":
+        description: Customer opted out
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                data:
+                  $ref: "../components/schemas/Customer/Customer.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+      "404":
+        description: "Unknown or cross-tenant customer (CUSTOMER_NOT_FOUND)"
+
+/customers/{id}/timeline:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Customer id or uuid
+
+  get:
+    tags:
+      - Customers
+
+    summary: Get customer 360 timeline
+
+    description: |
+      Returns a consolidated timeline of the customer's activity: purchases
+      (non-cancelled) with their associated automations, quotes, and
+      conversations.
+
+    operationId: getCustomerTimeline
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Customer timeline
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              required:
+                - data
+
+              properties:
+
+                data:
+                  type: object
+
+      "401":
+        description: Missing or invalid access token
+
+      "404":
+        description: "Unknown or cross-tenant customer (CUSTOMER_NOT_FOUND)"
+
+/customers/{id}/allow-contact:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+
+  post:
+    tags:
+      - Customers
+
+    summary: Re-enable contact
+
+    description: |
+      Fase 5 (T19): limpia el opt-out del cliente para volver a permitir
+      envíos comerciales y automatizaciones.
+
+    operationId: customerAllowContact
+
+    security:
+      - bearerAuth: []
+
+    responses:
+
+      "200":
+        description: Customer contact re-enabled
+
+        content:
+
+          application/json:
+
+            schema:
+
+              type: object
+
+              properties:
+
+                data:
+                  $ref: "../components/schemas/Customer/Customer.yaml"
+
+      "401":
+        description: Missing or invalid access token
+
+      "404":
+        description: "Unknown or cross-tenant customer (CUSTOMER_NOT_FOUND)"

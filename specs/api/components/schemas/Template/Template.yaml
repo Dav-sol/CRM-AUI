@@ -1,0 +1,65 @@
+type: object
+required:
+  - id
+  - uuid
+  - organizationId
+  - name
+  - category
+  - tone
+  - angle
+  - body
+  - createdAt
+  - updatedAt
+properties:
+  id:
+    type: string
+  uuid:
+    type: string
+    format: uuid
+  organizationId:
+    type: string
+  code:
+    type: string
+    nullable: true
+    description: "Library code (e.g. BW-001); null for custom templates."
+  name:
+    type: string
+  group:
+    type: string
+    nullable: true
+    description: "Commercial group from the library."
+  category:
+    type: string
+    enum:
+      - CAMPAIGN
+      - FOLLOW_UP
+      - QUICK_REPLY
+  tone:
+    type: string
+    enum:
+      - PROFESSIONAL
+      - CARIBE_COMMERCIAL
+      - CARIBE_AUTHENTIC
+  angle:
+    type: string
+    enum:
+      - TRUST
+      - PREVENTION
+      - REPURCHASE
+      - LOYALTY
+      - CONVERSATION
+      - CALM
+  goal:
+    type: string
+    nullable: true
+  recommendedUse:
+    type: string
+    nullable: true
+  body:
+    type: string
+  createdAt:
+    type: string
+    format: date-time
+  updatedAt:
+    type: string
+    format: date-time

@@ -27,6 +27,11 @@ export type ListProducts200DataItem = {
      * @nullable
      */
   warrantyMonths?: number | null;
+  /**
+     * Precio de referencia del catálogo (COP).
+     * @nullable
+     */
+  price?: number | null;
   status: ListProducts200DataItemStatus;
   createdAt: string;
   updatedAt: string;

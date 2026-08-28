@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
+import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import {
   CampaignStatus,
@@ -15,11 +16,13 @@ import {
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
+import { findInvalidVariables } from '../../common/message-variables';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
 import { QueryCampaignsDto } from './dto/query-campaigns.dto';
 import { CampaignSegmentDto } from './dto/campaign-segment.dto';
 import { PreviewSegmentDto } from './dto/preview-segment.dto';
+import { PreviewSegmentDraftDto } from './dto/preview-segment-draft.dto';
 import {
   CAMPAIGN_BATCH_SIZE,
   MAX_AUTOMATIONS_PER_CAMPAIGN,
@@ -73,12 +76,33 @@ export interface CampaignSummary {
 export interface CampaignDetail extends CampaignSummary {
   template: string;
   updatedAt: Date;
+  // Fase 1: etapas inline del timeline del editor (sin secuencia).
+  stages: InlineCampaignStage[];
   followUpSequence: {
     uuid: string;
     name: string;
     warrantyMonths: number;
     stageCount: number;
+    // Fase P0-A: etapas con su mensaje para el preview real.
+    stages: Array<{
+      uuid: string;
+      name: string;
+      anchor: FollowUpStageAnchor;
+      offsetDays: number;
+      template: string;
+      templateOnPast: string | null;
+    }>;
   } | null;
+  // Métricas de atribución (Fase 2/P0-D): entregados = mensajes OUTBOUND
+  // enviados; respondidos = INBOUND atribuidos; cotizaciones/ventas/ingresos
+  // = cadena conversación → cotización → venta atribuida a la campaña.
+  delivered: number;
+  responded: number;
+  quotes: number;
+  sales: number;
+  revenue: number;
+  whatsappCost: number;
+  roi: number | null;
 }
 
 export interface CampaignListResult {
@@ -94,9 +118,14 @@ interface CampaignRow {
   description: string | null;
   type: CampaignType;
   template: string;
+  templateD3: string | null;
+  templateD180: string | null;
+  templateD365: string | null;
   status: CampaignStatus;
   startAt: Date | null;
   segment: Prisma.JsonValue | null;
+  stages: Prisma.JsonValue | null;
+  followUpSequenceId: string | null;
   followUpSequence?: {
     uuid: string;
     warrantyMonths: number;
@@ -113,6 +142,53 @@ interface CampaignRow {
   updatedAt: Date;
 }
 
+// Fase 1: etapa inline persistida en Campaign.stages (Json). Misma semántica
+// que una etapa de secuencia pero sin identidad propia.
+interface InlineCampaignStage {
+  name: string | null;
+  anchor: FollowUpStageAnchor;
+  offsetDays: number;
+  template: string;
+  templateOnPast: string | null;
+}
+
+function parseInlineStages(raw: Prisma.JsonValue | null): InlineCampaignStage[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const parsed: InlineCampaignStage[] = [];
+  for (const item of raw) {
+    if (
+      typeof item !== 'object' ||
+      item === null ||
+      !('anchor' in item) ||
+      !('offsetDays' in item) ||
+      !('template' in item)
+    ) {
+      continue;
+    }
+    const stage = item as Record<string, unknown>;
+    if (
+      (stage.anchor !== 'PURCHASE_DATE' && stage.anchor !== 'WARRANTY_EXPIRY') ||
+      typeof stage.offsetDays !== 'number' ||
+      typeof stage.template !== 'string'
+    ) {
+      continue;
+    }
+    parsed.push({
+      name: typeof stage.name === 'string' ? stage.name : null,
+      anchor: stage.anchor,
+      offsetDays: stage.offsetDays,
+      template: stage.template,
+      templateOnPast:
+        typeof stage.templateOnPast === 'string' && stage.templateOnPast.length > 0
+          ? stage.templateOnPast
+          : null,
+    });
+  }
+  return parsed;
+}
+
 @Injectable()
 export class CampaignsService {
   private readonly logger = new Logger(CampaignsService.name);
@@ -121,6 +197,7 @@ export class CampaignsService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditIdentityService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly configService: ConfigService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -138,6 +215,17 @@ export class CampaignsService {
     createdAt: Date;
   }> {
     const organizationId = this.requireOrg(user);
+
+    // Fase 1: las etapas inline son excluyentes con la secuencia.
+    if (dto.followUpSequenceId && dto.stages && dto.stages.length > 0) {
+      throw new BadRequestException({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message:
+            'Cannot combine followUpSequenceId with inline stages; choose one',
+        },
+      });
+    }
 
     const followUpSequenceInternalId = await this.resolveFollowUpSequenceId(
       dto.followUpSequenceId,
@@ -157,6 +245,10 @@ export class CampaignsService {
         segment: dto.segment
           ? (dto.segment as Prisma.InputJsonValue)
           : undefined,
+        stages:
+          dto.stages && dto.stages.length > 0
+            ? (dto.stages as unknown as Prisma.InputJsonValue)
+            : undefined,
         startAt: dto.startAt ? new Date(dto.startAt) : undefined,
         followUpSequenceId: followUpSequenceInternalId,
         status: 'DRAFT',
@@ -214,6 +306,18 @@ export class CampaignsService {
       ...(query.search
         ? { name: { contains: query.search, mode: 'insensitive' } }
         : {}),
+      ...(query.createdFrom || query.createdTo
+        ? {
+            createdAt: {
+              ...(query.createdFrom
+                ? { gte: this.resolveDateBoundary(query.createdFrom, false) }
+                : {}),
+              ...(query.createdTo
+                ? { lte: this.resolveDateBoundary(query.createdTo, true) }
+                : {}),
+            },
+          }
+        : {}),
     };
 
     const [total, campaigns] = await Promise.all([
@@ -249,7 +353,14 @@ export class CampaignsService {
             warrantyMonths: true,
             stages: {
               where: { deletedAt: null },
-              select: { id: true },
+              select: {
+                id: true,
+                name: true,
+                anchor: true,
+                offsetDays: true,
+                template: true,
+                templateOnPast: true,
+              },
             },
           },
         },
@@ -260,24 +371,54 @@ export class CampaignsService {
     }
     const stats = await this.loadCampaignStats([campaign.id]);
     const detail = toCampaignSummary(campaign, stats.get(campaign.id));
+    const attribution = await this.loadCampaignAttribution(
+      campaign.id,
+      campaign.uuid,
+    );
     return {
       ...detail,
       template: campaign.template,
       updatedAt: campaign.updatedAt,
+      stages: parseInlineStages(campaign.stages),
       followUpSequence: campaign.followUpSequence
         ? {
             uuid: campaign.followUpSequence.uuid,
             name: campaign.followUpSequence.name,
             warrantyMonths: campaign.followUpSequence.warrantyMonths,
             stageCount: campaign.followUpSequence.stages.length,
+            stages: campaign.followUpSequence.stages.map((stage) => ({
+              uuid: stage.id,
+              name: stage.name,
+              anchor: stage.anchor,
+              offsetDays: stage.offsetDays,
+              template: stage.template,
+              templateOnPast: stage.templateOnPast,
+            })),
           }
         : null,
+      delivered: attribution.delivered,
+      responded: attribution.responded,
+      quotes: attribution.quotes,
+      sales: attribution.sales,
+      revenue: attribution.revenue,
+      whatsappCost: attribution.whatsappCost,
+      roi: attribution.roi,
     };
   }
 
   // ---------------------------------------------------------------------------
-  // Update (US3, FR-004) — DRAFT only
+  // Update (US3, FR-004) — DRAFT, APPROVED, or ACTIVE (ACTIVE = template-only)
   // ---------------------------------------------------------------------------
+
+  /** Fields allowed when campaign status is ACTIVE */
+  private static readonly ACTIVE_ALLOWED_FIELDS = new Set([
+    'name',
+    'description',
+    'template',
+    'templateD3',
+    'templateD180',
+    'templateD365',
+  ]);
 
   async update(
     user: AuthUser,
@@ -289,11 +430,19 @@ export class CampaignsService {
     if (!campaign) {
       throw this.campaignNotFound();
     }
-    if (campaign.status !== CampaignStatus.DRAFT) {
+
+    const isActive = campaign.status === CampaignStatus.ACTIVE;
+    const isEditable =
+      campaign.status === CampaignStatus.DRAFT ||
+      campaign.status === CampaignStatus.APPROVED ||
+      isActive;
+
+    if (!isEditable) {
       throw new BadRequestException({
         error: {
           code: 'VALIDATION_ERROR',
-          message: 'Campaign can only be updated while DRAFT',
+          message:
+            'Campaign can only be updated while DRAFT, APPROVED, or ACTIVE',
         },
       });
     }
@@ -307,6 +456,7 @@ export class CampaignsService {
       dto.templateD180 !== undefined ||
       dto.templateD365 !== undefined ||
       dto.segment !== undefined ||
+      dto.stages !== undefined ||
       dto.startAt !== undefined ||
       dto.followUpSequenceId !== undefined;
     if (!hasChanges) {
@@ -314,6 +464,43 @@ export class CampaignsService {
         error: {
           code: 'VALIDATION_ERROR',
           message: 'At least one field must be provided',
+        },
+      });
+    }
+
+    // ACTIVE campaigns: only name, description, and template fields allowed
+    if (isActive) {
+      const blockedFields = (
+        ['type', 'segment', 'stages', 'startAt', 'followUpSequenceId'] as const
+      ).filter((f) => dto[f] !== undefined);
+
+      if (blockedFields.length > 0) {
+        throw new BadRequestException({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message:
+              'Cannot modify segment, stages, startAt, type, or followUpSequenceId on an ACTIVE campaign. Pause the campaign first.',
+          },
+        });
+      }
+    }
+
+    // Fase 1: las etapas inline son excluyentes con la secuencia. La secuencia
+    // existente de la campaña cuenta como combinación inválida.
+    const effectiveSequenceId =
+      dto.followUpSequenceId !== undefined
+        ? dto.followUpSequenceId
+        : campaign.followUpSequenceId;
+    if (
+      effectiveSequenceId &&
+      dto.stages &&
+      dto.stages.length > 0
+    ) {
+      throw new BadRequestException({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message:
+            'Cannot combine followUpSequenceId with inline stages; choose one',
         },
       });
     }
@@ -331,6 +518,10 @@ export class CampaignsService {
         segment: dto.segment
           ? (dto.segment as Prisma.InputJsonValue)
           : undefined,
+        stages:
+          dto.stages !== undefined
+            ? (dto.stages as unknown as Prisma.InputJsonValue)
+            : undefined,
         startAt: dto.startAt ? new Date(dto.startAt) : undefined,
         followUpSequenceId:
           dto.followUpSequenceId !== undefined
@@ -376,6 +567,8 @@ export class CampaignsService {
     status: 'ACTIVE';
     automationCount: number;
     startedAt: Date;
+    skippedByLimit: number;
+    skippedByFrequency: number;
   }> {
     const organizationId = this.requireOrg(user);
     const campaign = await this.findScopedCampaignWithSequence(
@@ -385,11 +578,11 @@ export class CampaignsService {
     if (!campaign) {
       throw this.campaignNotFound();
     }
-    if (campaign.status !== CampaignStatus.DRAFT) {
+    if (campaign.status !== CampaignStatus.APPROVED) {
       throw new BadRequestException({
         error: {
           code: 'VALIDATION_ERROR',
-          message: 'Campaign is not in DRAFT state',
+          message: 'Campaign must be APPROVED before activation',
         },
       });
     }
@@ -407,6 +600,28 @@ export class CampaignsService {
         templateOnPast: string | null;
       }>;
     } | null;
+
+    // P0.2: no se activa una campaña sin mensajes válidos ni sin audiencia.
+    this.assertValidMessages(campaign);
+    const audience = await this.prisma.purchase.count({
+      where: this.buildSegmentWhere(segment, organizationId),
+    });
+    if (audience === 0) {
+      await this.auditService.record({
+        module: MODULE,
+        action: 'campaign.activate',
+        outcome: 'failure',
+        userId: user.id,
+        organizationId,
+        metadata: { reason: 'no_audience' },
+      });
+      throw new BadRequestException({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Cannot activate a campaign without an audience',
+        },
+      });
+    }
 
     // If campaign has a followUpSequence, validate it has stages
     if (
@@ -426,22 +641,28 @@ export class CampaignsService {
       campaign.startAt && campaign.startAt > now ? campaign.startAt : now;
 
     let automationCount = 0;
+    let skippedByLimit = 0;
+    let skippedByFrequency = 0;
     await this.prisma.$transaction(async (tx) => {
       const guarded = await tx.campaign.updateMany({
-        where: { uuid, organizationId, status: 'DRAFT', deletedAt: null },
+        where: { uuid, organizationId, status: 'APPROVED', deletedAt: null },
         data: { status: 'ACTIVE' },
       });
       if (guarded.count === 0) {
         throw new BadRequestException({
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Campaign is not in DRAFT state',
+            message: 'Campaign must be APPROVED before activation',
           },
         });
       }
 
-      // If campaign has a followUpSequence, use its stages; otherwise use single template
+      // If campaign has a followUpSequence, use its stages; otherwise use
+      // inline editor stages when present; otherwise single template.
       const useFollowUpSequence = !!followUpSequence;
+      const inlineStages = useFollowUpSequence
+        ? []
+        : parseInlineStages(campaign.stages);
 
       const rows = await this.resolveSegmentPurchases(
         tx,
@@ -450,7 +671,11 @@ export class CampaignsService {
       );
       const totalAutomations =
         rows.length *
-        (useFollowUpSequence ? followUpSequence.stages.length : 1);
+        (useFollowUpSequence
+          ? followUpSequence.stages.length
+          : inlineStages.length > 0
+            ? inlineStages.length
+            : 1);
       if (totalAutomations > MAX_AUTOMATIONS_PER_CAMPAIGN) {
         throw new BadRequestException({
           error: {
@@ -463,7 +688,7 @@ export class CampaignsService {
       if (useFollowUpSequence) {
         // Generate one automation per stage per qualifying purchase
         // scheduledDate = base(anchor) + stage.offsetDays
-        automationCount = await this.generateAutomationsFromSequence(
+        const sequenceResult = await this.generateAutomationsFromSequence(
           tx,
           campaign.id,
           organizationId,
@@ -474,6 +699,31 @@ export class CampaignsService {
           // this date; stages before it are never sent historically.
           scheduledDate,
         );
+        automationCount = sequenceResult.count;
+        skippedByLimit += sequenceResult.skippedByLimit;
+        skippedByFrequency += sequenceResult.skippedByFrequency;
+      } else if (inlineStages.length > 0) {
+        // Fase 1: etapas inline del editor — misma generación que secuencia
+        // (TRANSACTIONAL, conversión recompra de etapas pasadas, HG-SEM-03/F4).
+        const inlineResult = await this.generateAutomationsFromSequence(
+          tx,
+          campaign.id,
+          organizationId,
+          rows,
+          inlineStages.map((stage) => ({
+            uuid: '',
+            name: stage.name ?? 'Etapa',
+            anchor: stage.anchor,
+            offsetDays: stage.offsetDays,
+            template: stage.template,
+            templateOnPast: stage.templateOnPast,
+          })),
+          campaign.template,
+          scheduledDate,
+        );
+        automationCount = inlineResult.count;
+        skippedByLimit += inlineResult.skippedByLimit;
+        skippedByFrequency += inlineResult.skippedByFrequency;
       } else {
         // Original single-template logic
         for (let i = 0; i < rows.length; i += CAMPAIGN_BATCH_SIZE) {
@@ -497,6 +747,8 @@ export class CampaignsService {
             scheduledDate: Date;
             status: 'SCHEDULED';
             priority: number;
+            purpose: 'COMMERCIAL';
+            stageName: string;
           }> = [];
 
           for (const row of batch) {
@@ -525,6 +777,21 @@ export class CampaignsService {
               });
               cycleId = existing.id;
             }
+            // Legacy single-template sends are COMMERCIAL: respect the anti-spam
+            // limits per customer (playbook §14).
+            const allowed = await this.commercialAllowed(
+              tx,
+              organizationId,
+              row.customerId,
+            );
+            if (allowed !== 'ok') {
+              if (allowed === 'limit') {
+                skippedByLimit++;
+              } else {
+                skippedByFrequency++;
+              }
+              continue;
+            }
             automationRows.push({
               organizationId,
               purchaseId: row.purchaseId,
@@ -533,12 +800,14 @@ export class CampaignsService {
               scheduledDate,
               status: 'SCHEDULED',
               priority: 0,
+              purpose: 'COMMERCIAL',
+              stageName: 'Mensaje de campaña',
             });
           }
 
           await tx.automation.createMany({ data: automationRows });
+          automationCount += automationRows.length;
         }
-        automationCount = rows.length;
       }
     });
 
@@ -576,7 +845,86 @@ export class CampaignsService {
       status: 'ACTIVE',
       automationCount,
       startedAt: scheduledDate,
+      // Fase 4 (T16): clientes del segmento omitidos por anti-spam.
+      skippedByLimit,
+      skippedByFrequency,
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Approve (playbook §20): marketing approves the campaign before it can be
+  // activated. DRAFT -> APPROVED; activation requires APPROVED.
+  // ---------------------------------------------------------------------------
+
+  async approve(
+    user: AuthUser,
+    uuid: string,
+  ): Promise<{ uuid: string; status: CampaignStatus }> {
+    const organizationId = this.requireOrg(user);
+    const campaign = await this.findScopedCampaignWithSequence(organizationId, uuid);
+    if (!campaign) {
+      throw this.campaignNotFound();
+    }
+    if (campaign.status !== CampaignStatus.DRAFT) {
+      throw new BadRequestException({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Only DRAFT campaigns can be approved',
+        },
+      });
+    }
+
+    // P0.2: no se aprueba una campaña sin mensajes, con variables inválidas o
+    // sin audiencia.
+    this.assertValidMessages(campaign);
+    const audience = await this.prisma.purchase.count({
+      where: this.buildSegmentWhere(
+        campaign.segment as CampaignSegmentDto | null,
+        organizationId,
+      ),
+    });
+    if (audience === 0) {
+      await this.auditService.record({
+        module: MODULE,
+        action: 'campaign.approved',
+        outcome: 'failure',
+        userId: user.id,
+        organizationId,
+        metadata: { reason: 'no_audience' },
+      });
+      throw new BadRequestException({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Cannot approve a campaign without an audience',
+        },
+      });
+    }
+
+    const updated = await this.prisma.campaign.update({
+      where: { id: campaign.id },
+      data: { status: 'APPROVED' },
+    });
+
+    await this.auditService.record({
+      module: MODULE,
+      action: 'campaign.approved',
+      outcome: 'success',
+      userId: user.id,
+      organizationId,
+      description: `campaign approved campaign=${updated.uuid}`,
+      metadata: { campaignId: updated.uuid },
+    });
+    this.emitEvent(
+      'CampaignUpdated',
+      buildCampaignUpdatedEvent(
+        updated.uuid,
+        organizationId,
+        user.id,
+        updated.updatedAt.toISOString(),
+      ),
+    );
+
+    return { uuid: updated.uuid, status: updated.status };
   }
 
   // ---------------------------------------------------------------------------
@@ -689,6 +1037,7 @@ export class CampaignsService {
     }
     if (
       campaign.status !== CampaignStatus.DRAFT &&
+      campaign.status !== CampaignStatus.APPROVED &&
       campaign.status !== CampaignStatus.ACTIVE &&
       campaign.status !== CampaignStatus.PAUSED
     ) {
@@ -760,11 +1109,41 @@ export class CampaignsService {
   // Segment preview (US4, FR-005) — dry-run, no automations created
   // ---------------------------------------------------------------------------
 
+  // Fase 3 (P0-5): preview stateless para el creador (sin uuid de campaña).
+  async previewSegmentDraft(
+    user: AuthUser,
+    dto: PreviewSegmentDraftDto,
+  ): Promise<{
+    count: number;
+    estimatedAutomations: number;
+    estimatedCost: number;
+  }> {
+    const organizationId = this.requireOrg(user);
+    if (dto.segment && !hasSegmentCriterion(dto.segment)) {
+      throw new BadRequestException({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'segment must include at least one criterion',
+        },
+      });
+    }
+    return this.estimateSegment(
+      organizationId,
+      dto.segment ?? null,
+      dto.followUpSequenceId,
+      dto.type,
+    );
+  }
+
   async previewSegment(
     user: AuthUser,
     uuid: string,
     dto?: PreviewSegmentDto,
-  ): Promise<{ count: number }> {
+  ): Promise<{
+    count: number;
+    estimatedAutomations: number;
+    estimatedCost: number;
+  }> {
     const organizationId = this.requireOrg(user);
     const campaign = await this.findScopedCampaign(organizationId, uuid);
     if (!campaign) {
@@ -784,10 +1163,11 @@ export class CampaignsService {
       });
     }
 
-    const rows = await this.resolveSegmentPurchases(
-      this.prisma,
+    const result = await this.estimateSegment(
       organizationId,
       segment,
+      campaign.followUpSequenceId,
+      campaign.type,
     );
 
     await this.auditService.record({
@@ -797,10 +1177,48 @@ export class CampaignsService {
       userId: user.id,
       organizationId,
       description: `campaign segment preview campaign=${campaign.uuid}`,
-      metadata: { campaignId: campaign.uuid, count: rows.length },
+      metadata: { campaignId: campaign.uuid, count: result.count },
     });
 
-    return { count: rows.length };
+    return result;
+  }
+
+  // Fase 3: resoluciones de audiencia y costo estimado compartidas.
+  private async estimateSegment(
+    organizationId: string,
+    segment: CampaignSegmentDto | null,
+    followUpSequenceId?: string | null,
+    campaignType?: CampaignType | null,
+  ): Promise<{
+    count: number;
+    estimatedAutomations: number;
+    estimatedCost: number;
+  }> {
+    const rows = await this.resolveSegmentPurchases(
+      this.prisma,
+      organizationId,
+      segment,
+    );
+    const stagesCount = followUpSequenceId
+      ? await this.prisma.followUpSequenceStage.count({
+          where: { sequenceId: followUpSequenceId, deletedAt: null },
+        })
+      : 1;
+    const estimatedAutomations = rows.length * Math.max(stagesCount, 1);
+    // Fase P0.2 (D6): tarifas por propósito, preparadas para costos reales de
+    // Meta. El comercial es más caro que el transaccional; sigue siendo un
+    // ESTIMADO (no hay facturación real en v1).
+    const commercial =
+      campaignType === 'REPURCHASE' || campaignType === 'SPECIAL';
+    const messageCost = commercial
+      ? (this.configService.get<number>('campaigns.messageCostCommercial') ??
+        400)
+      : (this.configService.get<number>('campaigns.messageCost') ?? 200);
+    return {
+      count: rows.length,
+      estimatedAutomations,
+      estimatedCost: estimatedAutomations * messageCost,
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -955,7 +1373,7 @@ export class CampaignsService {
     organizationId: string,
     rows: Array<{ purchaseId: string; customerId: string; purchaseDate: Date }>,
     stages: Array<{
-      uuid: string;
+      uuid?: string;
       name: string;
       anchor: FollowUpStageAnchor;
       offsetDays: number;
@@ -964,8 +1382,14 @@ export class CampaignsService {
     }>,
     campaignTemplate: string,
     reference: Date,
-  ): Promise<number> {
+  ): Promise<{
+    count: number;
+    skippedByLimit: number;
+    skippedByFrequency: number;
+  }> {
     let automationCount = 0;
+    let skippedByLimit = 0;
+    let skippedByFrequency = 0;
 
     for (let i = 0; i < rows.length; i += CAMPAIGN_BATCH_SIZE) {
       const batch = rows.slice(i, i + CAMPAIGN_BATCH_SIZE);
@@ -1062,6 +1486,19 @@ export class CampaignsService {
             continue;
           }
 
+          // F4: when a past WARRANTY_EXPIRY stage fired the repurchase
+          // conversion for this purchase, later post-warranty recompra stages
+          // (offsetDays > 0) are substituted by that single conversion — one
+          // renovation contact per cycle (playbook §11). Transactional /
+          // warranty stages are untouched.
+          if (
+            repurchaseStage &&
+            stage.anchor === FollowUpStageAnchor.WARRANTY_EXPIRY &&
+            stage.offsetDays > 0
+          ) {
+            continue;
+          }
+
           await tx.automation.create({
             data: {
               organizationId,
@@ -1071,6 +1508,11 @@ export class CampaignsService {
               scheduledDate: computed,
               status: 'SCHEDULED',
               priority: 0,
+              // Sequence stages are transactional (warranty/post-purchase):
+              // never counted against the commercial 3/60d limit.
+              purpose: 'TRANSACTIONAL',
+              // Fase 4 (T14): motivo legible de la automatización.
+              stageName: stage.name,
               // Snapshot (HG-FUS-02 option A): the automation is
               // self-sufficient — later sequence edits do not affect
               // already generated campaigns/automations.
@@ -1081,6 +1523,21 @@ export class CampaignsService {
         }
 
         if (repurchaseStage) {
+          // Repurchase conversion is COMMERCIAL: respect the anti-spam limits
+          // per customer (playbook §14). Transactional never blocks.
+          const allowed = await this.commercialAllowed(
+            tx,
+            organizationId,
+            row.customerId,
+          );
+          if (allowed !== 'ok') {
+            if (allowed === 'limit') {
+              skippedByLimit++;
+            } else {
+              skippedByFrequency++;
+            }
+            continue;
+          }
           const { stage } = repurchaseStage;
           await tx.automation.create({
             data: {
@@ -1091,6 +1548,8 @@ export class CampaignsService {
               scheduledDate: reference,
               status: 'SCHEDULED',
               priority: 0,
+              purpose: 'COMMERCIAL',
+              stageName: 'Recompra / renovación',
               messageTemplate: stage.templateOnPast ?? campaignTemplate,
             },
           });
@@ -1098,7 +1557,119 @@ export class CampaignsService {
         }
       }
     }
-    return automationCount;
+    return { count: automationCount, skippedByLimit, skippedByFrequency };
+  }
+
+  // Playbook §14: a customer may receive at most `maxCommercialPer60d`
+  // COMMERCIAL automations within the next 60 days (future scheduled) plus
+  // those already sent in the last 60 days. Only COMMERCIAL purpose counts.
+  private async commercialAllowed(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    customerId: string,
+  ): Promise<'ok' | 'limit' | 'frequency'> {
+    const max =
+      this.configService.get<number>('journeys.maxCommercialPer60d') ?? 3;
+    const minDays =
+      this.configService.get<number>('journeys.minDaysBetweenCommercial') ?? 3;
+    if (max <= 0) {
+      return 'limit';
+    }
+    const now = new Date();
+    const since = new Date(now.getTime() - 60 * 86_400_000);
+    const minSince = new Date(now.getTime() - minDays * 86_400_000);
+    const count = await tx.automation.count({
+      where: {
+        organizationId,
+        deletedAt: null,
+        purpose: 'COMMERCIAL',
+        purchase: { customerId },
+        OR: [
+          { status: 'SCHEDULED', scheduledDate: { gte: now } },
+          { status: 'EXECUTED', executedDate: { gte: since } },
+        ],
+      },
+    });
+    if (count >= max) {
+      return 'limit';
+    }
+    if (minDays > 0) {
+      // Playbook §14: nunca dos comerciales demasiado cerca.
+      const tooClose = await tx.automation.count({
+        where: {
+          organizationId,
+          deletedAt: null,
+          purpose: 'COMMERCIAL',
+          purchase: { customerId },
+          OR: [
+            { status: 'EXECUTED', executedDate: { gte: minSince, lte: now } },
+            {
+              status: 'SCHEDULED',
+              scheduledDate: {
+                gte: now,
+                lte: new Date(now.getTime() + minDays * 86_400_000),
+              },
+            },
+          ],
+        },
+      });
+      if (tooClose > 0) {
+        return 'frequency';
+      }
+    }
+    return 'ok';
+  }
+
+  // Fase 2/P0-D: entregados/respondidos + cadena comercial atribuida
+  // (cotizaciones → ventas → ingresos) y ROI estimado.
+  private async loadCampaignAttribution(
+    campaignId: string,
+    campaignUuid: string,
+  ): Promise<{
+    delivered: number;
+    responded: number;
+    quotes: number;
+    sales: number;
+    revenue: number;
+    whatsappCost: number;
+    roi: number | null;
+  }> {
+    const [delivered, responded, quoteAgg] = await Promise.all([
+      this.prisma.message.count({
+        where: {
+          type: 'AUTOMATIC',
+          direction: 'OUTBOUND',
+          automation: { campaignId },
+          status: { in: ['SENT', 'DELIVERED', 'READ'] },
+          deletedAt: null,
+        },
+      }),
+      this.prisma.message.count({
+        where: {
+          type: 'INCOMING',
+          direction: 'INBOUND',
+          inReplyToCampaignId: campaignUuid,
+          deletedAt: null,
+        },
+      }),
+      this.prisma.quote.aggregate({
+        where: { campaignId: campaignUuid, deletedAt: null },
+        _count: { _all: true, purchaseId: true },
+        _sum: { value: true },
+      }),
+    ]);
+
+    const quotes = quoteAgg._count._all;
+    const sales = quoteAgg._count.purchaseId;
+    const revenue =
+      (quoteAgg._sum.value?.toNumber() ?? 0) * (sales > 0 ? 1 : 0);
+    const messageCost =
+      this.configService.get<number>('campaigns.messageCost') ?? 200;
+    const whatsappCost = delivered * messageCost;
+    const roi =
+      whatsappCost > 0 ? (revenue - whatsappCost) / whatsappCost : null;
+
+    return { delivered, responded, quotes, sales, revenue, whatsappCost, roi };
   }
 
   private async loadCampaignStats(
@@ -1140,18 +1711,64 @@ export class CampaignsService {
     );
   }
 
-  private async resolveSegmentPurchases(
-    client: Prisma.TransactionClient,
-    organizationId: string,
+  // P0.2: validación transversal de mensajes (aprobación y activación).
+  // Rechaza campañas sin mensajes y templates con variables desconocidas.
+  private assertValidMessages(campaign: CampaignRow): void {
+    const templates = [
+      campaign.template,
+      campaign.templateD3,
+      campaign.templateD180,
+      campaign.templateD365,
+      ...(campaign.followUpSequence?.stages ?? []).flatMap((stage) => [
+        stage.template,
+        stage.templateOnPast ?? '',
+      ]),
+      // Fase 1: etapas inline del editor.
+      ...parseInlineStages(campaign.stages).flatMap((stage) => [
+        stage.template,
+        stage.templateOnPast ?? '',
+      ]),
+    ].filter(
+      (template): template is string =>
+        Boolean(template && template.trim().length > 0),
+    );
+
+    if (templates.length === 0) {
+      throw new BadRequestException({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Campaign has no messages',
+        },
+      });
+    }
+    const invalid = new Set<string>();
+    for (const template of templates) {
+      for (const variable of findInvalidVariables(template)) {
+        invalid.add(variable);
+      }
+    }
+    if (invalid.size > 0) {
+      throw new BadRequestException({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: `Invalid message variables: ${[...invalid].join(', ')}`,
+        },
+      });
+    }
+  }
+
+  private buildSegmentWhere(
     segment: CampaignSegmentDto | null,
-  ): Promise<
-    Array<{ purchaseId: string; customerId: string; purchaseDate: Date }>
-  > {
-    const where: Prisma.PurchaseWhereInput = {
+    organizationId: string,
+  ): Prisma.PurchaseWhereInput {
+    return {
       organizationId,
       deletedAt: null,
       customer: {
         deletedAt: null,
+        // Fase 5 (T19): los clientes que pidieron no ser contactados no entran
+        // en las campañas.
+        noContactAt: null,
         ...(segment?.city
           ? { city: { contains: segment.city, mode: 'insensitive' } }
           : {}),
@@ -1198,6 +1815,16 @@ export class CampaignsService {
         ? { warrantyMonths: segment.warrantyMonths }
         : {}),
     };
+  }
+
+  private async resolveSegmentPurchases(
+    client: Prisma.TransactionClient,
+    organizationId: string,
+    segment: CampaignSegmentDto | null,
+  ): Promise<
+    Array<{ purchaseId: string; customerId: string; purchaseDate: Date }>
+  > {
+    const where = this.buildSegmentWhere(segment, organizationId);
 
     const purchases = await client.purchase.findMany({
       where,

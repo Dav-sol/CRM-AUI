@@ -30,7 +30,25 @@ const campaign = {
     uuid: "seq-1",
     name: "Secuencia Demo — Garantía 12 meses",
     warrantyMonths: 12,
-    stageCount: 4,
+    stageCount: 2,
+    stages: [
+      {
+        uuid: "st-1",
+        name: "Bienvenida",
+        anchor: "PURCHASE_DATE",
+        offsetDays: 0,
+        template: "Hola {customerName}",
+        templateOnPast: null,
+      },
+      {
+        uuid: "st-2",
+        name: "Revisión mitad",
+        anchor: "WARRANTY_EXPIRY",
+        offsetDays: -180,
+        template: "Revisión gratuita",
+        templateOnPast: "Recompra",
+      },
+    ],
   },
 };
 
@@ -53,11 +71,16 @@ describe("CampaignDetailView", () => {
 
   it("muestra datos de la campaña y su secuencia vinculada", async () => {
     vi.mocked(apiGetCampaign).mockResolvedValue(campaign as never);
-    vi.mocked(apiListAutomations).mockResolvedValue({ data: [automation], meta: { page: 1, limit: 50, total: 1, pages: 1 } } as never);
+    vi.mocked(apiListAutomations).mockResolvedValue({
+      data: [automation],
+      meta: { page: 1, limit: 50, total: 1, pages: 1 },
+    } as never);
 
     render(<CampaignDetailView uuid="camp-1" />);
 
-    await waitFor(() => expect(screen.getByText("Campaña Demo — Garantía 12 meses")).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByText("Campaña Demo — Garantía 12 meses")).toBeTruthy(),
+    );
     expect(screen.getByText("Secuencia Demo — Garantía 12 meses")).toBeTruthy();
     expect(screen.getByText(/412 totales/)).toBeTruthy();
     expect(screen.getByText("Programada")).toBeTruthy();
@@ -65,7 +88,10 @@ describe("CampaignDetailView", () => {
 
   it("consulta las automatizaciones filtrando por campaignId", async () => {
     vi.mocked(apiGetCampaign).mockResolvedValue(campaign as never);
-    vi.mocked(apiListAutomations).mockResolvedValue({ data: [], meta: { page: 1, limit: 50, total: 0, pages: 0 } } as never);
+    vi.mocked(apiListAutomations).mockResolvedValue({
+      data: [],
+      meta: { page: 1, limit: 50, total: 0, pages: 0 },
+    } as never);
 
     render(<CampaignDetailView uuid="camp-1" />);
 
@@ -80,7 +106,10 @@ describe("CampaignDetailView", () => {
       ...campaign,
       followUpSequence: null,
     } as never);
-    vi.mocked(apiListAutomations).mockResolvedValue({ data: [], meta: { page: 1, limit: 50, total: 0, pages: 0 } } as never);
+    vi.mocked(apiListAutomations).mockResolvedValue({
+      data: [],
+      meta: { page: 1, limit: 50, total: 0, pages: 0 },
+    } as never);
 
     render(<CampaignDetailView uuid="camp-1" />);
 

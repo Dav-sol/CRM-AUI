@@ -1,0 +1,41 @@
+type: object
+description: "All fields optional. At least one must be provided."
+properties:
+  name:
+    type: string
+    minLength: 1
+    maxLength: 200
+  group:
+    type: string
+    maxLength: 100
+  category:
+    type: string
+    enum:
+      - CAMPAIGN
+      - FOLLOW_UP
+      - QUICK_REPLY
+  tone:
+    type: string
+    enum:
+      - PROFESSIONAL
+      - CARIBE_COMMERCIAL
+      - CARIBE_AUTHENTIC
+  angle:
+    type: string
+    enum:
+      - TRUST
+      - PREVENTION
+      - REPURCHASE
+      - LOYALTY
+      - CONVERSATION
+      - CALM
+  goal:
+    type: string
+    maxLength: 500
+  recommendedUse:
+    type: string
+    maxLength: 500
+  body:
+    type: string
+    minLength: 1
+    maxLength: 4096

@@ -28,11 +28,12 @@ export function FollowUpSequencesIndexPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [warrantyMonths, setWarrantyMonths] = useState<SequenceFilters["warrantyMonths"]>(undefined);
+  const [sort, setSort] = useState("");
   const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedSequence, setSelectedSequence] = useState<string | null>(null);
   const [editingSequence, setEditingSequence] = useState<FollowUpSequenceItem | null>(null);
-  const { items, meta, error } = useFollowUpSequences({ page, search, warrantyMonths, refreshKey });
+  const { items, meta, error } = useFollowUpSequences({ page, search, warrantyMonths, sort, refreshKey });
 
   const totalPages = meta?.pages ?? 1;
 
@@ -107,6 +108,21 @@ export function FollowUpSequencesIndexPage() {
             Limpiar búsqueda
           </Button>
         )}
+        <select
+          value={sort}
+          onChange={(event) => {
+            setSort(event.target.value);
+            setPage(1);
+          }}
+          className="h-8 appearance-none rounded-md border border-border/60 bg-background px-2 text-xs text-foreground outline-none transition-colors focus:border-primary/50"
+          aria-label="Ordenar secuencias"
+        >
+          <option value="">Orden</option>
+          <option value="-createdAt">Creada (nueva → vieja)</option>
+          <option value="createdAt">Creada (vieja → nueva)</option>
+          <option value="name">Nombre (A → Z)</option>
+          <option value="warrantyMonths">Garantía (menor → mayor)</option>
+        </select>
       </div>
 
       <div className="mt-4 min-h-0 flex-1 overflow-y-auto rounded-lg border border-border/60">

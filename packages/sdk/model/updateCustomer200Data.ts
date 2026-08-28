@@ -45,6 +45,17 @@ export type UpdateCustomer200Data = {
   city?: string | null;
   /** BLOCKED is reserved and inert in v1. */
   status: UpdateCustomer200DataStatus;
+  /**
+     * Fase 5 (T19): fecha del opt-out "No contactar". Cuando está presente, el
+     * cliente no recibe envíos comerciales ni automatizaciones.
+     * @nullable
+     */
+  noContactAt?: string | null;
+  /**
+     * Motivo del opt-out, cuando fue registrado.
+     * @nullable
+     */
+  noContactReason?: string | null;
   createdAt: string;
   updatedAt: string;
   /**

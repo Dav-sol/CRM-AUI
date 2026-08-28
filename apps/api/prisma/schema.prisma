@@ -38,6 +38,7 @@ model Organization {
   conversationTagAssignments ConversationTagAssignment[]
   conversationNotes          ConversationNote[]
   quickReplies               QuickReply[]
+  templates                  Template[]
 
   @@map("organizations")
 }
@@ -99,6 +100,10 @@ model Customer {
   address        String?
   city           String?
   status         CustomerStatus @default(ACTIVE)
+  // Fase 5 (T19): opt-out "No contactar" (playbook §15). Cuando está set, el
+  // cliente no recibe envíos comerciales ni automatizaciones. Null = permitido.
+  noContactAt     DateTime?      @map("no_contact_at")
+  noContactReason String?        @map("no_contact_reason")
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
   deletedAt      DateTime?      @map("deleted_at")
@@ -127,6 +132,9 @@ model Product {
   category       String?
   status         ProductStatus @default(ACTIVE)
   warrantyMonths Int?          @map("warranty_months")
+  // Fase urgente: precio de referencia (catálogo). La cotización lo prellena
+  // y el vendedor puede modificarlo.
+  price          Decimal?      @db.Decimal(12, 2) @map("price")
   createdAt      DateTime      @default(now()) @map("created_at")
   updatedAt      DateTime      @updatedAt @map("updated_at")
   deletedAt      DateTime?     @map("deleted_at")
@@ -153,6 +161,10 @@ model Purchase {
   purchaseDate      DateTime       @map("purchase_date")
   warrantyMonths    Int?           @map("warranty_months")
   warrantyExpiresAt DateTime?      @map("warranty_expires_at")
+  // Atribución de ventas (Fase 2): conversación que originó la venta (uuid).
+  sourceConversationId String?     @map("source_conversation_id")
+  // Fase P0-C: cotización que originó la venta (uuid).
+  quoteId             String?      @map("quote_id")
   quantity          Int
   value             Decimal        @db.Decimal(12, 2)
   status            PurchaseStatus @default(COMPLETED)
@@ -176,6 +188,39 @@ model Purchase {
   @@index([organizationId, status])
   @@index([organizationId, purchaseDate])
   @@map("purchases")
+}
+
+// Fase P0-C: cotización simple (un producto + cantidad). Conserva la cadena de
+// atribución: campaña → mensaje → conversación → cotización → venta. Los IDs
+// son escalares (sin @relation) como sourceConversationId/quoteId.
+model Quote {
+  id             String      @id @default(cuid())
+  uuid           String      @unique @default(uuid())
+  organizationId String      @map("organization_id")
+  conversationId String?     @map("conversation_id")
+  customerId     String?     @map("customer_id")
+  campaignId     String?     @map("campaign_id")
+  productId      String?     @map("product_id")
+  quantity       Int         @default(1)
+  value          Decimal     @db.Decimal(12, 2)
+  status         QuoteStatus @default(DRAFT)
+  purchaseId     String?     @map("purchase_id")
+  note           String?     @map("note")
+  sentAt         DateTime?   @map("sent_at")
+  acceptedAt     DateTime?   @map("accepted_at")
+  rejectedAt     DateTime?   @map("rejected_at")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+  deletedAt      DateTime?   @map("deleted_at")
+  createdBy      String?     @map("created_by")
+  updatedBy      String?     @map("updated_by")
+
+  @@index([organizationId])
+  @@index([customerId])
+  @@index([conversationId])
+  @@index([campaignId])
+  @@index([status])
+  @@map("quotes")
 }
 
 model CommercialCycle {
@@ -216,6 +261,10 @@ model Campaign {
 
   startAt              DateTime?       @map("start_at")
   segment              Json?           @map("segment")
+  // Fase 1: etapas propias de la campaña (timeline inline). Misma forma que
+  // FollowUpSequenceStage sin uuid: { name?, anchor, offsetDays, template,
+  // templateOnPast? }. Se usan cuando no hay followUpSequenceId.
+  stages               Json?           @map("stages")
   followUpSequenceId   String?         @map("follow_up_sequence_id")
 
   organization         Organization    @relation(fields: [organizationId], references: [id])
@@ -286,10 +335,16 @@ model Automation {
   priority          Int              @default(0)
   // Attempts made; bounds automatic retries of ERROR automations.
   retryCount        Int              @default(0) @map("retry_count")
+  // Anti-spam classification (playbook §14): only COMMERCIAL automations count
+  // against the 3/60d limit; transactional (warranty/post-purchase) never block.
+  purpose           AutomationPurpose @default(TRANSACTIONAL)
   // Snapshot of the FollowUpSequenceStage template at generation time.
   // When set, WhatsApp execution uses it directly instead of the legacy
   // campaign stage heuristics (templateD3/D180/D365).
   messageTemplate   String?          @map("message_template")
+  // Fase 4 (T14): nombre legible del motivo/etapa ("Revisión mitad de garantía",
+  // "Seguimiento postventa", "Recompra / renovación").
+  stageName         String?          @map("stage_name")
   createdBy         String?          @map("created_by")
   updatedBy         String?          @map("updated_by")
   deletedBy         String?          @map("deleted_by")
@@ -344,6 +399,10 @@ model Message {
   organizationId         String           @map("organization_id")
   conversationId         String           @map("conversation_id")
   automationId           String?          @map("automation_id")
+  // Atribución de respuestas (Fase 2): cuando un mensaje entrante responde a
+  // una automatización/campaña reciente, se guarda aquí su origen (uuid).
+  inReplyToAutomationId  String?          @map("in_reply_to_automation_id")
+  inReplyToCampaignId    String?          @map("in_reply_to_campaign_id")
   type                   MessageType
   content                String
   direction              MessageDirection
@@ -619,6 +678,14 @@ enum PurchaseStatus {
   REFUNDED
 }
 
+enum QuoteStatus {
+  DRAFT
+  ENVIADA
+  ACEPTADA
+  RECHAZADA
+  VENCIDA
+}
+
 enum CommercialCycleStatus {
   ACTIVE
   FINISHED
@@ -634,6 +701,8 @@ enum CampaignType {
 
 enum CampaignStatus {
   DRAFT
+  // Approved by marketing; activation from APPROVED only (playbook §20).
+  APPROVED
   ACTIVE
   PAUSED
   FINISHED
@@ -650,6 +719,11 @@ enum AutomationStatus {
   CANCELLED
   ERROR
   PAUSED
+}
+
+enum AutomationPurpose {
+  TRANSACTIONAL
+  COMMERCIAL
 }
 
 enum FollowUpStageAnchor {
@@ -702,4 +776,57 @@ enum ImportStatus {
   FAILED
   PARTIAL
   CANCELLED
+}
+
+// ---------------------------------------------------------------------------
+// Fase 2: Biblioteca de copy (specs/Biblioteca/biblioteca.md). Plantillas
+// reutilizables por intención comercial, org-scoped, sembradas con las 150
+// piezas (50 bases × 3 tonos).
+// ---------------------------------------------------------------------------
+
+enum TemplateCategory {
+  CAMPAIGN
+  FOLLOW_UP
+  QUICK_REPLY
+}
+
+enum TemplateTone {
+  PROFESSIONAL
+  CARIBE_COMMERCIAL
+  CARIBE_AUTHENTIC
+}
+
+enum TemplateAngle {
+  TRUST
+  PREVENTION
+  REPURCHASE
+  LOYALTY
+  CONVERSATION
+  CALM
+}
+
+model Template {
+  id             String           @id @default(cuid())
+  uuid           String           @unique @default(uuid())
+  organizationId String           @map("organization_id")
+  // Código de la biblioteca (ej: BW-001); null para plantillas propias.
+  code           String?
+  name           String
+  // Categoría comercial de la biblioteca (ej: "Bienvenida y postventa").
+  group          String?
+  category       TemplateCategory @default(CAMPAIGN)
+  tone           TemplateTone     @default(PROFESSIONAL)
+  angle          TemplateAngle
+  goal           String?
+  recommendedUse String?          @map("recommended_use")
+  body           String
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  deletedAt      DateTime?        @map("deleted_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([organizationId, category])
+  @@map("templates")
 }

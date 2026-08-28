@@ -35,6 +35,12 @@ import type {
   updateFollowUpSequence,
   updateCustomer,
   updateProduct,
+  updateCampaign,
+  listTemplates,
+  getTemplate,
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
 } from "@automatize-it/sdk";
 
 type SuccessData<
@@ -102,6 +108,7 @@ export type CreatePurchaseBody = Parameters<typeof createPurchase>[0];
 export type CampaignItem = SuccessData<typeof listCampaigns>[number];
 export type CampaignListParams = Parameters<typeof listCampaigns>[0];
 export type CreateCampaignBody = Parameters<typeof createCampaign>[0];
+export type UpdateCampaignBody = Parameters<typeof updateCampaign>[1];
 
 export type AutomationItem = SuccessData<typeof listAutomations>[number];
 export type AutomationListParams = Parameters<typeof listAutomations>[0];
@@ -142,3 +149,9 @@ export type CreateFollowUpSequenceBody = Parameters<
 export type UpdateFollowUpSequenceBody = Parameters<
   typeof updateFollowUpSequence
 >[1];
+
+export type TemplateItem = SuccessData<typeof listTemplates>[number];
+export type TemplateListParams = Parameters<typeof listTemplates>[0];
+export type TemplateDetail = NonNullable<SuccessData<typeof getTemplate>>;
+export type CreateTemplateBody = Parameters<typeof createTemplate>[0];
+export type UpdateTemplateBody = Parameters<typeof updateTemplate>[1];

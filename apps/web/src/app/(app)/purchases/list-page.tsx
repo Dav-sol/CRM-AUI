@@ -67,6 +67,7 @@ export function PurchasesIndexPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<PurchaseFilters["status"]>(undefined);
   const [range, setRange] = useState<RangeKey>("30d");
+  const [sort, setSort] = useState("");
   const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -78,6 +79,7 @@ export function PurchasesIndexPage() {
     status,
     dateFrom,
     dateTo,
+    sort,
     refreshKey,
   });
 
@@ -187,6 +189,22 @@ export function PurchasesIndexPage() {
             maxLength={100}
           />
         </form>
+        <select
+          value={sort}
+          onChange={(event) => {
+            setSort(event.target.value);
+            setPage(1);
+          }}
+          className="h-8 appearance-none rounded-md border border-border/60 bg-background px-2 text-xs text-foreground outline-none transition-colors focus:border-primary/50"
+          aria-label="Ordenar compras"
+        >
+          <option value="">Orden</option>
+          <option value="-purchaseDate">Fecha (nueva → vieja)</option>
+          <option value="purchaseDate">Fecha (vieja → nueva)</option>
+          <option value="-createdAt">Creada (nueva → vieja)</option>
+          <option value="-value">Valor (mayor → menor)</option>
+          <option value="value">Valor (menor → mayor)</option>
+        </select>
       </div>
 
       {/* KPIs globales */}

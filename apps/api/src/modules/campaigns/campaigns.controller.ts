@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { CampaignsService } from './campaigns.service';
 import { CampaignPathParamsDto } from './dto/campaign-path-params.dto';
 import { PreviewSegmentDto } from './dto/preview-segment.dto';
+import { PreviewSegmentDraftDto } from './dto/preview-segment-draft.dto';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
 import { QueryCampaignsDto } from './dto/query-campaigns.dto';
@@ -65,6 +66,15 @@ export class CampaignsController {
     return { data: await this.campaignsService.activate(user, params.uuid) };
   }
 
+  @Post('campaigns/:uuid/approve')
+  @HttpCode(HttpStatus.OK)
+  async approve(
+    @CurrentUser() user: AuthUser,
+    @Param() params: CampaignPathParamsDto,
+  ) {
+    return { data: await this.campaignsService.approve(user, params.uuid) };
+  }
+
   @Post('campaigns/:uuid/pause')
   @HttpCode(HttpStatus.OK)
   async pause(
@@ -101,6 +111,17 @@ export class CampaignsController {
   ) {
     return {
       data: await this.campaignsService.previewSegment(user, params.uuid, body),
+    };
+  }
+
+  @Post('campaigns/segment-preview')
+  @HttpCode(HttpStatus.OK)
+  async previewSegmentDraft(
+    @CurrentUser() user: AuthUser,
+    @Body() body: PreviewSegmentDraftDto,
+  ) {
+    return {
+      data: await this.campaignsService.previewSegmentDraft(user, body),
     };
   }
 }

@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   IsDateString,
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -53,4 +54,31 @@ export class QueryCustomersDto {
   @IsOptional()
   @Matches(new RegExp(`^-?(${SORT_FIELDS})$`))
   sort?: string;
+
+  // P0.1: filtros de drill-down del dashboard y listado comercial.
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(730)
+  warrantyExpiringInDays?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1825)
+  warrantyExpiredInDays?: number;
+
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  hasPurchases?: 'true' | 'false';
+
+  @IsOptional()
+  @IsIn(['true'])
+  noContact?: 'true';
+
+  @IsOptional()
+  @IsIn(['true'])
+  recurrent?: 'true';
 }

@@ -10,6 +10,7 @@
  *
  * OpenAPI spec version: 1.0.0
  */
+import type { ListAutomationsPurpose } from './listAutomationsPurpose';
 import type { ListAutomationsStatus } from './listAutomationsStatus';
 
 export type ListAutomationsParams = {
@@ -27,6 +28,11 @@ limit?: number;
  */
 status?: ListAutomationsStatus;
 /**
+ * Anti-spam classification (playbook §14): COMMERCIAL counts against the
+ * 3/60d limit; TRANSACTIONAL (warranty/post-purchase) never does.
+ */
+purpose?: ListAutomationsPurpose;
+/**
  * uuid of the owning commercial cycle.
  */
 commercialCycleId?: string;
@@ -38,6 +44,11 @@ campaignId?: string;
  * uuid of the customer that owns the triggering purchase.
  */
 customerId?: string;
+/**
+ * Free-text search over the customer name or product name
+ * (case-insensitive contains).
+ */
+search?: string;
 /**
  * Lower bound on scheduledDate. Date-only (`YYYY-MM-DD`) means the start
  * of that day; a full ISO datetime keeps its exact instant.

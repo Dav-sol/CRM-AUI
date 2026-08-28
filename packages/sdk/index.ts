@@ -14,10 +14,15 @@ import type {
   AcceptInvitation201,
   AcceptInvitation400,
   AcceptInvitationBody,
+  AcceptQuote200,
   ActivateCampaign200,
   ActivateCampaign400,
   ActivateCampaign401,
   ActivateCampaign404,
+  ApproveCampaign200,
+  ApproveCampaign400,
+  ApproveCampaign401,
+  ApproveCampaign404,
   ArchiveConversation200,
   ArchiveConversation400,
   ArchiveConversation404,
@@ -104,6 +109,17 @@ import type {
   CreateQuickReply400,
   CreateQuickReply403,
   CreateQuickReplyBody,
+  CreateQuote201,
+  CreateQuoteBody,
+  CreateTemplate201,
+  CreateTemplate400,
+  CreateTemplate401,
+  CreateTemplate403,
+  CreateTemplate500,
+  CreateTemplateBody,
+  CustomerAllowContact200,
+  CustomerNoContact200,
+  CustomerNoContactBody,
   DeleteConversationTag200,
   DeleteConversationTag403,
   DeleteConversationTag404,
@@ -124,6 +140,12 @@ import type {
   DeleteQuickReply200,
   DeleteQuickReply403,
   DeleteQuickReply404,
+  DeleteTemplate200,
+  DeleteTemplate401,
+  DeleteTemplate403,
+  DeleteTemplate404,
+  DeleteTemplate500,
+  ExpireQuote200,
   GetAutomation200,
   GetAutomation401,
   GetAutomation404,
@@ -143,10 +165,12 @@ import type {
   GetDashboardActionable401,
   GetDashboardActivity200,
   GetDashboardActivity401,
+  GetDashboardActivityParams,
   GetDashboardCampaigns200,
   GetDashboardCampaigns401,
   GetDashboardSummary200,
   GetDashboardSummary401,
+  GetDashboardSummaryParams,
   GetFollowUpSequence200,
   GetFollowUpSequence401,
   GetFollowUpSequence403,
@@ -170,6 +194,11 @@ import type {
   GetPurchase500,
   GetPurchaseStats200,
   GetPurchaseStatsParams,
+  GetQuote200,
+  GetTemplate200,
+  GetTemplate401,
+  GetTemplate404,
+  GetTemplate500,
   ListAutomations200,
   ListAutomations401,
   ListAutomationsParams,
@@ -215,6 +244,13 @@ import type {
   ListQuickReplies200,
   ListQuickReplies401,
   ListQuickRepliesParams,
+  ListQuotes200,
+  ListQuotesParams,
+  ListTemplates200,
+  ListTemplates400,
+  ListTemplates401,
+  ListTemplates500,
+  ListTemplatesParams,
   Login200,
   Login401,
   LoginBody,
@@ -231,9 +267,13 @@ import type {
   PreviewCampaignSegment401,
   PreviewCampaignSegment404,
   PreviewCampaignSegmentBody,
+  PreviewCampaignSegmentDraft200,
+  PreviewCampaignSegmentDraft401,
+  PreviewCampaignSegmentDraftBody,
   Refresh200,
   Refresh400,
   Refresh401,
+  RejectQuote200,
   RemoveConversationTag200,
   RemoveConversationTag404,
   ReopenConversation200,
@@ -262,6 +302,7 @@ import type {
   SendManualMessage404,
   SendManualMessage502,
   SendManualMessageBody,
+  SendQuote200,
   TransferConversation200,
   TransferConversation400,
   TransferConversation404,
@@ -307,7 +348,16 @@ import type {
   UpdateQuickReply400,
   UpdateQuickReply403,
   UpdateQuickReply404,
-  UpdateQuickReplyBody
+  UpdateQuickReplyBody,
+  UpdateQuote200,
+  UpdateQuoteBody,
+  UpdateTemplate200,
+  UpdateTemplate400,
+  UpdateTemplate401,
+  UpdateTemplate403,
+  UpdateTemplate404,
+  UpdateTemplate500,
+  UpdateTemplateBody
 } from './model';
 
 
@@ -1126,6 +1176,122 @@ export const deleteCustomer = async (id: string, options?: RequestInit): Promise
 
   const data: deleteCustomerResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as deleteCustomerResponse
+}
+
+
+
+export type customerNoContactResponse200 = {
+  data: CustomerNoContact200
+  status: 200
+}
+
+export type customerNoContactResponse401 = {
+  data: void
+  status: 401
+}
+
+export type customerNoContactResponse404 = {
+  data: void
+  status: 404
+}
+
+export type customerNoContactResponseSuccess = (customerNoContactResponse200) & {
+  headers: Headers;
+};
+export type customerNoContactResponseError = (customerNoContactResponse401 | customerNoContactResponse404) & {
+  headers: Headers;
+};
+
+export type customerNoContactResponse = (customerNoContactResponseSuccess | customerNoContactResponseError)
+
+export const getCustomerNoContactUrl = (id: string,) => {
+
+
+
+
+  return `/api/v1/customers/${id}/no-contact`
+}
+
+/**
+ * Fase 5 (T19): marca al cliente para que no reciba envíos comerciales ni
+ * automatizaciones (playbook §15). El scheduler y las campañas respetan el
+ * opt-out. Se registra la fecha y un motivo opcional.
+ * @summary Opt-out "No contactar"
+ */
+export const customerNoContact = async (id: string,
+    customerNoContactBody?: CustomerNoContactBody, options?: RequestInit): Promise<customerNoContactResponse> => {
+
+  const res = await fetch(getCustomerNoContactUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(customerNoContactBody)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: customerNoContactResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as customerNoContactResponse
+}
+
+
+
+export type customerAllowContactResponse200 = {
+  data: CustomerAllowContact200
+  status: 200
+}
+
+export type customerAllowContactResponse401 = {
+  data: void
+  status: 401
+}
+
+export type customerAllowContactResponse404 = {
+  data: void
+  status: 404
+}
+
+export type customerAllowContactResponseSuccess = (customerAllowContactResponse200) & {
+  headers: Headers;
+};
+export type customerAllowContactResponseError = (customerAllowContactResponse401 | customerAllowContactResponse404) & {
+  headers: Headers;
+};
+
+export type customerAllowContactResponse = (customerAllowContactResponseSuccess | customerAllowContactResponseError)
+
+export const getCustomerAllowContactUrl = (id: string,) => {
+
+
+
+
+  return `/api/v1/customers/${id}/allow-contact`
+}
+
+/**
+ * Fase 5 (T19): limpia el opt-out del cliente para volver a permitir
+ * envíos comerciales y automatizaciones.
+ * @summary Re-enable contact
+ */
+export const customerAllowContact = async (id: string, options?: RequestInit): Promise<customerAllowContactResponse> => {
+
+  const res = await fetch(getCustomerAllowContactUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: customerAllowContactResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as customerAllowContactResponse
 }
 
 
@@ -3668,10 +3834,10 @@ export const getUpdateCampaignUrl = (uuid: string,) => {
 
 /**
  * Partially updates the campaign. Only allowed while the campaign is
- * DRAFT (FR-004); any other state returns 400 VALIDATION_ERROR. At
- * least one field must be provided; the segment, when present, must
- * include at least one criterion.
- * @summary Update a campaign (DRAFT only)
+ * DRAFT or APPROVED, i.e. before activation (FR-004); any other state
+ * returns 400 VALIDATION_ERROR. At least one field must be provided;
+ * the segment, when present, must include at least one criterion.
+ * @summary Update a campaign (DRAFT or APPROVED)
  */
 export const updateCampaign = async (uuid: string,
     updateCampaignBody: UpdateCampaignBody, options?: RequestInit): Promise<updateCampaignResponse> => {
@@ -3732,11 +3898,13 @@ export const getActivateCampaignUrl = (uuid: string,) => {
 }
 
 /**
- * Transitions DRAFT → ACTIVE and generates one SCHEDULED automation
+ * Transitions APPROVED → ACTIVE and generates one SCHEDULED automation
  * per qualifying customer (deduplicated, most recent purchase first),
- * batched inside a single transaction (FR-006). Segments resolving to
- * more than MAX_AUTOMATIONS_PER_CAMPAIGN (5.000) return 400
- * SEGMENT_TOO_LARGE and leave the campaign in DRAFT.
+ * batched inside a single transaction (FR-006). Activation requires the
+ * campaign to be APPROVED (playbook §20: marketing approves before the
+ * platform executes). Segments resolving to more than
+ * MAX_AUTOMATIONS_PER_CAMPAIGN (5.000) return 400 SEGMENT_TOO_LARGE and
+ * leave the campaign in APPROVED.
  * @summary Activate a campaign
  */
 export const activateCampaign = async (uuid: string, options?: RequestInit): Promise<activateCampaignResponse> => {
@@ -3755,6 +3923,69 @@ export const activateCampaign = async (uuid: string, options?: RequestInit): Pro
 
   const data: activateCampaignResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as activateCampaignResponse
+}
+
+
+
+export type approveCampaignResponse200 = {
+  data: ApproveCampaign200
+  status: 200
+}
+
+export type approveCampaignResponse400 = {
+  data: ApproveCampaign400
+  status: 400
+}
+
+export type approveCampaignResponse401 = {
+  data: ApproveCampaign401
+  status: 401
+}
+
+export type approveCampaignResponse404 = {
+  data: ApproveCampaign404
+  status: 404
+}
+
+export type approveCampaignResponseSuccess = (approveCampaignResponse200) & {
+  headers: Headers;
+};
+export type approveCampaignResponseError = (approveCampaignResponse400 | approveCampaignResponse401 | approveCampaignResponse404) & {
+  headers: Headers;
+};
+
+export type approveCampaignResponse = (approveCampaignResponseSuccess | approveCampaignResponseError)
+
+export const getApproveCampaignUrl = (uuid: string,) => {
+
+
+
+
+  return `/api/v1/campaigns/${uuid}/approve`
+}
+
+/**
+ * Transitions DRAFT → APPROVED (playbook §20: marketing defines and
+ * approves campaigns; the platform executes). Activation requires
+ * APPROVED. All authenticated organization roles may approve (HG-3).
+ * @summary Approve a campaign for activation
+ */
+export const approveCampaign = async (uuid: string, options?: RequestInit): Promise<approveCampaignResponse> => {
+
+  const res = await fetch(getApproveCampaignUrl(uuid),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: approveCampaignResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as approveCampaignResponse
 }
 
 
@@ -4009,6 +4240,61 @@ export const previewCampaignSegment = async (uuid: string,
 
   const data: previewCampaignSegmentResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as previewCampaignSegmentResponse
+}
+
+
+
+export type previewCampaignSegmentDraftResponse200 = {
+  data: PreviewCampaignSegmentDraft200
+  status: 200
+}
+
+export type previewCampaignSegmentDraftResponse401 = {
+  data: PreviewCampaignSegmentDraft401
+  status: 401
+}
+
+export type previewCampaignSegmentDraftResponseSuccess = (previewCampaignSegmentDraftResponse200) & {
+  headers: Headers;
+};
+export type previewCampaignSegmentDraftResponseError = (previewCampaignSegmentDraftResponse401) & {
+  headers: Headers;
+};
+
+export type previewCampaignSegmentDraftResponse = (previewCampaignSegmentDraftResponseSuccess | previewCampaignSegmentDraftResponseError)
+
+export const getPreviewCampaignSegmentDraftUrl = () => {
+
+
+
+
+  return `/api/v1/campaigns/segment-preview`
+}
+
+/**
+ * Dry-run resolution of an audience without an existing campaign (Fase 3).
+ * Returns the qualifying customers, the estimated generated automations
+ * (customers × stages when a followUpSequence is referenced) and the
+ * estimated WhatsApp cost (COP). No automations are created, no PII is
+ * returned.
+ * @summary Stateless segment preview for the campaign creator
+ */
+export const previewCampaignSegmentDraft = async (previewCampaignSegmentDraftBody: PreviewCampaignSegmentDraftBody, options?: RequestInit): Promise<previewCampaignSegmentDraftResponse> => {
+
+  const res = await fetch(getPreviewCampaignSegmentDraftUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(previewCampaignSegmentDraftBody)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: previewCampaignSegmentDraftResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as previewCampaignSegmentDraftResponse
 }
 
 
@@ -4462,12 +4748,19 @@ export type getDashboardSummaryResponseError = (getDashboardSummaryResponse401) 
 
 export type getDashboardSummaryResponse = (getDashboardSummaryResponseSuccess | getDashboardSummaryResponseError)
 
-export const getGetDashboardSummaryUrl = () => {
+export const getGetDashboardSummaryUrl = (params?: GetDashboardSummaryParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/v1/dashboard/summary`
+  return stringifiedParams.length > 0 ? `/api/v1/dashboard/summary?${stringifiedParams}` : `/api/v1/dashboard/summary`
 }
 
 /**
@@ -4478,9 +4771,9 @@ export const getGetDashboardSummaryUrl = () => {
  * month (HG-3).
  * @summary Global KPIs
  */
-export const getDashboardSummary = async ( options?: RequestInit): Promise<getDashboardSummaryResponse> => {
+export const getDashboardSummary = async (params?: GetDashboardSummaryParams, options?: RequestInit): Promise<getDashboardSummaryResponse> => {
 
-  const res = await fetch(getGetDashboardSummaryUrl(),
+  const res = await fetch(getGetDashboardSummaryUrl(params),
   {
     ...options,
     method: 'GET'
@@ -4570,12 +4863,19 @@ export type getDashboardActivityResponseError = (getDashboardActivityResponse401
 
 export type getDashboardActivityResponse = (getDashboardActivityResponseSuccess | getDashboardActivityResponseError)
 
-export const getGetDashboardActivityUrl = () => {
+export const getGetDashboardActivityUrl = (params?: GetDashboardActivityParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/v1/dashboard/activity`
+  return stringifiedParams.length > 0 ? `/api/v1/dashboard/activity?${stringifiedParams}` : `/api/v1/dashboard/activity`
 }
 
 /**
@@ -4584,9 +4884,9 @@ export const getGetDashboardActivityUrl = () => {
  * exposes message content or customer PII.
  * @summary Activity feed
  */
-export const getDashboardActivity = async ( options?: RequestInit): Promise<getDashboardActivityResponse> => {
+export const getDashboardActivity = async (params?: GetDashboardActivityParams, options?: RequestInit): Promise<getDashboardActivityResponse> => {
 
-  const res = await fetch(getGetDashboardActivityUrl(),
+  const res = await fetch(getGetDashboardActivityUrl(params),
   {
     ...options,
     method: 'GET'
@@ -4977,6 +5277,723 @@ export const deleteFollowUpSequence = async (uuid: string, options?: RequestInit
 
   const data: deleteFollowUpSequenceResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as deleteFollowUpSequenceResponse
+}
+
+
+
+export type createQuoteResponse201 = {
+  data: CreateQuote201
+  status: 201
+}
+
+export type createQuoteResponse401 = {
+  data: void
+  status: 401
+}
+
+export type createQuoteResponseSuccess = (createQuoteResponse201) & {
+  headers: Headers;
+};
+export type createQuoteResponseError = (createQuoteResponse401) & {
+  headers: Headers;
+};
+
+export type createQuoteResponse = (createQuoteResponseSuccess | createQuoteResponseError)
+
+export const getCreateQuoteUrl = () => {
+
+
+
+
+  return `/api/v1/quotes`
+}
+
+/**
+ * Crea una cotización en estado BORRADOR (Fase P0-C).
+ * @summary Create a quote (DRAFT)
+ */
+export const createQuote = async (createQuoteBody: CreateQuoteBody, options?: RequestInit): Promise<createQuoteResponse> => {
+
+  const res = await fetch(getCreateQuoteUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createQuoteBody)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: createQuoteResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as createQuoteResponse
+}
+
+
+
+export type listQuotesResponse200 = {
+  data: ListQuotes200
+  status: 200
+}
+
+export type listQuotesResponse401 = {
+  data: void
+  status: 401
+}
+
+export type listQuotesResponseSuccess = (listQuotesResponse200) & {
+  headers: Headers;
+};
+export type listQuotesResponseError = (listQuotesResponse401) & {
+  headers: Headers;
+};
+
+export type listQuotesResponse = (listQuotesResponseSuccess | listQuotesResponseError)
+
+export const getListQuotesUrl = (params?: ListQuotesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/quotes?${stringifiedParams}` : `/api/v1/quotes`
+}
+
+/**
+ * Filtra por customerId/conversationId/status. Las ENVIADA viejas pasan a VENCIDA automáticamente.
+ * @summary List quotes
+ */
+export const listQuotes = async (params?: ListQuotesParams, options?: RequestInit): Promise<listQuotesResponse> => {
+
+  const res = await fetch(getListQuotesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listQuotesResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listQuotesResponse
+}
+
+
+
+export type getQuoteResponse200 = {
+  data: GetQuote200
+  status: 200
+}
+
+export type getQuoteResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getQuoteResponseSuccess = (getQuoteResponse200) & {
+  headers: Headers;
+};
+export type getQuoteResponseError = (getQuoteResponse404) & {
+  headers: Headers;
+};
+
+export type getQuoteResponse = (getQuoteResponseSuccess | getQuoteResponseError)
+
+export const getGetQuoteUrl = (uuid: string,) => {
+
+
+
+
+  return `/api/v1/quotes/${uuid}`
+}
+
+/**
+ * @summary Get a quote
+ */
+export const getQuote = async (uuid: string, options?: RequestInit): Promise<getQuoteResponse> => {
+
+  const res = await fetch(getGetQuoteUrl(uuid),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: getQuoteResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getQuoteResponse
+}
+
+
+
+export type updateQuoteResponse200 = {
+  data: UpdateQuote200
+  status: 200
+}
+
+export type updateQuoteResponseSuccess = (updateQuoteResponse200) & {
+  headers: Headers;
+};
+;
+
+export type updateQuoteResponse = (updateQuoteResponseSuccess)
+
+export const getUpdateQuoteUrl = (uuid: string,) => {
+
+
+
+
+  return `/api/v1/quotes/${uuid}`
+}
+
+/**
+ * @summary Update a quote (DRAFT/ENVIADA only)
+ */
+export const updateQuote = async (uuid: string,
+    updateQuoteBody: UpdateQuoteBody, options?: RequestInit): Promise<updateQuoteResponse> => {
+
+  const res = await fetch(getUpdateQuoteUrl(uuid),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateQuoteBody)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: updateQuoteResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as updateQuoteResponse
+}
+
+
+
+export type sendQuoteResponse200 = {
+  data: SendQuote200
+  status: 200
+}
+
+export type sendQuoteResponseSuccess = (sendQuoteResponse200) & {
+  headers: Headers;
+};
+;
+
+export type sendQuoteResponse = (sendQuoteResponseSuccess)
+
+export const getSendQuoteUrl = (uuid: string,) => {
+
+
+
+
+  return `/api/v1/quotes/${uuid}/send`
+}
+
+/**
+ * @summary Mark a quote as ENVIADA
+ */
+export const sendQuote = async (uuid: string, options?: RequestInit): Promise<sendQuoteResponse> => {
+
+  const res = await fetch(getSendQuoteUrl(uuid),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: sendQuoteResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as sendQuoteResponse
+}
+
+
+
+export type acceptQuoteResponse200 = {
+  data: AcceptQuote200
+  status: 200
+}
+
+export type acceptQuoteResponseSuccess = (acceptQuoteResponse200) & {
+  headers: Headers;
+};
+;
+
+export type acceptQuoteResponse = (acceptQuoteResponseSuccess)
+
+export const getAcceptQuoteUrl = (uuid: string,) => {
+
+
+
+
+  return `/api/v1/quotes/${uuid}/accept`
+}
+
+/**
+ * @summary Accept a sent quote (ACEPTADA)
+ */
+export const acceptQuote = async (uuid: string, options?: RequestInit): Promise<acceptQuoteResponse> => {
+
+  const res = await fetch(getAcceptQuoteUrl(uuid),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: acceptQuoteResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as acceptQuoteResponse
+}
+
+
+
+export type rejectQuoteResponse200 = {
+  data: RejectQuote200
+  status: 200
+}
+
+export type rejectQuoteResponseSuccess = (rejectQuoteResponse200) & {
+  headers: Headers;
+};
+;
+
+export type rejectQuoteResponse = (rejectQuoteResponseSuccess)
+
+export const getRejectQuoteUrl = (uuid: string,) => {
+
+
+
+
+  return `/api/v1/quotes/${uuid}/reject`
+}
+
+/**
+ * @summary Reject a sent quote (RECHAZADA)
+ */
+export const rejectQuote = async (uuid: string, options?: RequestInit): Promise<rejectQuoteResponse> => {
+
+  const res = await fetch(getRejectQuoteUrl(uuid),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: rejectQuoteResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as rejectQuoteResponse
+}
+
+
+
+export type expireQuoteResponse200 = {
+  data: ExpireQuote200
+  status: 200
+}
+
+export type expireQuoteResponseSuccess = (expireQuoteResponse200) & {
+  headers: Headers;
+};
+;
+
+export type expireQuoteResponse = (expireQuoteResponseSuccess)
+
+export const getExpireQuoteUrl = (uuid: string,) => {
+
+
+
+
+  return `/api/v1/quotes/${uuid}/expire`
+}
+
+/**
+ * @summary Mark a quote as VENCIDA
+ */
+export const expireQuote = async (uuid: string, options?: RequestInit): Promise<expireQuoteResponse> => {
+
+  const res = await fetch(getExpireQuoteUrl(uuid),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: expireQuoteResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as expireQuoteResponse
+}
+
+
+
+export type listTemplatesResponse200 = {
+  data: ListTemplates200
+  status: 200
+}
+
+export type listTemplatesResponse400 = {
+  data: ListTemplates400
+  status: 400
+}
+
+export type listTemplatesResponse401 = {
+  data: ListTemplates401
+  status: 401
+}
+
+export type listTemplatesResponse500 = {
+  data: ListTemplates500
+  status: 500
+}
+
+export type listTemplatesResponseSuccess = (listTemplatesResponse200) & {
+  headers: Headers;
+};
+export type listTemplatesResponseError = (listTemplatesResponse400 | listTemplatesResponse401 | listTemplatesResponse500) & {
+  headers: Headers;
+};
+
+export type listTemplatesResponse = (listTemplatesResponseSuccess | listTemplatesResponseError)
+
+export const getListTemplatesUrl = (params?: ListTemplatesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/templates?${stringifiedParams}` : `/api/v1/templates`
+}
+
+/**
+ * Returns a paginated list of templates ordered by code, name.
+ * Supports filtering by category, tone, angle, group, and free-text search.
+ * @summary List templates of the organization
+ */
+export const listTemplates = async (params?: ListTemplatesParams, options?: RequestInit): Promise<listTemplatesResponse> => {
+
+  const res = await fetch(getListTemplatesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: listTemplatesResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as listTemplatesResponse
+}
+
+
+
+export type createTemplateResponse201 = {
+  data: CreateTemplate201
+  status: 201
+}
+
+export type createTemplateResponse400 = {
+  data: CreateTemplate400
+  status: 400
+}
+
+export type createTemplateResponse401 = {
+  data: CreateTemplate401
+  status: 401
+}
+
+export type createTemplateResponse403 = {
+  data: CreateTemplate403
+  status: 403
+}
+
+export type createTemplateResponse500 = {
+  data: CreateTemplate500
+  status: 500
+}
+
+export type createTemplateResponseSuccess = (createTemplateResponse201) & {
+  headers: Headers;
+};
+export type createTemplateResponseError = (createTemplateResponse400 | createTemplateResponse401 | createTemplateResponse403 | createTemplateResponse500) & {
+  headers: Headers;
+};
+
+export type createTemplateResponse = (createTemplateResponseSuccess | createTemplateResponseError)
+
+export const getCreateTemplateUrl = () => {
+
+
+
+
+  return `/api/v1/templates`
+}
+
+/**
+ * Creates a new template for the organization. Validates that body
+ * only uses supported variables ({customerName}, {productName},
+ * {organizationName}, {brand}, {warrantyExpiresAt}, {purchaseDate}).
+ * OPERADOR is not allowed (403).
+ * @summary Create a template
+ */
+export const createTemplate = async (createTemplateBody: CreateTemplateBody, options?: RequestInit): Promise<createTemplateResponse> => {
+
+  const res = await fetch(getCreateTemplateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createTemplateBody)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: createTemplateResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as createTemplateResponse
+}
+
+
+
+export type getTemplateResponse200 = {
+  data: GetTemplate200
+  status: 200
+}
+
+export type getTemplateResponse401 = {
+  data: GetTemplate401
+  status: 401
+}
+
+export type getTemplateResponse404 = {
+  data: GetTemplate404
+  status: 404
+}
+
+export type getTemplateResponse500 = {
+  data: GetTemplate500
+  status: 500
+}
+
+export type getTemplateResponseSuccess = (getTemplateResponse200) & {
+  headers: Headers;
+};
+export type getTemplateResponseError = (getTemplateResponse401 | getTemplateResponse404 | getTemplateResponse500) & {
+  headers: Headers;
+};
+
+export type getTemplateResponse = (getTemplateResponseSuccess | getTemplateResponseError)
+
+export const getGetTemplateUrl = (id: string,) => {
+
+
+
+
+  return `/api/v1/templates/${id}`
+}
+
+/**
+ * Returns a single template. Returns 404 TEMPLATE_NOT_FOUND for unknown
+ * ids, soft-deleted templates, or templates of another organization.
+ * @summary Get a template by id
+ */
+export const getTemplate = async (id: string, options?: RequestInit): Promise<getTemplateResponse> => {
+
+  const res = await fetch(getGetTemplateUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: getTemplateResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getTemplateResponse
+}
+
+
+
+export type updateTemplateResponse200 = {
+  data: UpdateTemplate200
+  status: 200
+}
+
+export type updateTemplateResponse400 = {
+  data: UpdateTemplate400
+  status: 400
+}
+
+export type updateTemplateResponse401 = {
+  data: UpdateTemplate401
+  status: 401
+}
+
+export type updateTemplateResponse403 = {
+  data: UpdateTemplate403
+  status: 403
+}
+
+export type updateTemplateResponse404 = {
+  data: UpdateTemplate404
+  status: 404
+}
+
+export type updateTemplateResponse500 = {
+  data: UpdateTemplate500
+  status: 500
+}
+
+export type updateTemplateResponseSuccess = (updateTemplateResponse200) & {
+  headers: Headers;
+};
+export type updateTemplateResponseError = (updateTemplateResponse400 | updateTemplateResponse401 | updateTemplateResponse403 | updateTemplateResponse404 | updateTemplateResponse500) & {
+  headers: Headers;
+};
+
+export type updateTemplateResponse = (updateTemplateResponseSuccess | updateTemplateResponseError)
+
+export const getUpdateTemplateUrl = (id: string,) => {
+
+
+
+
+  return `/api/v1/templates/${id}`
+}
+
+/**
+ * Updates mutable fields of a template (name, group, category, tone,
+ * angle, goal, recommendedUse, body). At least one field must be provided.
+ * Validates body variables if body is updated.
+ * OPERADOR is not allowed (403).
+ * @summary Update a template
+ */
+export const updateTemplate = async (id: string,
+    updateTemplateBody: UpdateTemplateBody, options?: RequestInit): Promise<updateTemplateResponse> => {
+
+  const res = await fetch(getUpdateTemplateUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateTemplateBody)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: updateTemplateResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as updateTemplateResponse
+}
+
+
+
+export type deleteTemplateResponse200 = {
+  data: DeleteTemplate200
+  status: 200
+}
+
+export type deleteTemplateResponse401 = {
+  data: DeleteTemplate401
+  status: 401
+}
+
+export type deleteTemplateResponse403 = {
+  data: DeleteTemplate403
+  status: 403
+}
+
+export type deleteTemplateResponse404 = {
+  data: DeleteTemplate404
+  status: 404
+}
+
+export type deleteTemplateResponse500 = {
+  data: DeleteTemplate500
+  status: 500
+}
+
+export type deleteTemplateResponseSuccess = (deleteTemplateResponse200) & {
+  headers: Headers;
+};
+export type deleteTemplateResponseError = (deleteTemplateResponse401 | deleteTemplateResponse403 | deleteTemplateResponse404 | deleteTemplateResponse500) & {
+  headers: Headers;
+};
+
+export type deleteTemplateResponse = (deleteTemplateResponseSuccess | deleteTemplateResponseError)
+
+export const getDeleteTemplateUrl = (id: string,) => {
+
+
+
+
+  return `/api/v1/templates/${id}`
+}
+
+/**
+ * Soft-deletes a template setting deletedAt; history is preserved
+ * and the record is hidden from queries. OPERADOR is not allowed (403).
+ * @summary Soft-delete a template
+ */
+export const deleteTemplate = async (id: string, options?: RequestInit): Promise<deleteTemplateResponse> => {
+
+  const res = await fetch(getDeleteTemplateUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: deleteTemplateResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as deleteTemplateResponse
 }
 
 

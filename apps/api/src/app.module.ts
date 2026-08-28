@@ -19,8 +19,12 @@ import { AutomationsModule } from './modules/automations/automations.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { ConversationsModule } from './modules/conversations/conversations.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
+import { QuotesModule } from './modules/quotes/quotes.module';
 import { FollowUpSequencesModule } from './modules/follow-up-sequences/follow-up-sequences.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { TemplatesModule } from './modules/templates/templates.module';
+import { MessagesModule } from './modules/messages/messages.module';
+import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
   imports: [
@@ -61,10 +65,17 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     ConversationsModule,
 
     CampaignsModule,
+    QuotesModule,
 
     FollowUpSequencesModule,
 
     DashboardModule,
+
+    TemplatesModule,
+
+    MessagesModule,
+
+    ReportsModule,
   ],
 })
 export class AppModule {}

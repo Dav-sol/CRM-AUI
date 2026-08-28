@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, apiListProducts } from "@/lib/api";
+import { formatCurrency } from "@/lib/format";
 import type { ProductItem, ProductListParams } from "@/lib/sdk-types";
 import { PRODUCT_STATUS_LABELS } from "@/lib/validators";
 import { ProductActions } from "./product-actions";
@@ -119,17 +120,27 @@ type ProductListProps = {
   onChanged: () => void;
 };
 
-function normalizeFamily(category: string | null | undefined): string {
-  const value = (category ?? "").trim().toUpperCase();
-  if (value.startsWith("MAC")) return "MAC";
-  if (value === "WILLARD") return "WILLARD";
-  if (value === "DUNCAN") return "DUNCAN";
+// Fase 6 (T20-lite): clasifica por categoría Y nombre para que los items de
+// marcas principales con categoría genérica (p. ej. "GENERAL") no caigan en
+// "Otras marcas". La fuente de verdad definitiva (campo brand) queda pendiente
+// de Human Gate (datos).
+function normalizeFamily(
+  category: string | null | undefined,
+  name: string | null | undefined,
+): string {
+  const source = `${category ?? ""} ${name ?? ""}`.trim().toUpperCase();
+  if (source.includes("MAC")) return "MAC";
+  if (source.includes("WILLARD")) return "WILLARD";
+  if (source.includes("DUNCAN")) return "DUNCAN";
   return "Otras marcas";
 }
 
 const FAMILY_ORDER = ["MAC", "WILLARD", "DUNCAN", "Otras marcas"];
 
 export function ProductList({ items, error, onChanged }: ProductListProps) {
+  // Fase 6 (T22): tope por familia para no renderizar el catálogo completo.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const FAMILY_PAGE_SIZE = 15;
   if (items === null) {
     return (
       <div className="space-y-2" aria-label="Cargando productos">
@@ -170,7 +181,7 @@ export function ProductList({ items, error, onChanged }: ProductListProps) {
 
   const groups = new Map<string, ProductItem[]>();
   for (const product of items) {
-    const family = normalizeFamily(product.category);
+    const family = normalizeFamily(product.category, product.name);
     const bucket = groups.get(family) ?? [];
     bucket.push(product);
     groups.set(family, bucket);
@@ -196,7 +207,7 @@ export function ProductList({ items, error, onChanged }: ProductListProps) {
             </span>
           </div>
           <ul className="mt-2 divide-y divide-border/60 rounded-lg border border-border/60 bg-card">
-            {familyItems.map((product) => (
+            {familyItems.slice(0, expanded[family] ? undefined : FAMILY_PAGE_SIZE).map((product) => (
               <li
                 key={product.uuid}
                 className="flex items-center gap-4 px-4 py-2.5"
@@ -223,11 +234,32 @@ export function ProductList({ items, error, onChanged }: ProductListProps) {
                     Sin garantía
                   </Badge>
                 )}
+                {product.price ? (
+                  <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                    ${formatCurrency(product.price)}
+                  </span>
+                ) : null}
                 <ProductStatusBadge status={product.status} />
                 <ProductActions product={product} onChanged={onChanged} />
               </li>
             ))}
           </ul>
+          {familyItems.length > FAMILY_PAGE_SIZE && (
+            <button
+              type="button"
+              onClick={() =>
+                setExpanded((current) => ({
+                  ...current,
+                  [family]: !current[family],
+                }))
+              }
+              className="mt-1.5 px-2 text-xs font-medium text-primary hover:underline"
+            >
+              {expanded[family]
+                ? "Mostrar menos"
+                : `Ver ${familyItems.length - FAMILY_PAGE_SIZE} más`}
+            </button>
+          )}
         </section>
       ))}
     </div>

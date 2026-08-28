@@ -1,0 +1,25 @@
+type: object
+required:
+  - data
+  - meta
+properties:
+  data:
+    type: array
+    items:
+      $ref: "./Template.yaml"
+  meta:
+    type: object
+    required:
+      - page
+      - limit
+      - total
+      - pages
+    properties:
+      page:
+        type: integer
+      limit:
+        type: integer
+      total:
+        type: integer
+      pages:
+        type: integer

@@ -36,6 +36,13 @@ properties:
     nullable: true
     description: Warranty duration in months from the product catalog (12, 15, 18 or 24).
 
+  price:
+    type: number
+    nullable: true
+    description: |
+      Precio de referencia del catálogo (COP). Las cotizaciones lo prellenan
+      y el vendedor puede modificarlo.
+
   status:
     type: string
     enum:

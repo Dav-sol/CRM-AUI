@@ -14,6 +14,8 @@
 export type GetDashboardActionable200DataRepurchaseWindowItem = {
   purchaseId: string;
   customerName: string;
+  customerUuid: string;
   productName: string;
   warrantyExpiresAt: string;
+  potentialValue: number;
 };

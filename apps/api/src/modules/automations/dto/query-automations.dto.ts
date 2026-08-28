@@ -10,7 +10,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { AutomationStatus } from '@prisma/client';
+import { AutomationPurpose, AutomationStatus } from '@prisma/client';
 
 const SORT_FIELDS = 'scheduledDate|createdAt|updatedAt|status';
 
@@ -33,6 +33,10 @@ export class QueryAutomationsDto {
   status?: AutomationStatus;
 
   @IsOptional()
+  @IsEnum(AutomationPurpose)
+  purpose?: AutomationPurpose;
+
+  @IsOptional()
   @IsString()
   @MaxLength(64)
   commercialCycleId?: string;
@@ -46,6 +50,11 @@ export class QueryAutomationsDto {
   @IsString()
   @MaxLength(64)
   customerId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
 
   @IsOptional()
   @IsDateString()

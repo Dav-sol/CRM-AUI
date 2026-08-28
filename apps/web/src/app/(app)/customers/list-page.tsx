@@ -1,30 +1,41 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 
 import { CreateCustomerSheet } from "@/components/customers/create-customer-sheet";
 import { CustomerList, useCustomers } from "@/components/customers/customer-list";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { ListToolbar } from "@/components/ui/list-toolbar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useListQuery } from "@/lib/use-list-query";
+
+const CUSTOMER_SORT_OPTIONS = [
+  { value: "-createdAt", label: "Creados (nuevo → viejo)" },
+  { value: "createdAt", label: "Creados (viejo → nuevo)" },
+  { value: "name", label: "Nombre (A → Z)" },
+  { value: "-name", label: "Nombre (Z → A)" },
+  { value: "city", label: "Ciudad" },
+  { value: "status", label: "Estado" },
+];
 
 export function CustomersIndexPage() {
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const { state, set } = useListQuery({});
   const [refreshKey, setRefreshKey] = useState(0);
-  const { items, meta, error } = useCustomers({ page, search, refreshKey });
+  const { items, meta, error } = useCustomers({
+    page: state.page,
+    search: state.search,
+    status: state.status,
+    createdFrom: state.from,
+    createdTo: state.to,
+    sort: state.sort,
+    refreshKey,
+  });
 
   const totalPages = meta?.pages ?? 1;
 
-  function applySearch(event: React.FormEvent) {
-    event.preventDefault();
-    setPage(1);
-    setSearch(searchInput.trim());
-  }
-
   return (
-    <div className="mx-auto flex h-full w-full max-w-6xl flex-col p-6 lg:p-8">
+    <div className="mx-auto w-full max-w-6xl space-y-5 p-6 lg:p-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Clientes</h1>
@@ -40,41 +51,53 @@ export function CustomersIndexPage() {
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <form onSubmit={applySearch} className="relative w-full max-w-xs">
-          <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
-            placeholder="Buscar por nombre, código, teléfono o email…"
-            className="pl-9"
-            aria-label="Buscar clientes"
-            maxLength={100}
+      <div className="mt-4">
+        <ListToolbar
+          searchValue={state.search}
+          onSearchChange={(search) => set({ search })}
+          searchPlaceholder="Buscar por nombre, código, teléfono o email…"
+          sort={state.sort}
+          sortOptions={CUSTOMER_SORT_OPTIONS}
+          onSortChange={(sort) => set({ sort })}
+          filters={[
+            {
+              value: state.status,
+              onChange: (status) => set({ status }),
+              options: [
+                { value: "ACTIVE", label: "Activos" },
+                { value: "INACTIVE", label: "Inactivos" },
+                { value: "PENDING", label: "Pendientes" },
+                { value: "BLOCKED", label: "Bloqueados" },
+              ],
+              placeholder: "Estado",
+              "aria-label": "Filtrar por estado",
+            },
+          ]}
+        >
+          <DateRangePicker
+            value={{ from: state.from, to: state.to, compareFrom: state.compareFrom, compareTo: state.compareTo }}
+            onChange={(range) =>
+              set({ from: range.from, to: range.to, compareFrom: range.compareFrom, compareTo: range.compareTo })
+            }
           />
-        </form>
-        {search && (
-          <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setSearchInput(""); setPage(1); }}>
-            Limpiar búsqueda
-          </Button>
-        )}
+        </ListToolbar>
       </div>
 
-      <div className="mt-4 min-h-0 flex-1 overflow-y-auto rounded-lg border border-border/60">
+      <div className="mt-4">
         <CustomerList items={items} error={error} />
       </div>
 
       {meta && (
         <div className="mt-4 flex items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground">
-            Página {meta.page} de {totalPages} · {meta.total} resultados
+            Página {state.page} de {totalPages} · {meta.total} resultados
           </p>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
-              disabled={page <= 1 || items === null}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={state.page <= 1 || items === null}
+              onClick={() => set({ page: Math.max(1, state.page - 1) })}
               aria-label="Página anterior"
             >
               <ChevronLeft />
@@ -83,8 +106,8 @@ export function CustomersIndexPage() {
             <Button
               variant="outline"
               size="sm"
-              disabled={page >= totalPages || items === null}
-              onClick={() => setPage((p) => p + 1)}
+              disabled={state.page >= totalPages || items === null}
+              onClick={() => set({ page: state.page + 1 })}
               aria-label="Página siguiente"
             >
               Siguiente

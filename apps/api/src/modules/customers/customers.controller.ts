@@ -19,6 +19,7 @@ import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { QueryCustomersDto } from './dto/query-customers.dto';
+import { NoContactCustomerDto } from './dto/no-contact-customer.dto';
 
 @Controller('customers')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -44,6 +45,17 @@ export class CustomersController {
     return { data: customer };
   }
 
+  @Get(':id/timeline')
+  async findTimeline(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    const timeline = await this.customersService.findTimeline(user, id);
+    if (!timeline) {
+      throw new NotFoundException({
+        error: { code: 'CUSTOMER_NOT_FOUND', message: 'Customer not found' },
+      });
+    }
+    return { data: timeline };
+  }
+
   @Post()
   @Roles('PLATFORM_OWNER', 'ADMINISTRADOR', 'GERENTE')
   async create(@CurrentUser() user: AuthUser, @Body() dto: CreateCustomerDto) {
@@ -66,5 +78,23 @@ export class CustomersController {
   async remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     await this.customersService.remove(user, id);
     return { data: { success: true } };
+  }
+
+  @Post(':id/no-contact')
+  @Roles('PLATFORM_OWNER', 'ADMINISTRADOR', 'GERENTE')
+  async noContact(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: NoContactCustomerDto,
+  ) {
+    return {
+      data: await this.customersService.noContact(user, id, dto.reason),
+    };
+  }
+
+  @Post(':id/allow-contact')
+  @Roles('PLATFORM_OWNER', 'ADMINISTRADOR', 'GERENTE')
+  async allowContact(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return { data: await this.customersService.allowContact(user, id) };
   }
 }

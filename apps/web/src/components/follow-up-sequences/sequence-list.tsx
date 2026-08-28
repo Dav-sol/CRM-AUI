@@ -14,6 +14,7 @@ export type SequenceFilters = {
   page?: number;
   search?: string;
   warrantyMonths?: 12 | 15 | 18 | 24;
+  sort?: string;
   refreshKey?: number;
 };
 
@@ -36,6 +37,9 @@ export function useFollowUpSequences(filters: SequenceFilters) {
       }
       if (filters.warrantyMonths) {
         params.warrantyMonths = filters.warrantyMonths;
+      }
+      if (filters.sort) {
+        params.sort = filters.sort;
       }
       try {
         const data = await apiListFollowUpSequences(params);
@@ -61,7 +65,7 @@ export function useFollowUpSequences(filters: SequenceFilters) {
     return () => {
       cancelled = true;
     };
-  }, [filters.page, filters.search, filters.warrantyMonths, filters.refreshKey]);
+  }, [filters.page, filters.search, filters.warrantyMonths, filters.sort, filters.refreshKey]);
 
   return { items, meta, error };
 }

@@ -71,8 +71,11 @@ properties:
     type: object
     nullable: true
     required:
+      - uuid
       - name
     properties:
+      uuid:
+        type: string
       name:
         type: string
       phone:
@@ -87,6 +90,13 @@ properties:
     type: string
     nullable: true
     description: Snapshot of the message template used at execution time.
+
+  stageName:
+    type: string
+    nullable: true
+    description: |
+      Human-readable reason of the automation (Fase 4), e.g. "Revisión mitad
+      de garantía", "Seguimiento postventa (Día 3)" or "Recompra / renovación".
 
   createdAt:
     type: string

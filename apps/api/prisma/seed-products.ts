@@ -70,6 +70,14 @@ function parseWarrantyMonths(warranty: string): number {
   return match ? parseInt(match[1], 10) : 12;
 }
 
+// "$300.000" → 300000 (formato de miles con punto, COP).
+function parsePrice(price: string | undefined): number | null {
+  if (!price) return null;
+  const cleaned = price.replace(/[^0-9]/g, '');
+  const parsed = parseInt(cleaned, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function generateCode(brand: string, name: string, id: number): string {
   const brandPrefix = brand === 'MAC' ? 'MAC' : 'WIL';
   const namePart = name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20).toUpperCase();
@@ -109,6 +117,7 @@ async function main() {
           category: battery.brand,
           status: 'ACTIVE',
           warrantyMonths,
+          price: parsePrice(battery.price),
           updatedAt: new Date(),
         },
         create: {
@@ -118,6 +127,7 @@ async function main() {
           category: battery.brand,
           status: 'ACTIVE',
           warrantyMonths,
+          price: parsePrice(battery.price),
           createdAt: new Date(),
           updatedAt: new Date(),
         },

@@ -11,12 +11,13 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { UpdateCampaignBodySegment } from './updateCampaignBodySegment';
+import type { UpdateCampaignBodyStagesItem } from './updateCampaignBodyStagesItem';
 import type { UpdateCampaignBodyType } from './updateCampaignBodyType';
 
 /**
- * Partial update of a campaign. Only allowed while the campaign is DRAFT;
- * at least one field must be provided. The segment, when present, must
- * include at least one criterion.
+ * Partial update of a campaign. Only allowed while the campaign is DRAFT or
+ * APPROVED (before activation); at least one field must be provided. The
+ * segment, when present, must include at least one criterion.
  */
 export type UpdateCampaignBody = {
   /**
@@ -36,5 +37,11 @@ export type UpdateCampaignBody = {
   template?: string;
   /** Customer segment filter for campaign automations. All criteria combine with AND; at least one criterion is required when the segment is provided. */
   segment?: UpdateCampaignBodySegment;
+  /**
+     * Etapas inline del timeline (Fase 1). Excluyente con followUpSequenceId.
+     * Un array vacío limpia las etapas inline existentes.
+     * @maxItems 20
+     */
+  stages?: UpdateCampaignBodyStagesItem[];
   startAt?: string;
 };

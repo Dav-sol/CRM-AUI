@@ -44,6 +44,15 @@ properties:
       - $ref: "./CampaignSegment.yaml"
     description: At least one criterion required when present.
 
+  stages:
+    type: array
+    maxItems: 20
+    description: |
+      Etapas inline del timeline (Fase 1). Excluyente con followUpSequenceId:
+      no se puede enviar una secuencia y etapas a la vez.
+    items:
+      $ref: "./CampaignStage.yaml"
+
   startAt:
     type: string
     format: date-time

@@ -197,6 +197,8 @@ export class PurchasesService {
           purchaseDate,
           warrantyMonths,
           warrantyExpiresAt,
+          sourceConversationId: dto.sourceConversationId ?? null,
+          quoteId: dto.quoteId ?? null,
           quantity: dto.quantity,
           value: new Prisma.Decimal(dto.value),
           status: dto.status ?? undefined,
@@ -212,6 +214,24 @@ export class PurchasesService {
         organizationId,
         description: `purchase created invoice=${purchase.invoiceNumber}`,
       });
+      // Fase P0-C: si la venta viene de una cotización, se vincula y se cierra
+      // el ciclo (cotización → venta).
+      if (dto.quoteId) {
+        const quote = await this.prisma.quote.findFirst({
+          where: { uuid: dto.quoteId, organizationId },
+          select: { id: true },
+        });
+        if (quote) {
+          await this.prisma.quote.update({
+            where: { id: quote.id },
+            data: {
+              purchaseId: purchase.id,
+              status: 'ACEPTADA',
+              acceptedAt: new Date(),
+            },
+          });
+        }
+      }
       // Same post-sale domain as imported purchases (Decisión 1): a manual
       // purchase starts the AU-001 cycle (+3d/+6m/+12m). The consumer is
       // idempotent on purchaseId, so replays never duplicate the cycle.

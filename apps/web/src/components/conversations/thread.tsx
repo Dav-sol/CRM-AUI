@@ -84,6 +84,11 @@ export function Thread({ messages, loading }: ThreadProps) {
                     : "bg-primary text-primary-foreground",
               )}
             >
+              {inbound && message.inReplyToCampaignName && (
+                <p className="mb-1 text-[10px] font-medium text-primary/70">
+                  Respondió a {message.inReplyToCampaignName}
+                </p>
+              )}
               <p className="whitespace-pre-wrap break-words">
                 {message.content}
               </p>

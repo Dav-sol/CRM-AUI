@@ -21,6 +21,14 @@ properties:
     type: string
     format: date-time
 
+  stages:
+    type: array
+    description: |
+      Etapas inline del timeline (Fase 1), cuando la campaña no usa secuencia.
+      Vacío si no hay etapas propias.
+    items:
+      $ref: "./CampaignStage.yaml"
+
   followUpSequence:
     type: object
     nullable: true
@@ -30,6 +38,7 @@ properties:
       - name
       - warrantyMonths
       - stageCount
+      - stages
     properties:
 
       uuid:
@@ -48,3 +57,74 @@ properties:
 
       stageCount:
         type: integer
+
+      stages:
+        type: array
+        description: |
+          Etapas con su mensaje (Fase P0-A), para el preview real en el detalle.
+        items:
+          type: object
+          required:
+            - uuid
+            - name
+            - anchor
+            - offsetDays
+            - template
+          properties:
+            uuid:
+              type: string
+            name:
+              type: string
+            anchor:
+              type: string
+              enum:
+                - PURCHASE_DATE
+                - WARRANTY_EXPIRY
+            offsetDays:
+              type: integer
+            template:
+              type: string
+            templateOnPast:
+              type: string
+              nullable: true
+
+  delivered:
+    type: integer
+    description: |
+      Mensajes OUTBOUND automáticos de la campaña enviados (SENT/DELIVERED/READ).
+      Atribución de entrega (Fase 2).
+
+  responded:
+    type: integer
+    description: |
+      Mensajes INBOUND atribuidos a esta campaña (respuestas del cliente).
+      Atribución de respuestas (Fase 2).
+
+  quotes:
+    type: integer
+    description: |
+      Cotizaciones atribuidas a esta campaña (Fase P0-D).
+
+  sales:
+    type: integer
+    description: |
+      Ventas atribuidas a esta campaña (cotizaciones aceptadas con compra
+      vinculada).
+
+  revenue:
+    type: number
+    description: |
+      Suma de los valores de las ventas atribuidas a esta campaña.
+
+  whatsappCost:
+    type: number
+    description: |
+      Costo estimado de WhatsApp = mensajes enviados × tarifa configurada
+      (WHATSAPP_MESSAGE_COST). Estimado, no facturación.
+
+  roi:
+    type: number
+    nullable: true
+    description: |
+      Retorno estimado = (revenue − whatsappCost) / whatsappCost. Null si no
+      hay costo.

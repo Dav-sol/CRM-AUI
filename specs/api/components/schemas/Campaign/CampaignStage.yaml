@@ -1,0 +1,48 @@
+type: object
+
+description: |
+  Etapa inline del timeline de una campaña (Fase 1). Misma semántica que una
+  etapa de FollowUpSequence pero persistida en la campaña. Solo se usa cuando
+  la campaña no tiene followUpSequenceId.
+
+required:
+  - anchor
+  - offsetDays
+  - template
+
+properties:
+
+  name:
+    type: string
+    maxLength: 100
+    description: Nombre legible de la etapa (opcional).
+
+  anchor:
+    type: string
+    enum:
+      - PURCHASE_DATE
+      - WARRANTY_EXPIRY
+    description: Momento de referencia desde el que se calcula la fecha de envío.
+
+  offsetDays:
+    type: integer
+    minimum: -3650
+    maximum: 3650
+    description: Días de offset desde el anchor (negativo = antes).
+
+  template:
+    type: string
+    minLength: 1
+    maxLength: 4096
+    description: |
+      Plantilla del mensaje con las variables soportadas
+      ({customerName}, {productName}, {organizationName},
+      {warrantyExpiresAt}, {purchaseDate}, {brand}).
+
+  templateOnPast:
+    type: string
+    minLength: 1
+    maxLength: 4096
+    description: |
+      Plantilla alternativa usada cuando la etapa ya pasó al activar
+      (convierte la etapa en oferta de recompra).

@@ -1,0 +1,52 @@
+type: object
+required:
+  - name
+  - category
+  - tone
+  - angle
+  - body
+properties:
+  name:
+    type: string
+    minLength: 1
+    maxLength: 200
+  code:
+    type: string
+    maxLength: 50
+    description: "Optional library code (e.g. BW-001)."
+  group:
+    type: string
+    maxLength: 100
+    description: "Optional commercial group name."
+  category:
+    type: string
+    enum:
+      - CAMPAIGN
+      - FOLLOW_UP
+      - QUICK_REPLY
+  tone:
+    type: string
+    enum:
+      - PROFESSIONAL
+      - CARIBE_COMMERCIAL
+      - CARIBE_AUTHENTIC
+  angle:
+    type: string
+    enum:
+      - TRUST
+      - PREVENTION
+      - REPURCHASE
+      - LOYALTY
+      - CONVERSATION
+      - CALM
+  goal:
+    type: string
+    maxLength: 500
+  recommendedUse:
+    type: string
+    maxLength: 500
+  body:
+    type: string
+    minLength: 1
+    maxLength: 4096
+    description: "Template body. Supported variables: {customerName}, {productName}, {organizationName}, {brand}, {warrantyExpiresAt}, {purchaseDate}."

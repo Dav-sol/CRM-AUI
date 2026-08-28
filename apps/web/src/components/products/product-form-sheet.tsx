@@ -33,6 +33,7 @@ const EMPTY_FORM: ProductFormValues = {
   code: "",
   name: "",
   category: "",
+  price: undefined,
   status: "ACTIVE",
 };
 
@@ -62,6 +63,7 @@ export function ProductFormSheet({
           name: product.name,
           category: product.category ?? "",
           warrantyMonths: product.warrantyMonths ?? undefined,
+          price: product.price ?? undefined,
           status: product.status,
         }
       : EMPTY_FORM;
@@ -83,6 +85,7 @@ export function ProductFormSheet({
       category: values.category || undefined,
       warrantyMonths: values.warrantyMonths as
         CreateProductBodyWarrantyMonths | undefined,
+      price: values.price ?? undefined,
       status: values.status,
     };
     try {
@@ -239,6 +242,35 @@ export function ProductFormSheet({
               {errors.warrantyMonths && (
                 <p className="text-xs text-destructive" role="alert">
                   {errors.warrantyMonths.message}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="product-price">
+                Precio de catálogo (COP){" "}
+                <span className="text-xs text-muted-foreground">
+                  (opcional)
+                </span>
+              </Label>
+              <Input
+                id="product-price"
+                type="number"
+                step="1"
+                min={0}
+                placeholder="0"
+                aria-invalid={!!errors.price}
+                {...register("price", {
+                  valueAsNumber: true,
+                  setValueAs: (value) =>
+                    value === "" || value === undefined
+                      ? undefined
+                      : Number(value),
+                })}
+              />
+              {errors.price && (
+                <p className="text-xs text-destructive" role="alert">
+                  {errors.price.message}
                 </p>
               )}
             </div>

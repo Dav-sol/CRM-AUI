@@ -5,11 +5,17 @@ import { WhatsappService } from './whatsapp.service';
 
 describe('WhatsappScheduler', () => {
   let scheduler: WhatsappScheduler;
-  let service: { executeDueAutomations: jest.Mock };
+  let service: {
+    executeDueAutomations: jest.Mock;
+    expireStuckExecuting: jest.Mock;
+  };
   let configService: { get: jest.Mock };
 
   beforeEach(async () => {
-    service = { executeDueAutomations: jest.fn().mockResolvedValue(undefined) };
+    service = {
+      executeDueAutomations: jest.fn().mockResolvedValue(undefined),
+      expireStuckExecuting: jest.fn().mockResolvedValue(undefined),
+    };
     configService = { get: jest.fn().mockReturnValue('development') };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -23,9 +29,10 @@ describe('WhatsappScheduler', () => {
     scheduler = module.get(WhatsappScheduler);
   });
 
-  it('runs the due-automation execution on each tick', async () => {
+  it('expires stuck EXECUTING and runs the due-automation execution on each tick', async () => {
     await scheduler.tick();
 
+    expect(service.expireStuckExecuting).toHaveBeenCalledTimes(1);
     expect(service.executeDueAutomations).toHaveBeenCalledTimes(1);
   });
 
@@ -34,6 +41,7 @@ describe('WhatsappScheduler', () => {
 
     await scheduler.tick();
 
+    expect(service.expireStuckExecuting).not.toHaveBeenCalled();
     expect(service.executeDueAutomations).not.toHaveBeenCalled();
   });
 });

@@ -115,7 +115,7 @@ export function FollowUpRecommendations() {
             Hallazgos
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Lo que tus datos de garantía y recompra revelan hoy. Tocá una tarjeta para ver el detalle.
+            Lo que tus datos de garantía y recompra revelan hoy. Toca una tarjeta para ver el detalle.
           </p>
         </CardHeader>
         <CardContent>

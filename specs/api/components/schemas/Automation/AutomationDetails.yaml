@@ -63,3 +63,9 @@ properties:
       phone:
         type: string
         nullable: true
+
+  renderedMessage:
+    type: string
+    description: |
+      Fase P0-A: mensaje ya personalizado (variables {customerName},
+      {productName}, {organizationName} renderizadas con los datos reales).

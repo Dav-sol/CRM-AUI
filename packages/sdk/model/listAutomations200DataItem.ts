@@ -42,6 +42,7 @@ export type ListAutomations200DataItem = ({
 } | null;
   /** @nullable */
   customer?: {
+  uuid: string;
   name: string;
   /** @nullable */
   phone?: string | null;
@@ -53,5 +54,11 @@ export type ListAutomations200DataItem = ({
      * @nullable
      */
   messageTemplate?: string | null;
+  /**
+     * Human-readable reason of the automation (Fase 4), e.g. "Revisión mitad
+     * de garantía", "Seguimiento postventa (Día 3)" or "Recompra / renovación".
+     * @nullable
+     */
+  stageName?: string | null;
   createdAt: string;
 });

@@ -38,15 +38,16 @@ properties:
     type: string
     enum:
       - DRAFT
+      - APPROVED
       - ACTIVE
       - PAUSED
       - FINISHED
       - CANCELLED
     description: |
-      Lifecycle. DRAFT → ACTIVE (activate), ACTIVE ↔ PAUSED,
-      ACTIVE/PAUSED/DRAFT → CANCELLED, ACTIVE → FINISHED (automatic when
-      no SCHEDULED automations remain). FINISHED and CANCELLED are
-      terminal.
+      Lifecycle. DRAFT → APPROVED (approve, playbook §20) → ACTIVE (activate),
+      ACTIVE ↔ PAUSED, DRAFT/APPROVED/ACTIVE/PAUSED → CANCELLED, ACTIVE →
+      FINISHED (automatic when no SCHEDULED automations remain). FINISHED and
+      CANCELLED are terminal. Activation requires APPROVED.
 
   startAt:
     type: string

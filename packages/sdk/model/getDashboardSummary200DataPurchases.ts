@@ -16,4 +16,18 @@ export type GetDashboardSummary200DataPurchases = {
   total: number;
   /** Purchases with purchaseDate in the current calendar month (UTC). */
   thisMonth: number;
+  /** Purchases with purchaseDate inside the selected range. */
+  inRange: number;
+  /**
+     * Percent change of inRange vs the previous period.
+     * @nullable
+     */
+  countDelta: number | null;
+  /** Sum of purchase.value inside the selected range (revenue proxy). */
+  value: number;
+  /**
+     * Percent change of value vs the previous period.
+     * @nullable
+     */
+  valueDelta: number | null;
 };

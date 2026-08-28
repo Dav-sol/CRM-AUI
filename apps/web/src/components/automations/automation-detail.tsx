@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { AutomationStatusBadge } from "@/components/automations/automation-list";
@@ -90,7 +91,17 @@ function AutomationDetailContent({ detail }: { detail: AutomationDetail }) {
       </div>
       <div className="space-y-1">
         <span className="text-muted-foreground">Cliente</span>
-        <p className="font-medium">{detail.customer.name}</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="font-medium">{detail.customer.name}</p>
+          {detail.customer.uuid && (
+            <Link
+              href={`/customers/${detail.customer.uuid}`}
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              Ver cliente 360 →
+            </Link>
+          )}
+        </div>
         <p className="text-xs text-muted-foreground">
           {formatPhone(detail.customer.phone)}
         </p>
@@ -116,18 +127,34 @@ function AutomationDetailContent({ detail }: { detail: AutomationDetail }) {
           </p>
         )}
       </div>
+      {detail.stageName && (
+        <div className="space-y-1">
+          <span className="text-muted-foreground">Motivo</span>
+          <p className="font-medium">{detail.stageName}</p>
+        </div>
+      )}
       {detail.campaign && (
         <div className="space-y-1">
           <span className="text-muted-foreground">Campaña</span>
           <p className="font-medium">{detail.campaign.name}</p>
         </div>
       )}
-      {detail.messageTemplate && (
+      {detail.renderedMessage && (
         <div className="space-y-1">
-          <span className="text-muted-foreground">Mensaje a enviar</span>
-          <p className="rounded-lg border border-border/60 bg-muted/30 p-3 text-xs whitespace-pre-wrap">
-            {detail.messageTemplate}
+          <span className="text-muted-foreground">Mensaje personalizado</span>
+          <p className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs whitespace-pre-wrap">
+            {detail.renderedMessage}
           </p>
+          {detail.messageTemplate && (
+            <details className="mt-1">
+              <summary className="cursor-pointer select-none text-[11px] text-muted-foreground hover:text-foreground">
+                Ver plantilla original
+              </summary>
+              <p className="mt-1 rounded-md border border-border/60 bg-muted/30 p-2 text-[11px] whitespace-pre-wrap text-muted-foreground">
+                {detail.messageTemplate}
+              </p>
+            </details>
+          )}
         </div>
       )}
     </div>

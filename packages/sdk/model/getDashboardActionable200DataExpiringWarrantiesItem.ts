@@ -14,6 +14,7 @@
 export type GetDashboardActionable200DataExpiringWarrantiesItem = {
   purchaseId: string;
   customerName: string;
+  customerUuid: string;
   productName: string;
   warrantyExpiresAt: string;
 };

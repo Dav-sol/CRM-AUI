@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { findInvalidVariables } from "@/lib/variables";
 
 export const loginSchema = z.object({
   email: z.string().email("Ingresa un email válido"),
@@ -120,8 +121,13 @@ export const campaignSchema = z.object({
   template: z
     .string()
     .trim()
-    .min(1, "Ingresa el mensaje de la campaña")
-    .max(4096, "El mensaje no puede superar los 4096 caracteres"),
+    .max(4096, "El mensaje no puede superar los 4096 caracteres")
+    .optional()
+    .or(z.literal(""))
+    .refine(
+      (value) => !value || findInvalidVariables(value).length === 0,
+      "La plantilla contiene variables desconocidas. Usa el selector para insertarlas.",
+    ),
   templateD3: z
     .string()
     .trim()
@@ -160,7 +166,15 @@ export const campaignSchema = z.object({
       warrantyExpiresFrom: z.string().optional().or(z.literal("")),
       warrantyExpiresTo: z.string().optional().or(z.literal("")),
       warrantyMonths: z
-        .union([z.literal(12), z.literal(15), z.literal(18), z.literal(24)])
+        .union([
+          z.literal(12),
+          z.literal(15),
+          z.literal(18),
+          z.literal(24),
+          // valueAsNumber convierte el select vacío ("Todas") en NaN; se
+          // acepta como "sin filtro" para no bloquear el submit (bug P0.2).
+          z.nan(),
+        ])
         .optional(),
     })
     .partial()
@@ -194,6 +208,10 @@ export const productSchema = z.object({
       (value) => value === undefined || [12, 15, 18, 24].includes(value),
       { message: "La garantía debe ser 12, 15, 18 o 24 meses" },
     ),
+  price: z
+    .number({ message: "El precio debe ser un número" })
+    .min(0, "El precio no puede ser negativo")
+    .optional(),
   status: z.enum(["ACTIVE", "INACTIVE"]),
 });
 
@@ -207,6 +225,7 @@ export const PRODUCT_STATUS_LABELS: Record<string, string> = {
 
 export const CAMPAIGN_STATUS_LABELS: Record<string, string> = {
   DRAFT: "Borrador",
+  APPROVED: "Aprobada",
   ACTIVE: "Activa",
   PAUSED: "Pausada",
   FINISHED: "Finalizada",

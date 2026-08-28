@@ -14,13 +14,13 @@ import {
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
+import { brandOf, renderTemplate } from '../../common/message-variables';
 import { AutomationPathParamsDto } from './dto/automation-path-params.dto';
 import { QueryAutomationsDto } from './dto/query-automations.dto';
 import { QueryCommercialCyclesDto } from './dto/query-commercial-cycles.dto';
 import {
   AutomationCancelledPayload,
   AutomationEventPayload,
-  CycleCancelledPayload,
   CycleEventPayload,
   buildAutomationEvent,
 } from './automations.events';
@@ -70,9 +70,11 @@ export interface AutomationSummary {
   commercialCycleId: string;
   createdAt: Date;
   campaign: { uuid: string; name: string } | null;
-  customer: { name: string; phone: string | null } | null;
+  customer: { uuid: string; name: string; phone: string | null } | null;
   productName: string;
   messageTemplate: string | null;
+  // Fase 4 (T14): motivo legible de la automatización.
+  stageName: string | null;
 }
 
 export interface AutomationDetail extends AutomationSummary {
@@ -89,6 +91,8 @@ export interface AutomationDetail extends AutomationSummary {
     name: string;
     phone: string | null;
   };
+  // Fase P0-A: mensaje ya personalizado (variables renderizadas).
+  renderedMessage: string;
 }
 
 export interface ListResult<T> {
@@ -102,12 +106,14 @@ const AUTOMATION_INCLUDE = {
       uuid: true,
       invoiceNumber: true,
       purchaseDate: true,
-      product: { select: { name: true } },
+      warrantyExpiresAt: true,
+      product: { select: { name: true, category: true } },
       customer: { select: { uuid: true, name: true, phone: true } },
     },
   },
   commercialCycle: { select: { uuid: true } },
-  campaign: { select: { uuid: true, name: true } },
+  campaign: { select: { uuid: true, name: true, template: true } },
+  organization: { select: { name: true } },
 } as const;
 
 const AUTOMATION_INCLUDE_SUMMARY = {
@@ -115,7 +121,7 @@ const AUTOMATION_INCLUDE_SUMMARY = {
     select: {
       uuid: true,
       product: { select: { name: true } },
-      customer: { select: { name: true, phone: true } },
+      customer: { select: { uuid: true, name: true, phone: true } },
     },
   },
   commercialCycle: { select: { uuid: true } },
@@ -150,14 +156,6 @@ type CycleDetailRow = Prisma.CommercialCycleGetPayload<{
   include: typeof CYCLE_INCLUDE_DETAIL;
 }>;
 
-type CancelledAutomationRow = {
-  uuid: string;
-  purchaseId: string;
-  commercialCycleId: string | null;
-  scheduledDate: Date;
-  status: AutomationStatus;
-};
-
 function toCycleSummary(cycle: CycleSummaryRow): CommercialCycleSummary {
   return {
     uuid: cycle.uuid,
@@ -187,18 +185,21 @@ function toAutomationSummary(
       : null,
     customer: automation.purchase?.customer
       ? {
+          uuid: automation.purchase.customer.uuid,
           name: automation.purchase.customer.name,
           phone: automation.purchase.customer.phone,
         }
       : null,
     productName: automation.purchase?.product?.name ?? '',
     messageTemplate: automation.messageTemplate,
+    stageName: automation.stageName ?? null,
   };
 }
 
 function toAutomationDetail(
   automation: AutomationWithRelations,
 ): AutomationDetail {
+  const template = automation.messageTemplate ?? null;
   return {
     ...toAutomationSummary(automation),
     organizationId: automation.organizationId,
@@ -215,6 +216,22 @@ function toAutomationDetail(
       name: automation.purchase?.customer?.name ?? '',
       phone: automation.purchase?.customer?.phone ?? null,
     },
+    // Fase P0-A: el mensaje personalizado con los datos reales. Si la
+    // automatización no define su propio template, usa el de la campaña.
+    renderedMessage: renderTemplate(
+      template ?? automation.campaign?.template ?? '',
+      {
+        customerName: automation.purchase?.customer?.name ?? '',
+        productName: automation.purchase?.product?.name ?? '',
+        organizationName: automation.organization?.name ?? '',
+        brand: brandOf(
+          automation.purchase?.product?.category,
+          automation.purchase?.product?.name,
+        ),
+        warrantyExpiresAt: automation.purchase?.warrantyExpiresAt ?? null,
+        purchaseDate: automation.purchase?.purchaseDate ?? null,
+      },
+    ),
   };
 }
 
@@ -277,56 +294,13 @@ export class AutomationsService {
       return;
     }
 
-    const activeCycle = await this.prisma.commercialCycle.findFirst({
-      where: {
-        status: 'ACTIVE',
-        deletedAt: null,
-        purchase: {
-          customerId: purchase.customerId,
-          organizationId: purchase.organizationId,
-          deletedAt: null,
-        },
-      },
-      select: { id: true },
-    });
-
     try {
-      const { cycle, automations, cancelledAutomations, cancelledCycleId } =
-        await this.prisma.$transaction(async (tx) => {
-          let cancelledAutomations: CancelledAutomationRow[] = [];
-          if (activeCycle) {
-            cancelledAutomations = await tx.automation.findMany({
-              where: {
-                commercialCycleId: activeCycle.id,
-                status: { in: CANCELLABLE_STATUSES },
-                deletedAt: null,
-              },
-              select: {
-                uuid: true,
-                purchaseId: true,
-                commercialCycleId: true,
-                scheduledDate: true,
-                status: true,
-              },
-            });
-            await tx.automation.updateMany({
-              where: {
-                commercialCycleId: activeCycle.id,
-                status: { in: CANCELLABLE_STATUSES },
-                deletedAt: null,
-              },
-              data: { status: 'CANCELLED', updatedBy: null },
-            });
-            await tx.commercialCycle.update({
-              where: { id: activeCycle.id },
-              data: {
-                status: 'CANCELLED',
-                endDate: new Date(),
-                updatedBy: null,
-              },
-            });
-          }
-
+      const { cycle, automations } = await this.prisma.$transaction(
+        async (tx) => {
+          // Playbook §15: a new purchase creates its OWN cycle. It does NOT
+          // cancel the customer's previous cycles/journeys — those may belong
+          // to another purchase/warranty still valid. Cancelling what is truly
+          // obsolete on recompra is a human decision (V2), not a blanket rule.
           const created = await tx.commercialCycle.create({
             data: {
               purchaseId,
@@ -340,9 +314,14 @@ export class AutomationsService {
             addMonths(purchase.purchaseDate, 6),
             addMonths(purchase.purchaseDate, 12),
           ];
+          const stageNames = [
+            'Seguimiento postventa (Día 3)',
+            'Seguimiento postventa (Mes 6)',
+            'Seguimiento postventa (Mes 12)',
+          ];
 
           const automationRows = await Promise.all(
-            scheduledDates.map((scheduledDate) =>
+            scheduledDates.map((scheduledDate, index) =>
               tx.automation.create({
                 data: {
                   organizationId: purchase.organizationId,
@@ -351,18 +330,18 @@ export class AutomationsService {
                   scheduledDate,
                   status: 'SCHEDULED',
                   priority: 0,
+                  // AU-001 is transactional follow-up (not counted vs 3/60d).
+                  purpose: 'TRANSACTIONAL',
+                  // Fase 4 (T14): motivo legible.
+                  stageName: stageNames[index],
                 },
               }),
             ),
           );
 
-          return {
-            cycle: created,
-            automations: automationRows,
-            cancelledAutomations,
-            cancelledCycleId: activeCycle?.id ?? null,
-          };
-        });
+          return { cycle: created, automations: automationRows };
+        },
+      );
 
       await this.auditService.record({
         module: MODULE,
@@ -390,22 +369,6 @@ export class AutomationsService {
         },
       });
 
-      if (cancelledCycleId) {
-        const cancelled = await this.prisma.commercialCycle.findUnique({
-          where: { id: cancelledCycleId },
-          select: { uuid: true },
-        });
-        await this.auditService.record({
-          module: MODULE,
-          action: 'automation.cycle.cancelled',
-          outcome: 'success',
-          userId: null,
-          organizationId: purchase.organizationId,
-          description: `commercial cycle cancelled purchase=${purchase.uuid}`,
-          metadata: { cycleId: cancelled?.uuid ?? cancelledCycleId },
-        });
-      }
-
       this.emit('CommercialCycleStarted', null, purchase.organizationId, {
         cycleId: cycle.uuid,
         purchaseId: purchase.uuid,
@@ -420,33 +383,6 @@ export class AutomationsService {
           status: automation.status,
           scheduledDate: automation.scheduledDate.toISOString(),
         } satisfies AutomationEventPayload);
-      }
-      for (const automation of cancelledAutomations) {
-        this.emit('AutomationCancelled', null, purchase.organizationId, {
-          automationId: automation.uuid,
-          purchaseId: automation.purchaseId,
-          commercialCycleId:
-            automation.commercialCycleId ?? cancelledCycleId ?? '',
-          status: automation.status,
-          scheduledDate: automation.scheduledDate.toISOString(),
-          cancelledAt: new Date().toISOString(),
-        } satisfies AutomationCancelledPayload);
-      }
-      if (cancelledCycleId) {
-        const cancelledCycle = await this.prisma.commercialCycle.findUnique({
-          where: { id: cancelledCycleId },
-          select: { uuid: true, endDate: true },
-        });
-        if (cancelledCycle) {
-          this.emit('CommercialCycleCancelled', null, purchase.organizationId, {
-            cycleId: cancelledCycle.uuid,
-            purchaseId: purchase.uuid,
-            status: 'CANCELLED',
-            startDate: cycle.startDate.toISOString(),
-            endDate:
-              cancelledCycle.endDate?.toISOString() ?? new Date().toISOString(),
-          } satisfies CycleCancelledPayload);
-        }
       }
     } catch (error) {
       if (
@@ -718,6 +654,9 @@ export class AutomationsService {
     if (query.status) {
       where.status = query.status;
     }
+    if (query.purpose) {
+      where.purpose = query.purpose;
+    }
     if (query.commercialCycleId) {
       where.commercialCycle = { uuid: query.commercialCycleId };
     }
@@ -726,6 +665,23 @@ export class AutomationsService {
     }
     if (query.customerId) {
       where.purchase = { customer: { uuid: query.customerId } };
+    }
+    if (query.search?.trim()) {
+      where.purchase = {
+        ...(where.purchase as Prisma.PurchaseWhereInput),
+        OR: [
+          {
+            customer: {
+              name: { contains: query.search.trim(), mode: 'insensitive' },
+            },
+          },
+          {
+            product: {
+              name: { contains: query.search.trim(), mode: 'insensitive' },
+            },
+          },
+        ],
+      };
     }
     if (query.scheduledFrom || query.scheduledTo) {
       where.scheduledDate = {};

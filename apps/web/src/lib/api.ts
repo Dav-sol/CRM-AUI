@@ -1,5 +1,6 @@
 import {
   activateCampaign,
+  approveCampaign,
   archiveConversation,
   assignConversation,
   assignConversationTag,
@@ -10,10 +11,20 @@ import {
   createCampaign,
   createConversationNote,
   createCustomer,
+  customerAllowContact,
+  customerNoContact,
   createImportJob,
   createProduct,
   createPurchase,
   createFollowUpSequence,
+  createQuote,
+  acceptQuote,
+  rejectQuote,
+  sendQuote,
+  expireQuote,
+  getQuote,
+  listQuotes,
+  updateQuote,
   deleteFollowUpSequence,
   getAutomation,
   getCampaign,
@@ -46,6 +57,7 @@ import {
   me,
   pauseCampaign,
   previewCampaignSegment,
+  previewCampaignSegmentDraft,
   removeConversationTag,
   reopenConversation,
   replyConversation,
@@ -55,8 +67,17 @@ import {
   updateFollowUpSequence,
   updateCustomer,
   updateProduct,
+  updateCampaign,
   deleteProduct,
+  listTemplates,
+  getTemplate,
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
 } from "@automatize-it/sdk";
+
+import type { ListQuotes200DataItem } from "@automatize-it/sdk/model/listQuotes200DataItem";
+import type { PreviewCampaignSegmentDraftBodyType } from "@automatize-it/sdk/model/previewCampaignSegmentDraftBodyType";
 
 import { authStore, notifySessionExpired, refreshAccessToken } from "./auth";
 import type {
@@ -80,9 +101,13 @@ import type {
   ProductListParams,
   PurchaseListParams,
   ReplyBody,
+  UpdateCampaignBody,
   UpdateFollowUpSequenceBody,
   UpdateCustomerBody,
   UpdateProductBody,
+  TemplateListParams,
+  CreateTemplateBody,
+  UpdateTemplateBody,
 } from "./sdk-types";
 
 export class ApiError extends Error {
@@ -212,11 +237,283 @@ export async function apiGetConversation(
   return unwrap(getConversation, res);
 }
 
+export async function apiCustomerNoContact(
+  id: string,
+  reason?: string,
+): Promise<SdkData<typeof customerNoContact>> {
+  const res = await call((options) =>
+    customerNoContact(id, { reason }, options),
+  );
+  return unwrap(customerNoContact, res);
+}
+
+export async function apiCustomerAllowContact(
+  id: string,
+): Promise<SdkData<typeof customerAllowContact>> {
+  const res = await call((options) => customerAllowContact(id, options));
+  return unwrap(customerAllowContact, res);
+}
+
+export async function apiCreateQuote(body: {
+  conversationId?: string;
+  customerId?: string;
+  campaignId?: string;
+  productId?: string;
+  quantity?: number;
+  value: number;
+  note?: string;
+}): Promise<SdkData<typeof createQuote>> {
+  const res = await call((options) => createQuote(body, options));
+  return unwrap(createQuote, res);
+}
+
+export async function apiListQuotes(
+  params?: Parameters<typeof listQuotes>[0],
+): Promise<ListQuotes200DataItem[]> {
+  const res = await call((options) => listQuotes(params, options));
+  if (res.status >= 200 && res.status < 300) {
+    const body = res.data as
+      ListQuotes200DataItem[] | { data?: ListQuotes200DataItem[] };
+    return Array.isArray(body) ? body : (body.data ?? []);
+  }
+  const error = (res.data ?? {}) as { code?: string; message?: string };
+  throw new ApiError(
+    res.status,
+    error.code ?? "REQUEST_FAILED",
+    error.message ?? "Request failed",
+  );
+}
+
+export async function apiGetQuote(
+  uuid: string,
+): Promise<SdkData<typeof getQuote>> {
+  const res = await call((options) => getQuote(uuid, options));
+  return unwrap(getQuote, res);
+}
+
+export async function apiUpdateQuote(
+  uuid: string,
+  body: {
+    productId?: string;
+    quantity?: number;
+    value?: number;
+    note?: string;
+  },
+): Promise<SdkData<typeof updateQuote>> {
+  const res = await call((options) => updateQuote(uuid, body, options));
+  return unwrap(updateQuote, res);
+}
+
+export async function apiSendQuote(
+  uuid: string,
+): Promise<SdkData<typeof sendQuote>> {
+  const res = await call((options) => sendQuote(uuid, options));
+  return unwrap(sendQuote, res);
+}
+
+export async function apiAcceptQuote(
+  uuid: string,
+): Promise<SdkData<typeof acceptQuote>> {
+  const res = await call((options) => acceptQuote(uuid, options));
+  return unwrap(acceptQuote, res);
+}
+
+export async function apiRejectQuote(
+  uuid: string,
+): Promise<SdkData<typeof rejectQuote>> {
+  const res = await call((options) => rejectQuote(uuid, options));
+  return unwrap(rejectQuote, res);
+}
+
+export async function apiExpireQuote(
+  uuid: string,
+): Promise<SdkData<typeof expireQuote>> {
+  const res = await call((options) => expireQuote(uuid, options));
+  return unwrap(expireQuote, res);
+}
+
 export async function apiGetCustomer(
   uuid: string,
 ): Promise<SdkData<typeof getCustomer>> {
   const res = await call((options) => getCustomer(uuid, options));
   return unwrap(getCustomer, res);
+}
+
+export interface CustomerTimeline {
+  customer: { uuid: string; name: string; status: string };
+  purchases: Array<{
+    uuid: string;
+    invoiceNumber: string;
+    purchaseDate: string;
+    quantity: number;
+    value: number;
+    warrantyMonths: number | null;
+    warrantyExpiresAt: string | null;
+    status: string;
+    product: { uuid: string; name: string; code: string };
+    automations: Array<{
+      uuid: string;
+      stageName: string | null;
+      scheduledDate: string;
+      executedDate: string | null;
+      status: string;
+      purpose: string;
+      messagePreview: string | null;
+    }>;
+  }>;
+  quotes: Array<{
+    uuid: string;
+    value: number;
+    status: string;
+    createdAt: string;
+    sentAt: string | null;
+  }>;
+  conversations: Array<{
+    uuid: string;
+    channel: string;
+    status: string;
+    messageCount: number;
+    createdAt: string;
+  }>;
+}
+
+export async function apiGetCustomerTimeline(
+  uuid: string,
+): Promise<CustomerTimeline> {
+  const opts = buildOptions();
+  const res = await fetch(`/api/v1/customers/${uuid}/timeline`, opts);
+  if (res.status === 401) {
+    const token = await refreshAccessToken();
+    if (!token) {
+      notifySessionExpired();
+      throw new SessionExpiredError();
+    }
+    const retry = await fetch(`/api/v1/customers/${uuid}/timeline`, {
+      ...opts,
+      headers: { ...opts.headers, Authorization: `Bearer ${token}` },
+    });
+    if (!retry.ok) throw new ApiError(retry.status, "FETCH_ERROR", "Error loading timeline");
+    return (await retry.json()).data;
+  }
+  if (!res.ok) throw new ApiError(res.status, "FETCH_ERROR", "Error loading timeline");
+  return (await res.json()).data;
+}
+
+// ---------------------------------------------------------------------------
+// Reports
+// ---------------------------------------------------------------------------
+
+export interface ReportParams {
+  from?: string;
+  to?: string;
+  groupBy?: "day" | "week" | "month";
+  search?: string;
+}
+
+export interface CustomerReport {
+  summary: {
+    total: number;
+    newInPeriod: number;
+    pendingContact: number;
+    blocked: number;
+  };
+  rows: Array<{ label: string; value: number; [key: string]: unknown }>;
+}
+
+export interface PurchaseReport {
+  summary: {
+    total: number;
+    totalValue: number;
+    unitsInPeriod: number;
+    valueInPeriod: number;
+    avgTicket: number;
+  };
+  rows: Array<{ label: string; value: number; totalValue: number; [key: string]: unknown }>;
+}
+
+export interface CampaignReport {
+  summary: {
+    total: number;
+    active: number;
+    finished: number;
+    totalSent: number;
+    totalDelivered: number;
+    totalResponded: number;
+    totalSales: number;
+    totalRevenue: number;
+  };
+  rows: Array<{ label: string; value: number; status: string; type: string; delivered: number; responded: number; sales: number; revenue: number }>;
+}
+
+export interface AutomationReport {
+  summary: {
+    total: number;
+    pending: number;
+    executed: number;
+    errors: number;
+    successRate: number;
+  };
+  rows: Array<{ label: string; value: number; [key: string]: unknown }>;
+}
+
+export interface MessageReport {
+  summary: {
+    total: number;
+    sent: number;
+    delivered: number;
+    read: number;
+    failed: number;
+    deliveryRate: number;
+  };
+  rows: Array<{ label: string; value: number; sent: number; failed: number; [key: string]: unknown }>;
+}
+
+function buildReportUrl(endpoint: string, params?: ReportParams): string {
+  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002";
+  const qs = new URLSearchParams();
+  if (params?.from) qs.set("from", params.from);
+  if (params?.to) qs.set("to", params.to);
+  if (params?.groupBy) qs.set("groupBy", params.groupBy);
+  if (params?.search) qs.set("search", params.search);
+  const query = qs.toString();
+  return `${base}/api/v1/reports/${endpoint}${query ? `?${query}` : ""}`;
+}
+
+async function fetchReport<T>(endpoint: string, params?: ReportParams): Promise<T> {
+  const url = buildReportUrl(endpoint, params);
+  const res = await fetch(url, { ...buildOptions() });
+  if (res.status === 401) {
+    const token = await refreshAccessToken();
+    if (!token) {
+      notifySessionExpired();
+      throw new SessionExpiredError();
+    }
+    const retry = await fetch(url, { ...buildOptions() });
+    if (!retry.ok) throw new ApiError(retry.status, "ERROR", await retry.text());
+    return (await retry.json()).data;
+  }
+  if (!res.ok) throw new ApiError(res.status, "ERROR", await res.text());
+  return (await res.json()).data;
+}
+
+export async function apiReportCustomers(params?: ReportParams): Promise<CustomerReport> {
+  return fetchReport<CustomerReport>("customers", params);
+}
+
+export async function apiReportPurchases(params?: ReportParams): Promise<PurchaseReport> {
+  return fetchReport<PurchaseReport>("purchases", params);
+}
+
+export async function apiReportCampaigns(params?: ReportParams): Promise<CampaignReport> {
+  return fetchReport<CampaignReport>("campaigns", params);
+}
+
+export async function apiReportAutomations(params?: ReportParams): Promise<AutomationReport> {
+  return fetchReport<AutomationReport>("automations", params);
+}
+
+export async function apiReportMessages(params?: ReportParams): Promise<MessageReport> {
+  return fetchReport<MessageReport>("messages", params);
 }
 
 export async function apiGetPurchase(
@@ -340,10 +637,10 @@ export async function apiListQuickReplies(): Promise<
   return unwrap(listQuickReplies, res);
 }
 
-export async function apiDashboardSummary(): Promise<
-  SdkData<typeof getDashboardSummary>
-> {
-  const res = await call((options) => getDashboardSummary(options));
+export async function apiDashboardSummary(
+  params?: Parameters<typeof getDashboardSummary>[0],
+): Promise<SdkData<typeof getDashboardSummary>> {
+  const res = await call((options) => getDashboardSummary(params, options));
   return unwrap(getDashboardSummary, res);
 }
 
@@ -354,10 +651,10 @@ export async function apiDashboardCampaigns(): Promise<
   return unwrap(getDashboardCampaigns, res);
 }
 
-export async function apiDashboardActivity(): Promise<
-  SdkData<typeof getDashboardActivity>
-> {
-  const res = await call((options) => getDashboardActivity(options));
+export async function apiDashboardActivity(
+  params?: Parameters<typeof getDashboardActivity>[0],
+): Promise<SdkData<typeof getDashboardActivity>> {
+  const res = await call((options) => getDashboardActivity(params, options));
   return unwrap(getDashboardActivity, res);
 }
 
@@ -366,6 +663,39 @@ export async function apiDashboardActionable(): Promise<
 > {
   const res = await call((options) => getDashboardActionable(options));
   return unwrap(getDashboardActionable, res);
+}
+
+export interface AggregatedMessage {
+  id: string;
+  source: "campaign_template" | "campaign_stage" | "sequence_stage" | "quick_reply";
+  sourceName: string;
+  sourceId: string;
+  body: string;
+  anchor?: string;
+  offsetDays?: number;
+  updatedAt: string;
+}
+
+export async function apiMessagesOverview(): Promise<AggregatedMessage[]> {
+  const opts = buildOptions();
+  const res = await fetch("/api/v1/message-overview", opts);
+  if (res.status === 401) {
+    const token = await refreshAccessToken();
+    if (!token) {
+      notifySessionExpired();
+      throw new SessionExpiredError();
+    }
+    const retry = await fetch("/api/v1/message-overview", {
+      ...opts,
+      headers: { ...opts.headers, Authorization: `Bearer ${token}` },
+    });
+    if (!retry.ok) throw new ApiError(retry.status, "FETCH_ERROR", "Error loading messages");
+    const json = await retry.json();
+    return json.data;
+  }
+  if (!res.ok) throw new ApiError(res.status, "FETCH_ERROR", "Error loading messages");
+  const json = await res.json();
+  return json.data;
 }
 
 export async function apiListCustomers(
@@ -425,6 +755,45 @@ export async function apiDeleteProduct(
   return unwrap(deleteProduct, res);
 }
 
+export async function apiListTemplates(
+  params?: TemplateListParams,
+): Promise<
+  NonNullable<
+    Extract<Awaited<ReturnType<typeof listTemplates>>, { status: 200 }>["data"]
+  >
+> {
+  return callList((options) => listTemplates(params, options));
+}
+
+export async function apiGetTemplate(
+  id: string,
+): Promise<SdkData<typeof getTemplate>> {
+  const res = await call((options) => getTemplate(id, options));
+  return unwrap(getTemplate, res);
+}
+
+export async function apiCreateTemplate(
+  body: CreateTemplateBody,
+): Promise<SdkData<typeof createTemplate>> {
+  const res = await call((options) => createTemplate(body, options));
+  return unwrap(createTemplate, res);
+}
+
+export async function apiUpdateTemplate(
+  id: string,
+  body: UpdateTemplateBody,
+): Promise<SdkData<typeof updateTemplate>> {
+  const res = await call((options) => updateTemplate(id, body, options));
+  return unwrap(updateTemplate, res);
+}
+
+export async function apiDeleteTemplate(
+  id: string,
+): Promise<SdkData<typeof deleteTemplate>> {
+  const res = await call((options) => deleteTemplate(id, options));
+  return unwrap(deleteTemplate, res);
+}
+
 export async function apiListPurchases(
   params?: PurchaseListParams,
 ): Promise<
@@ -459,11 +828,26 @@ export async function apiCreateCampaign(
   return unwrap(createCampaign, res);
 }
 
+export async function apiUpdateCampaign(
+  uuid: string,
+  body: UpdateCampaignBody,
+): Promise<SdkData<typeof updateCampaign>> {
+  const res = await call((options) => updateCampaign(uuid, body, options));
+  return unwrap(updateCampaign, res);
+}
+
 export async function apiActivateCampaign(
   uuid: string,
 ): Promise<SdkData<typeof activateCampaign>> {
   const res = await call((options) => activateCampaign(uuid, options));
   return unwrap(activateCampaign, res);
+}
+
+export async function apiApproveCampaign(
+  uuid: string,
+): Promise<SdkData<typeof approveCampaign>> {
+  const res = await call((options) => approveCampaign(uuid, options));
+  return unwrap(approveCampaign, res);
 }
 
 export async function apiPauseCampaign(
@@ -497,11 +881,30 @@ export async function apiGetCampaign(
 export async function apiPreviewCampaignSegment(
   uuid: string,
   segment?: Record<string, unknown>,
-): Promise<{ count: number }> {
+): Promise<{
+  count: number;
+  estimatedAutomations: number;
+  estimatedCost: number;
+}> {
   const res = await call((options) =>
     previewCampaignSegment(uuid, segment, options),
   );
   return unwrap(previewCampaignSegment, res);
+}
+
+export async function apiPreviewCampaignSegmentDraft(body: {
+  segment?: Record<string, unknown>;
+  followUpSequenceId?: string;
+  type?: PreviewCampaignSegmentDraftBodyType;
+}): Promise<{
+  count: number;
+  estimatedAutomations: number;
+  estimatedCost: number;
+}> {
+  const res = await call((options) =>
+    previewCampaignSegmentDraft(body, options),
+  );
+  return unwrap(previewCampaignSegmentDraft, res);
 }
 
 export async function apiListAutomations(
