@@ -114,7 +114,7 @@ export interface ConversationDetail extends ConversationSummary {
 
 export interface MessageSummary {
   uuid: string;
-  conversationId: string;
+  conversationId: string | null;
   automationId: string | null;
   inReplyToCampaignId: string | null;
   inReplyToCampaignName: string | null;
@@ -198,6 +198,8 @@ export class WhatsappService {
         retryCount: { lt: MAX_AUTOMATION_RETRIES },
         scheduledDate: { lte: new Date() },
         deletedAt: null,
+        // Fase 1: SMS automations are executed by SmsScheduler, not here.
+        channel: 'WHATSAPP_CLIENTS',
         OR: [{ campaignId: null }, { campaign: { status: 'ACTIVE' } }],
         purchase: {
           deletedAt: null,
@@ -435,7 +437,11 @@ export class WhatsappService {
     const usePancake = this.shouldUsePancake(automation.organizationId);
     try {
       const sendResult = usePancake
-        ? await this.pancakeProvider.sendMessage(phone, content)
+        ? await this.pancakeProvider.sendTemplate(phone, {
+            customer_name: automation.purchase.customer.name,
+            product_name: automation.purchase.product?.name ?? '',
+            organization_name: automation.organization?.name ?? '',
+          })
         : simulated
           ? {
               providerMessageId: `sim-${message.uuid}`,
@@ -548,17 +554,15 @@ export class WhatsappService {
     return renderTemplate(template, this.varsOf(automation));
   }
 
-  private varsOf(
-    automation: {
-      purchase: {
-        purchaseDate: Date;
-        warrantyExpiresAt?: Date | null;
-        customer: { name: string };
-        product: { name: string; category?: string | null } | null;
-      };
-      organization: { name: string } | null;
-    },
-  ): MessageTemplateVars {
+  private varsOf(automation: {
+    purchase: {
+      purchaseDate: Date;
+      warrantyExpiresAt?: Date | null;
+      customer: { name: string };
+      product: { name: string; category?: string | null } | null;
+    };
+    organization: { name: string } | null;
+  }): MessageTemplateVars {
     return {
       customerName: automation.purchase.customer.name,
       productName: automation.purchase.product?.name ?? '',
@@ -1629,9 +1633,37 @@ export class WhatsappService {
     content: string,
   ): Promise<ProviderSendResult> {
     if (this.shouldUsePancake(organizationId)) {
-      return this.pancakeProvider.sendMessage(phone, content);
+      const params = await this.resolvePancakeTemplateParams(
+        organizationId,
+        phone,
+      );
+      return this.pancakeProvider.sendTemplate(phone, params);
     }
     return this.provider.sendMessage(phone, content);
+  }
+
+  // Manual sends and advisor replies carry free text, but the Pancake path
+  // sends through the approved template: resolve the named BODY_PARAMS from
+  // the customer/organization (the product is unknown in these flows).
+  private async resolvePancakeTemplateParams(
+    organizationId: string,
+    phone: string,
+  ): Promise<Record<string, string>> {
+    const [customer, organization] = await Promise.all([
+      this.prisma.customer.findFirst({
+        where: { organizationId, phone, deletedAt: null },
+        select: { name: true },
+      }),
+      this.prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { name: true },
+      }),
+    ]);
+    return {
+      customer_name: customer?.name ?? '',
+      product_name: '',
+      organization_name: organization?.name ?? '',
+    };
   }
 
   private async findMessageUuidByProviderId(
@@ -1831,7 +1863,7 @@ function toNoteSummary(note: {
 
 function toMessageSummary(message: {
   uuid: string;
-  conversationId: string;
+  conversationId: string | null;
   automationId: string | null;
   inReplyToCampaignId: string | null;
   inReplyToCampaignName?: string | null;

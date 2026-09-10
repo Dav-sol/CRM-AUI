@@ -42,6 +42,8 @@ export const envValidationSchema = Joi.object({
   PANCAKE_API_TOKEN: Joi.string().optional(),
   PANCAKE_BOTCAKE_API_TOKEN: Joi.string().optional(),
   PANCAKE_PAGE_ID: Joi.string().optional(),
+  // Approved WhatsApp template id used for every Pancake send (global v1).
+  PANCAKE_TEMPLATE_ID: Joi.string().optional(),
   PANCAKE_API_BASE_URL: Joi.string().uri().optional(),
   PANCAKE_TEMPLATES_API_URL: Joi.string().uri().optional(),
   PANCAKE_ORGANIZATION_ID: Joi.string().optional(),
@@ -60,6 +62,34 @@ export const envValidationSchema = Joi.object({
   WHATSAPP_MESSAGE_COST_COMMERCIAL: Joi.number().integer().min(0).optional(),
   QUOTE_EXPIRY_DAYS: Joi.number().integer().min(1).optional(),
   WHATSAPP_EXECUTING_TIMEOUT_MS: Joi.number().integer().min(0).optional(),
+
+  // SMS provider configuration
+  SMS_PROVIDER: Joi.string()
+    .valid('NULL', 'ALTIRIA', 'TWILIO', 'VONAGE', 'BIRD', 'INFOBIP', 'HABLAME')
+    .default('NULL'),
+  SMS_API_KEY: Joi.string().optional(),
+  SMS_API_SECRET: Joi.string().optional(),
+  SMS_SENDER: Joi.string().optional(),
+  SMS_API_URL: Joi.string().uri().optional(),
+  SMS_WEBHOOK_BASE_URL: Joi.string().uri().optional(),
+  SMS_WEBHOOK_SECRET: Joi.string().optional(),
+  SMS_DEFAULT_COUNTRY_PREFIX: Joi.string().default('57'),
+  ALTIRIA_USERNAME: Joi.string().optional(),
+  ALTIRIA_API_PASSWORD: Joi.string().optional(),
+  SMS_COST_PER_SEGMENT: Joi.number().min(0).default(100),
+  SMS_CURRENCY: Joi.string().length(3).default('COP'),
+  SMS_COMMERCIAL_QUIET_HOURS_START: Joi.number()
+    .integer()
+    .min(0)
+    .max(23)
+    .default(20),
+  SMS_COMMERCIAL_QUIET_HOURS_END: Joi.number()
+    .integer()
+    .min(0)
+    .max(23)
+    .default(9),
+  SMS_TIMEZONE: Joi.string().default('America/Bogota'),
+  SMS_EXECUTING_TIMEOUT_MS: Joi.number().integer().min(0).optional(),
 
   APP_NAME: Joi.string().default('automatize-it-api'),
 

@@ -93,6 +93,10 @@ export default () => ({
     apiToken: process.env.PANCAKE_API_TOKEN, // page_access_token (Pancake)
     botcakeApiToken: process.env.PANCAKE_BOTCAKE_API_TOKEN, // Bearer for botcake.io
     pageId: process.env.PANCAKE_PAGE_ID, // e.g. waba_1146111635255630
+    // Global v1 template (2026-09-10 decision): every Pancake send uses this
+    // single APPROVED WhatsApp template (free-text InboxMessage always fails
+    // on WhatsApp). Without it, Pancake sends fail terminally (no retry).
+    templateId: process.env.PANCAKE_TEMPLATE_ID,
     apiBaseUrl:
       process.env.PANCAKE_API_BASE_URL ?? 'https://pages.fm/api/public_api',
     templatesApiUrl:
@@ -110,5 +114,36 @@ export default () => ({
     // "CO." PSID conversations that the composed [pageID]_[phone] misses).
     resolveConversationId:
       (process.env.PANCAKE_RESOLVE_CONVERSATION_ID ?? 'false') === 'true',
+  },
+
+  // SMS provider configuration (Fase 2: provider pluggable via env).
+  sms: {
+    provider: process.env.SMS_PROVIDER ?? 'NULL',
+    apiKey: process.env.SMS_API_KEY,
+    apiSecret: process.env.SMS_API_SECRET,
+    sender: process.env.SMS_SENDER,
+    apiUrl: process.env.SMS_API_URL,
+    webhookBaseUrl: process.env.SMS_WEBHOOK_BASE_URL,
+    webhookSecret: process.env.SMS_WEBHOOK_SECRET,
+    defaultCountryPrefix: process.env.SMS_DEFAULT_COUNTRY_PREFIX ?? '57',
+    altiria: {
+      username: process.env.ALTIRIA_USERNAME ?? '',
+      apiPassword: process.env.ALTIRIA_API_PASSWORD ?? '',
+    },
+    costPerSegment: parseInt(process.env.SMS_COST_PER_SEGMENT ?? '100', 10),
+    currency: process.env.SMS_CURRENCY ?? 'COP',
+    commercialQuietHoursStart: parseInt(
+      process.env.SMS_COMMERCIAL_QUIET_HOURS_START ?? '20',
+      10,
+    ),
+    commercialQuietHoursEnd: parseInt(
+      process.env.SMS_COMMERCIAL_QUIET_HOURS_END ?? '9',
+      10,
+    ),
+    timezone: process.env.SMS_TIMEZONE ?? 'America/Bogota',
+    executingTimeoutMs: parseInt(
+      process.env.SMS_EXECUTING_TIMEOUT_MS ?? '600000',
+      10,
+    ),
   },
 });

@@ -60,12 +60,17 @@ describe('WhatsappService', () => {
       findMany: jest.Mock;
     };
     customer: { findMany: jest.Mock; findFirst: jest.Mock; create: jest.Mock };
+    organization: { findUnique: jest.Mock };
     $transaction: jest.Mock;
   };
   let auditService: { record: jest.Mock };
   let eventEmitter: { emit: jest.Mock };
   let provider: { sendMessage: jest.Mock };
-  let pancakeProvider: { sendMessage: jest.Mock; isConfigured: jest.Mock };
+  let pancakeProvider: {
+    sendMessage: jest.Mock;
+    sendTemplate: jest.Mock;
+    isConfigured: jest.Mock;
+  };
   let configService: { get: jest.Mock };
 
   const emittedNames = (): string[] =>
@@ -99,6 +104,7 @@ describe('WhatsappService', () => {
           .fn()
           .mockResolvedValue({ id: 'cu-auto', uuid: 'cuu-auto' }),
       },
+      organization: { findUnique: jest.fn() },
       $transaction: jest.fn(),
     };
     auditService = { record: jest.fn().mockResolvedValue(undefined) };
@@ -106,6 +112,7 @@ describe('WhatsappService', () => {
     provider = { sendMessage: jest.fn() };
     pancakeProvider = {
       sendMessage: jest.fn(),
+      sendTemplate: jest.fn(),
       isConfigured: jest.fn(() => false),
     };
     configService = {
@@ -438,7 +445,7 @@ describe('WhatsappService', () => {
       pancakeProvider.isConfigured.mockReturnValue(true);
       const timeout = new PancakeTimeoutError('timeout');
       timeout.retryable = false;
-      pancakeProvider.sendMessage.mockRejectedValue(timeout);
+      pancakeProvider.sendTemplate.mockRejectedValue(timeout);
       prisma.automation.findMany.mockResolvedValue([dueAutomation]);
       prisma.$transaction.mockImplementation(
         async (fn: (tx: unknown) => Promise<unknown>) => fn(txMock()),
@@ -456,7 +463,15 @@ describe('WhatsappService', () => {
           retryCount: 3,
         }) as object,
       });
-      expect(pancakeProvider.sendMessage).toHaveBeenCalled();
+      expect(pancakeProvider.sendTemplate).toHaveBeenCalledWith(
+        '573000000000',
+        {
+          customer_name: 'Juan Perez',
+          product_name: 'Lavadora',
+          organization_name: 'Org Uno',
+        },
+      );
+      expect(pancakeProvider.sendMessage).not.toHaveBeenCalled();
     });
 
     it('keeps a Pancake retryable failure (429/5xx) on the retryable ERROR path', async () => {
@@ -468,7 +483,7 @@ describe('WhatsappService', () => {
       pancakeProvider.isConfigured.mockReturnValue(true);
       const rate = new PancakeRateLimitError('rate');
       rate.retryable = true;
-      pancakeProvider.sendMessage.mockRejectedValue(rate);
+      pancakeProvider.sendTemplate.mockRejectedValue(rate);
       prisma.automation.findMany.mockResolvedValue([dueAutomation]);
       prisma.$transaction.mockImplementation(
         async (fn: (tx: unknown) => Promise<unknown>) => fn(txMock()),
@@ -484,6 +499,34 @@ describe('WhatsappService', () => {
           status: 'ERROR',
           retryCount: { increment: 1 },
         }) as object,
+      });
+    });
+
+    it('sends automation messages through the approved template with named params', async () => {
+      configService.get.mockImplementation((key: string) => {
+        if (key === 'whatsapp.defaultOrganizationId') return 'org-1';
+        if (key === 'pancake.organizationId') return 'org-1';
+        return null;
+      });
+      pancakeProvider.isConfigured.mockReturnValue(true);
+      pancakeProvider.sendTemplate.mockResolvedValue({
+        providerMessageId: 'pc-1',
+        providerConversationId: 'waba_x_573000000000',
+        status: 'SENT',
+      });
+      prisma.automation.findMany.mockResolvedValue([dueAutomation]);
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => fn(txMock()),
+      );
+      prisma.message.update.mockResolvedValue({});
+      prisma.automation.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.executeDueAutomations();
+
+      expect(pancakeProvider.sendTemplate).toHaveBeenCalledTimes(1);
+      expect(prisma.automation.updateMany).toHaveBeenCalledWith({
+        where: { id: 'a-1', status: 'EXECUTING' },
+        data: expect.objectContaining({ status: 'EXECUTED' }) as object,
       });
     });
 
@@ -2159,6 +2202,115 @@ describe('WhatsappService', () => {
           }) as unknown,
         }),
       );
+    });
+  });
+
+  describe('Pancake global template path (2026-09-10)', () => {
+    const pancakeConfig = () => {
+      configService.get.mockImplementation((key: string) => {
+        if (key === 'whatsapp.defaultOrganizationId') return 'org-1';
+        if (key === 'pancake.organizationId') return 'org-1';
+        return null;
+      });
+      pancakeProvider.isConfigured.mockReturnValue(true);
+    };
+
+    it('routes manual sends through the template resolving customer/organization names', async () => {
+      pancakeConfig();
+      pancakeProvider.sendTemplate.mockResolvedValue({
+        providerMessageId: 'pc-1',
+        providerConversationId: 'waba_x_573000000000',
+        status: 'SENT',
+      });
+      prisma.customer.findFirst.mockResolvedValue({
+        id: 'cu-1',
+        uuid: 'cuu-1',
+        organizationId: 'org-1',
+        phone: '573000000000',
+        name: 'Juan Perez',
+      });
+      prisma.organization.findUnique.mockResolvedValue({ name: 'Org Uno' });
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = {
+            conversation: {
+              findFirst: jest.fn().mockResolvedValue(null),
+              create: jest
+                .fn()
+                .mockResolvedValue({ id: 'conv-1', uuid: 'conv-uuid-1' }),
+            },
+            message: {
+              create: jest
+                .fn()
+                .mockResolvedValue({ id: 'msg-1', uuid: 'msg-uuid-1' }),
+            },
+          };
+          return fn(tx);
+        },
+      );
+      prisma.message.update.mockResolvedValue({});
+      prisma.message.findFirst.mockResolvedValue(null);
+
+      await service.sendManualMessage(orgUser, {
+        customerId: 'cuu-1',
+        content: 'Hola',
+      });
+
+      expect(pancakeProvider.sendTemplate).toHaveBeenCalledWith(
+        '573000000000',
+        {
+          customer_name: 'Juan Perez',
+          product_name: '',
+          organization_name: 'Org Uno',
+        },
+      );
+    });
+
+    it('routes advisor replies through the template resolving names', async () => {
+      pancakeConfig();
+      pancakeProvider.sendTemplate.mockResolvedValue({
+        providerMessageId: 'pc-1',
+        providerConversationId: 'waba_x_573000000000',
+        status: 'SENT',
+      });
+      prisma.conversation.findFirst.mockResolvedValue({
+        id: 'co-1',
+        uuid: 'cou-1',
+        organizationId: 'org-1',
+        status: 'OPEN',
+        customer: { phone: '573000000000' },
+      });
+      prisma.customer.findFirst.mockResolvedValue({ name: 'Juan Perez' });
+      prisma.organization.findUnique.mockResolvedValue({ name: 'Org Uno' });
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = {
+            message: {
+              create: jest
+                .fn()
+                .mockResolvedValue({ id: 'msg-1', uuid: 'msg-uuid-1' }),
+            },
+            conversation: {
+              updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+            },
+          };
+          return fn(tx);
+        },
+      );
+      prisma.message.update.mockResolvedValue({});
+      prisma.message.findFirst.mockResolvedValue(null);
+
+      await service.sendReply(orgUser, 'cou-1', 'Hola');
+
+      expect(pancakeProvider.sendTemplate).toHaveBeenCalledWith(
+        '573000000000',
+        {
+          customer_name: 'Juan Perez',
+          product_name: '',
+          organization_name: 'Org Uno',
+        },
+      );
+      expect(provider.sendMessage).not.toHaveBeenCalled();
     });
   });
 });

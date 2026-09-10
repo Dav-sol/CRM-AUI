@@ -92,6 +92,44 @@ export class PancakeWhatsAppProvider implements WhatsAppProvider {
     };
   }
 
+  // Global v1 (2026-09-10): every Pancake send (automations, manual, advisor
+  // replies) goes through the single configured APPROVED template — free-text
+  // InboxMessage always fails on WhatsApp (validated live). Params are named
+  // BODY_PARAMS values (document.md:4246): customer_name, product_name,
+  // organization_name. The template id comes from PANCAKE_TEMPLATE_ID; a
+  // missing template is terminal (H5: no retry — it would fail again).
+  async sendTemplate(
+    to: string,
+    params: Record<string, string>,
+  ): Promise<ProviderSendResult> {
+    if (!this.isConfigured()) {
+      throw new PancakeError('Pancake provider is not configured');
+    }
+    const templateId = this.configService.get<string>('pancake.templateId');
+    if (!templateId) {
+      const error = new PancakeError(
+        'Pancake template is not configured (PANCAKE_TEMPLATE_ID)',
+      );
+      error.retryable = false;
+      throw error;
+    }
+    const conversationId =
+      (await this.resolveConversation(to)) ?? `${this.pageId}_${to}`;
+    const result = await this.api.sendTemplate(conversationId, {
+      templateId,
+      templateParams: { BODY_PARAMS: params },
+      senderId: this.senderId,
+    });
+    if (!result.id) {
+      throw new PancakeError('Pancake send response missing id');
+    }
+    return {
+      providerMessageId: result.id,
+      providerConversationId: conversationId,
+      status: 'SENT',
+    };
+  }
+
   private async resolveConversation(to: string): Promise<string | null> {
     if (!this.resolveConversationId) {
       return null;
