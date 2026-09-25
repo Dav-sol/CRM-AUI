@@ -1,0 +1,38 @@
+# The API image (apps/api/Dockerfile) builds with the repository root as its
+# build context, so without this file Docker sends everything here to the
+# daemon: 1.4 GB including .git (81 MB), node_modules (1.3 GB) and apps/api/.env.
+# Verified with a probe image: apps/api/.env (Pancake/JWT secrets) was part of
+# the image context before this file existed.
+
+# VCS metadata
+.git
+.gitignore
+.gitattributes
+
+# Secrets: never ship environment files to the Docker daemon.
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+
+# Dependencies and build output; the image installs and builds its own copies.
+node_modules
+**/node_modules
+dist
+**/dist
+.next
+**/.next
+.turbo
+**/.turbo
+coverage
+**/coverage
+
+# Logs and OS noise
+*.log
+**/*.log
+.DS_Store
+Thumbs.db
+
+# Local tooling state
+.opencode
