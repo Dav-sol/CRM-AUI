@@ -10,9 +10,16 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3002
-      DATABASE_URL: postgresql://automatizeit:automatizeit@postgres:5432/automatizeit
+      # Credentials come from infrastructure/docker/.env (gitignored). The
+      # password is required rather than defaulted: this file is the production
+      # stack, and a baked-in database password is a committed secret. Use
+      # URL-safe characters (e.g. `openssl rand -hex 32`) because the value is
+      # interpolated into the connection string.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-automatizeit}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requerido - ver infrastructure/docker/.env.example}@postgres:5432/${POSTGRES_DB:-automatizeit}
       REDIS_URL: redis://redis:6379
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      # Required on purpose: the previous localhost default silently produced a
+      # misconfigured production deployment instead of failing at `up`.
+      CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN requerido - origen del frontend, p.ej. https://app.ejemplo.com}
       # src/core/config/env.validation.ts (Joi) rejects the container at boot if
       # any of these is missing or too short, so `docker compose up` fails fast
       # here with a readable message instead of crash-looping inside the app.
@@ -29,9 +36,35 @@ services:
       # empty value would be rejected by Joi ("not allowed to be empty"). Add the
       # keys you actually enable to infrastructure/docker/.env instead.
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+
+  # One-shot migration task: `prisma migrate deploy` runs once per `up` and has
+  # to finish successfully before the API is allowed to start, so a deployment
+  # over an empty database ends up migrated instead of an API reporting health
+  # against 0 tables.
+  #
+  # It lives in its own task (and not in the API entrypoint) because
+  # `_prisma_migrations` has no unique index over migration_name: safety against
+  # duplicated runs comes from Prisma's Postgres advisory lock, not from the
+  # schema. A single task keeps concurrency out of the picture even if the API
+  # service is scaled.
+  migrate:
+    build:
+      context: ../../
+      dockerfile: apps/api/Dockerfile
+    container_name: automatizeit-migrate
+    restart: "no"
+    command: ["sh", "-c", "npx prisma migrate deploy"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-automatizeit}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requerido - ver infrastructure/docker/.env.example}@postgres:5432/${POSTGRES_DB:-automatizeit}
+    depends_on:
+      postgres:
         condition: service_healthy
 
   postgres:
@@ -40,18 +73,27 @@ services:
     restart: unless-stopped
 
     environment:
-      POSTGRES_DB: automatizeit
-      POSTGRES_USER: automatizeit
-      POSTGRES_PASSWORD: automatizeit
+      POSTGRES_DB: ${POSTGRES_DB:-automatizeit}
+      POSTGRES_USER: ${POSTGRES_USER:-automatizeit}
+      # POSTGRES_PASSWORD is only honoured on first initialization of the data
+      # volume; keep it in sync with infrastructure/docker/.env afterwards.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requerido - ver infrastructure/docker/.env.example}
 
+    # Bound to loopback: this compose file is also the production stack, and
+    # publishing the database/Redis on every interface exposes them to the
+    # network. Containers still reach each other by service name.
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
 
     volumes:
       - automatizeit_postgres_data:/var/lib/postgresql/data
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U automatizeit"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-automatizeit} -d ${POSTGRES_DB:-automatizeit}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -62,7 +104,7 @@ services:
     restart: unless-stopped
 
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
 
     volumes:
       - automatizeit_redis_data:/data
