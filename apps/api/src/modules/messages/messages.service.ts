@@ -4,10 +4,7 @@ import { PrismaService } from '../../core/database/prisma.service';
 import { AuthUser } from '../../core/decorators/current-user.decorator';
 
 export type MessageSource =
-  | 'campaign_template'
-  | 'campaign_stage'
-  | 'sequence_stage'
-  | 'quick_reply';
+  'campaign_template' | 'campaign_stage' | 'sequence_stage' | 'quick_reply';
 
 export interface AggregatedMessage {
   id: string;

@@ -75,6 +75,9 @@ export function renderTemplate(
     .replace(/\{productName\}/g, vars.productName)
     .replace(/\{organizationName\}/g, vars.organizationName)
     .replace(/\{brand\}/g, vars.brand)
-    .replace(/\{warrantyExpiresAt\}/g, formatVariableDate(vars.warrantyExpiresAt))
+    .replace(
+      /\{warrantyExpiresAt\}/g,
+      formatVariableDate(vars.warrantyExpiresAt),
+    )
     .replace(/\{purchaseDate\}/g, formatVariableDate(vars.purchaseDate));
 }

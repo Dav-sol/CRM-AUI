@@ -678,7 +678,7 @@ describe('CampaignsService', () => {
       );
       let txRef:
         | {
-purchase: { findMany: jest.Mock; count: jest.Mock };
+            purchase: { findMany: jest.Mock; count: jest.Mock };
             automation: { create: jest.Mock; createMany: jest.Mock };
           }
         | undefined;
@@ -1809,7 +1809,12 @@ purchase: { findMany: jest.Mock; count: jest.Mock };
 
     it('rejects approval when there are no messages (P0.2)', async () => {
       prisma.campaign.findFirst.mockResolvedValue(
-        campaignRow({ template: '', templateD3: '', templateD180: '', templateD365: '' }),
+        campaignRow({
+          template: '',
+          templateD3: '',
+          templateD180: '',
+          templateD365: '',
+        }),
       );
 
       await expect(service.approve(orgUser, 'cu-1')).rejects.toMatchObject({
@@ -2013,7 +2018,9 @@ purchase: { findMany: jest.Mock; count: jest.Mock };
             },
             purchase: {
               findMany: jest.fn(
-                (args?: { select?: Record<string, unknown> }): Promise<unknown> => {
+                (args?: {
+                  select?: Record<string, unknown>;
+                }): Promise<unknown> => {
                   if (args?.select && 'warrantyExpiresAt' in args.select) {
                     return Promise.resolve([
                       {
@@ -2041,10 +2048,12 @@ purchase: { findMany: jest.Mock; count: jest.Mock };
               count: jest.fn().mockResolvedValue(0),
               create: jest
                 .fn()
-                .mockImplementation(async ({ data }: { data: Record<string, unknown> }) => {
-                  createCalls.push(data);
-                  return { id: 'au-1' };
-                }),
+                .mockImplementation(
+                  async ({ data }: { data: Record<string, unknown> }) => {
+                    createCalls.push(data);
+                    return { id: 'au-1' };
+                  },
+                ),
             },
           };
           return fn(tx);
@@ -2063,9 +2072,7 @@ purchase: { findMany: jest.Mock; count: jest.Mock };
         new Date('2027-07-02T00:00:00.000Z'),
       );
       expect(createCalls[0].purpose).toBe('TRANSACTIONAL');
-      expect(createCalls[0].messageTemplate).toBe(
-        'Garantía de {productName}',
-      );
+      expect(createCalls[0].messageTemplate).toBe('Garantía de {productName}');
     });
 
     it('rejects activation when inline stages contain invalid variables', async () => {

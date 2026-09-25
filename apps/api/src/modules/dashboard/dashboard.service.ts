@@ -469,79 +469,83 @@ export class DashboardService {
     const in30Days = new Date(now.getTime() + 30 * 86_400_000);
     const in12Months = new Date(now.getTime() - 12 * 30 * 86_400_000);
 
-    const [upcomingAutomations, expiringWarranties, repurchaseWindow, openQuotesRows] =
-      await Promise.all([
-        this.prisma.automation.findMany({
-          where: {
-            organizationId,
-            deletedAt: null,
-            status: 'SCHEDULED',
-            scheduledDate: { gte: now },
-            purchase: { deletedAt: null },
-          },
-          orderBy: { scheduledDate: 'asc' },
-          take: 5,
-          select: {
-            uuid: true,
-            scheduledDate: true,
-            status: true,
-            campaign: { select: { name: true } },
-            purchase: {
-              select: {
-                customer: { select: { uuid: true, name: true } },
-                product: { select: { name: true } },
-              },
+    const [
+      upcomingAutomations,
+      expiringWarranties,
+      repurchaseWindow,
+      openQuotesRows,
+    ] = await Promise.all([
+      this.prisma.automation.findMany({
+        where: {
+          organizationId,
+          deletedAt: null,
+          status: 'SCHEDULED',
+          scheduledDate: { gte: now },
+          purchase: { deletedAt: null },
+        },
+        orderBy: { scheduledDate: 'asc' },
+        take: 5,
+        select: {
+          uuid: true,
+          scheduledDate: true,
+          status: true,
+          campaign: { select: { name: true } },
+          purchase: {
+            select: {
+              customer: { select: { uuid: true, name: true } },
+              product: { select: { name: true } },
             },
           },
-        }),
-        this.prisma.purchase.findMany({
-          where: {
-            organizationId,
-            deletedAt: null,
-            warrantyExpiresAt: { gte: now, lte: in30Days },
-          },
-          orderBy: { warrantyExpiresAt: 'asc' },
-          take: 5,
-          select: {
-            id: true,
-            warrantyExpiresAt: true,
-            customer: { select: { uuid: true, name: true } },
-            product: { select: { name: true } },
-          },
-        }),
-        this.prisma.purchase.findMany({
-          where: {
-            organizationId,
-            deletedAt: null,
-            warrantyExpiresAt: { gte: in12Months, lte: now },
-          },
-          orderBy: { warrantyExpiresAt: 'desc' },
-          take: 5,
-          select: {
-            id: true,
-            warrantyExpiresAt: true,
-            value: true,
-            customer: { select: { uuid: true, name: true } },
-            product: { select: { name: true } },
-          },
-        }),
-        this.prisma.quote.findMany({
-          where: {
-            organizationId,
-            deletedAt: null,
-            status: { in: ['ENVIADA', 'DRAFT'] },
-          },
-          orderBy: { createdAt: 'desc' },
-          take: 5,
-          select: {
-            uuid: true,
-            value: true,
-            sentAt: true,
-            createdAt: true,
-            customerId: true,
-          },
-        }),
-      ]);
+        },
+      }),
+      this.prisma.purchase.findMany({
+        where: {
+          organizationId,
+          deletedAt: null,
+          warrantyExpiresAt: { gte: now, lte: in30Days },
+        },
+        orderBy: { warrantyExpiresAt: 'asc' },
+        take: 5,
+        select: {
+          id: true,
+          warrantyExpiresAt: true,
+          customer: { select: { uuid: true, name: true } },
+          product: { select: { name: true } },
+        },
+      }),
+      this.prisma.purchase.findMany({
+        where: {
+          organizationId,
+          deletedAt: null,
+          warrantyExpiresAt: { gte: in12Months, lte: now },
+        },
+        orderBy: { warrantyExpiresAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          warrantyExpiresAt: true,
+          value: true,
+          customer: { select: { uuid: true, name: true } },
+          product: { select: { name: true } },
+        },
+      }),
+      this.prisma.quote.findMany({
+        where: {
+          organizationId,
+          deletedAt: null,
+          status: { in: ['ENVIADA', 'DRAFT'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: {
+          uuid: true,
+          value: true,
+          sentAt: true,
+          createdAt: true,
+          customerId: true,
+        },
+      }),
+    ]);
 
     const quoteCustomerIds = [
       ...new Set(

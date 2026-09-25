@@ -439,8 +439,7 @@ export class CustomersService {
           executedDate: a.executedDate?.toISOString() ?? null,
           status: a.status,
           purpose: a.purpose,
-          messagePreview:
-            a.messages[0]?.content ?? a.messageTemplate ?? null,
+          messagePreview: a.messages[0]?.content ?? a.messageTemplate ?? null,
         })),
       })),
       quotes: quotes.map((q) => ({

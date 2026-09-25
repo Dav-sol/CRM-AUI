@@ -46,10 +46,7 @@ export class TemplatesController {
 
   @Post()
   @Roles('PLATFORM_OWNER', 'ADMINISTRADOR', 'GERENTE')
-  async create(
-    @CurrentUser() user: AuthUser,
-    @Body() dto: CreateTemplateDto,
-  ) {
+  async create(@CurrentUser() user: AuthUser, @Body() dto: CreateTemplateDto) {
     const template = await this.templatesService.create(user, dto);
     return { data: template };
   }

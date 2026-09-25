@@ -480,7 +480,9 @@ describe('ProductsService', () => {
         code: 'P-100',
         organizationId: 'org-1',
       });
-      prisma.product.update.mockResolvedValue(mockProduct({ status: 'INACTIVE' }));
+      prisma.product.update.mockResolvedValue(
+        mockProduct({ status: 'INACTIVE' }),
+      );
 
       const result = await service.update(orgUser, 'pr-1', {
         name: 'Batería Z Plus',

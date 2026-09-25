@@ -70,7 +70,10 @@ export class TemplatesService {
     private readonly auditService: AuditIdentityService,
   ) {}
 
-  async findAll(user: AuthUser, query: QueryTemplatesDto): Promise<TemplateListResult> {
+  async findAll(
+    user: AuthUser,
+    query: QueryTemplatesDto,
+  ): Promise<TemplateListResult> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const where = this.buildListWhere(user, query);
@@ -98,10 +101,7 @@ export class TemplatesService {
     return template ? toTemplateItem(template) : null;
   }
 
-  async create(
-    user: AuthUser,
-    dto: CreateTemplateDto,
-  ): Promise<TemplateItem> {
+  async create(user: AuthUser, dto: CreateTemplateDto): Promise<TemplateItem> {
     const organizationId = this.requireOrg(user);
     const created = await this.prisma.template.create({
       data: {
@@ -224,7 +224,12 @@ export class TemplatesService {
       where.OR = [
         { name: { contains: query.search.trim(), mode: 'insensitive' } },
         { goal: { contains: query.search.trim(), mode: 'insensitive' } },
-        { recommendedUse: { contains: query.search.trim(), mode: 'insensitive' } },
+        {
+          recommendedUse: {
+            contains: query.search.trim(),
+            mode: 'insensitive',
+          },
+        },
         { body: { contains: query.search.trim(), mode: 'insensitive' } },
       ];
     }
@@ -251,7 +256,10 @@ export class TemplatesService {
     const field = desc ? sort.slice(1) : sort;
     if (!SORT_FIELDS.has(field)) {
       throw new BadRequestException({
-        error: { code: 'VALIDATION_ERROR', message: `Invalid sort field: ${field}` },
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: `Invalid sort field: ${field}`,
+        },
       });
     }
     return [{ [field]: desc ? 'desc' : 'asc' }];

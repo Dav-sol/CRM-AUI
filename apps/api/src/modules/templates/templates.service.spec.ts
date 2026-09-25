@@ -46,12 +46,16 @@ describe('TemplatesService', () => {
         findMany: jest.fn().mockResolvedValue([mockTemplate()]),
         findFirst: jest.fn().mockResolvedValue(mockTemplate()),
         count: jest.fn().mockResolvedValue(1),
-        create: jest.fn().mockImplementation(({ data }) =>
-          Promise.resolve(mockTemplate({ uuid: 'new-uuid', ...data })),
-        ),
-        update: jest.fn().mockImplementation(({ where, data }) =>
-          Promise.resolve(mockTemplate({ ...where, ...data })),
-        ),
+        create: jest
+          .fn()
+          .mockImplementation(({ data }) =>
+            Promise.resolve(mockTemplate({ uuid: 'new-uuid', ...data })),
+          ),
+        update: jest
+          .fn()
+          .mockImplementation(({ where, data }) =>
+            Promise.resolve(mockTemplate({ ...where, ...data })),
+          ),
       },
     };
     audit = { record: jest.fn().mockResolvedValue(undefined) };
@@ -180,9 +184,9 @@ describe('TemplatesService', () => {
     });
 
     it('throws if no fields provided', async () => {
-      await expect(
-        service.update(orgUser, 'uuid-tpl-1', {}),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.update(orgUser, 'uuid-tpl-1', {})).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 
