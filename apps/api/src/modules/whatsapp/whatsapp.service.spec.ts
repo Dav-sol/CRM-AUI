@@ -1,6 +1,7 @@
 import {
   BadGatewayException,
   BadRequestException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -13,6 +14,7 @@ import { AuditIdentityService } from '../auth/audit.identity.service';
 import { WhatsappService } from './whatsapp.service';
 import { PancakeWhatsAppProvider } from './pancake/pancake-whatsapp.provider';
 import {
+  PancakeApiError,
   PancakeRateLimitError,
   PancakeTimeoutError,
 } from './pancake/pancake.client';
@@ -500,6 +502,51 @@ describe('WhatsappService', () => {
           retryCount: { increment: 1 },
         }) as object,
       });
+    });
+
+    it('records a Pancake rejection as provider_error and logs the real reason', async () => {
+      // Regression: Pancake failures used to be labelled internal_error and
+      // the provider reason was dropped, so a blocked send could not be
+      // diagnosed from the CRM logs.
+      const errorSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      configService.get.mockImplementation((key: string) => {
+        if (key === 'whatsapp.defaultOrganizationId') return 'org-1';
+        if (key === 'pancake.organizationId') return 'org-1';
+        return null;
+      });
+      pancakeProvider.isConfigured.mockReturnValue(true);
+      const rejection = new PancakeApiError(
+        'Pancake API returned success=false: insufficient balance (error_code=131042)',
+      );
+      rejection.retryable = false;
+      pancakeProvider.sendTemplate.mockRejectedValue(rejection);
+      prisma.automation.findMany.mockResolvedValue([dueAutomation]);
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => fn(txMock()),
+      );
+      prisma.message.update.mockResolvedValue({});
+      prisma.automation.updateMany.mockResolvedValue({ count: 1 });
+
+      try {
+        await service.executeDueAutomations();
+
+        expect(auditService.record).toHaveBeenCalledWith(
+          expect.objectContaining({
+            action: 'automation.failed',
+            metadata: expect.objectContaining({
+              reason: 'provider_error',
+            }) as object,
+          }),
+        );
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('automatic send failed automation='),
+          expect.stringContaining('insufficient balance'),
+        );
+      } finally {
+        errorSpy.mockRestore();
+      }
     });
 
     it('sends automation messages through the approved template with named params', async () => {

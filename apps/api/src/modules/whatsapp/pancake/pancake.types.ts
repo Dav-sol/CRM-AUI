@@ -40,7 +40,11 @@ export interface PancakeMessagesResponse {
 export interface PancakeMessageTemplateComponent {
   type: string; // BODY | HEADER | BUTTONS | ...
   text?: string;
-  example?: { body_text?: string[][] };
+  example?: {
+    body_text?: string[][];
+    // Named BODY params published by Botcake (validated live 2026-09-25).
+    body_text_named_params?: Array<{ param_name?: string; example?: string }>;
+  };
   buttons?: Array<{ text?: string; type?: string; url?: string }>;
 }
 

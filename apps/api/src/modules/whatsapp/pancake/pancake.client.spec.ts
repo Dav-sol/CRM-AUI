@@ -134,6 +134,69 @@ describe('PancakeClient', () => {
     ).rejects.toBeInstanceOf(PancakeApiError);
   });
 
+  it('surfaces Pancake message and error_code on success=false', async () => {
+    // Live behaviour: HTTP 200 + success:false carries the real reason
+    // ("conversation_id not found", error_code 120). It must reach the logs.
+    (global.fetch as jest.Mock).mockResolvedValue(
+      jsonResponse({
+        success: false,
+        message: 'conversation_id not found',
+        error_code: 120,
+      }),
+    );
+
+    const error = (await client
+      .get('/v2/pages/p1/conversations', CONFIG.apiBaseUrl)
+      .catch((caught: unknown) => caught)) as PancakeApiError;
+
+    expect(error).toBeInstanceOf(PancakeApiError);
+    expect(error.retryable).toBe(false);
+    expect(error.errorCode).toBe(120);
+    expect(error.message).toContain('conversation_id not found');
+    expect(error.message).toContain('error_code=120');
+  });
+
+  it('surfaces the live wallet rejection (Wallet not enough money)', async () => {
+    // Exact response captured in production 2026-09-25: the Pancake prepaid
+    // wallet had no balance and rejected every template send.
+    (global.fetch as jest.Mock).mockResolvedValue(
+      jsonResponse({
+        id: 'waba_1146111635255630_',
+        message: 'Wallet not enough money',
+        success: false,
+        wallet_id: 'b9cd07ce-e95c-4833-8e71-1d6f482d9be1',
+        message_code: 'waba_1999667',
+      }),
+    );
+
+    const error = (await client
+      .get('/v2/pages/p1/conversations', CONFIG.apiBaseUrl)
+      .catch((caught: unknown) => caught)) as PancakeApiError;
+
+    expect(error).toBeInstanceOf(PancakeApiError);
+    expect(error.retryable).toBe(false);
+    expect(error.messageCode).toBe('waba_1999667');
+    expect(error.message).toContain('Wallet not enough money');
+    expect(error.message).toContain('message_code=waba_1999667');
+  });
+
+  it('redacts the page access token from a Pancake failure message', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(
+      jsonResponse({
+        success: false,
+        message: `bad page_access_token=${CONFIG.apiToken} for ${CONFIG.apiToken}`,
+      }),
+    );
+
+    const error = (await client
+      .get('/v2/pages/p1/conversations', CONFIG.apiBaseUrl)
+      .catch((caught: unknown) => caught)) as PancakeApiError;
+
+    expect(error.message).not.toContain(CONFIG.apiToken);
+    expect(error.message).toContain('[redacted]');
+    expect(error.message).toContain('page_access_token=[redacted]');
+  });
+
   it('maps 401/403 to PancakeAuthError', async () => {
     for (const status of [401, 403]) {
       (global.fetch as jest.Mock).mockResolvedValue(jsonResponse({}, status));

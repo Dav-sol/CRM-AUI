@@ -27,7 +27,15 @@ export class PancakeNotFoundError extends PancakeError {}
 export class PancakeRateLimitError extends PancakeError {}
 export class PancakeServerError extends PancakeError {}
 export class PancakeTimeoutError extends PancakeError {}
-export class PancakeApiError extends PancakeError {} // HTTP ok but success=false
+export class PancakeApiError extends PancakeError {
+  // Pancake's own error_code when present (e.g. 120 = conversation not found,
+  // validated live). Lets callers/logs tell apart account failures from
+  // payload failures instead of a bare "success=false".
+  errorCode?: number;
+  // Pancake's structured code, e.g. waba_1999667 = "Wallet not enough money"
+  // (validated live 2026-09-25) — the handle to give Pancake/Meta support.
+  messageCode?: string;
+} // HTTP ok but success=false
 
 @Injectable()
 export class PancakeClient {
@@ -179,11 +187,64 @@ export class PancakeClient {
       throw err;
     }
     if (body && body.success === false) {
-      const err = new PancakeApiError('Pancake API returned success=false');
+      // Pancake reports application failures as HTTP 200 + success:false with
+      // a message, error_code/message_code (validated live: "Wallet not enough
+      // money" + message_code waba_1999667; "conversation_id not found" +
+      // error_code 120; "Template not found"). Dropping them made every
+      // Pancake rejection indistinguishable in the logs, so the real reason a
+      // send was blocked could not be diagnosed from the CRM side.
+      const detail = body as {
+        message?: unknown;
+        error_code?: unknown;
+        message_code?: unknown;
+      };
+      const err = new PancakeApiError(
+        `Pancake API returned success=false${this.describeFailure(detail)}`,
+      );
+      if (typeof detail.error_code === 'number') {
+        err.errorCode = detail.error_code;
+      }
+      if (typeof detail.message_code === 'string' && detail.message_code) {
+        err.messageCode = detail.message_code.slice(0, 60);
+      }
       err.retryable = false;
       throw err;
     }
     return body as T;
+  }
+
+  // Format Pancake's failure detail for the error message, redacting the page
+  // access token so it can never reach a log line.
+  private describeFailure(detail: {
+    message?: unknown;
+    error_code?: unknown;
+    message_code?: unknown;
+  }): string {
+    const message =
+      typeof detail.message === 'string'
+        ? detail.message.replace(/\s+/g, ' ').trim().slice(0, 200)
+        : '';
+    const errorCode =
+      typeof detail.error_code === 'number'
+        ? ` (error_code=${detail.error_code})`
+        : '';
+    const messageCode =
+      typeof detail.message_code === 'string' && detail.message_code
+        ? ` (message_code=${detail.message_code.slice(0, 60)})`
+        : '';
+    return `${message ? `: ${this.redact(message)}` : ''}${errorCode}${messageCode}`;
+  }
+
+  private redact(value: string): string {
+    let out = value;
+    const token = this.config.apiToken;
+    if (token) {
+      out = out.split(token).join('[redacted]');
+    }
+    return out.replace(
+      /page_access_token=[^&\s]+/gi,
+      'page_access_token=[redacted]',
+    );
   }
 
   // Pancake limits public API calls to ~5 per page per second (document.md).

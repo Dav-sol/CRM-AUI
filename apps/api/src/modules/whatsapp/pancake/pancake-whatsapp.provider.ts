@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PancakePublicApi, PancakeSendTemplateInput } from './pancake.adapter';
 import { PancakeError } from './pancake.client';
+import { PancakeMessageTemplate } from './pancake.types';
 import type {
   ProviderSendResult,
   WhatsAppProvider,
@@ -9,6 +10,30 @@ import type {
 
 function digits(value: string): string {
   return value.replace(/\D/g, '');
+}
+
+// Variable names declared by the template BODY text ({{name}} placeholders).
+// Meta rejects a send whose BODY parameter count does not match the template
+// (error 132000), so the payload must match exactly what is declared here.
+// Falls back to the published example params when the text is absent.
+function declaredBodyParams(template: PancakeMessageTemplate): string[] {
+  const body = (template.components ?? []).find(
+    (component) => component.type === 'BODY',
+  );
+  const names = new Set<string>();
+  for (const match of (body?.text ?? '').matchAll(
+    /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g,
+  )) {
+    names.add(match[1]);
+  }
+  if (names.size === 0) {
+    for (const param of body?.example?.body_text_named_params ?? []) {
+      if (param.param_name) {
+        names.add(param.param_name);
+      }
+    }
+  }
+  return [...names];
 }
 
 // Drop-in replacement for WhatsAppProvider that sends through Pancake.
@@ -22,6 +47,13 @@ function digits(value: string): string {
 // sendMessage() (InboxMessage) is kept for within-window replies only.
 @Injectable()
 export class PancakeWhatsAppProvider implements WhatsAppProvider {
+  // Cache of the configured template's declared BODY variables (Botcake).
+  private templateParamsCache: {
+    fetchedAt: number;
+    names: string[] | null;
+  } | null = null;
+  private static readonly TEMPLATE_PARAMS_TTL_MS = 600_000;
+
   constructor(
     private readonly api: PancakePublicApi,
     private readonly configService: ConfigService,
@@ -117,7 +149,9 @@ export class PancakeWhatsAppProvider implements WhatsAppProvider {
       (await this.resolveConversation(to)) ?? `${this.pageId}_${to}`;
     const result = await this.api.sendTemplate(conversationId, {
       templateId,
-      templateParams: { BODY_PARAMS: params },
+      templateParams: {
+        BODY_PARAMS: await this.alignBodyParams(templateId, params),
+      },
       senderId: this.senderId,
     });
     if (!result.id) {
@@ -128,6 +162,52 @@ export class PancakeWhatsAppProvider implements WhatsAppProvider {
       providerConversationId: conversationId,
       status: 'SENT',
     };
+  }
+
+  // Meta rejects a template send whose BODY params do not match the declared
+  // variables (error 132000 "Template Param Count Mismatch"). Callers resolve
+  // a fixed superset (customer_name, product_name, organization_name) while
+  // the approved template declares its own set — live check 2026-09-25:
+  // google_reseas (es_CO, APPROVED) declares customer_name + product_name
+  // only. Send exactly the declared variables, filling unknown ones with ''.
+  // Definitions come from Botcake and are cached; when they cannot be read,
+  // the caller's params go unchanged (a definition fetch never blocks a send).
+  private async alignBodyParams(
+    templateId: string,
+    params: Record<string, string>,
+  ): Promise<Record<string, string>> {
+    const declared = await this.declaredBodyParamNames(templateId);
+    if (declared.length === 0) {
+      return params;
+    }
+    const aligned: Record<string, string> = {};
+    for (const name of declared) {
+      aligned[name] = params[name] ?? '';
+    }
+    return aligned;
+  }
+
+  private async declaredBodyParamNames(templateId: string): Promise<string[]> {
+    const cached = this.templateParamsCache;
+    if (
+      cached &&
+      Date.now() - cached.fetchedAt <
+        PancakeWhatsAppProvider.TEMPLATE_PARAMS_TTL_MS
+    ) {
+      return cached.names ?? [];
+    }
+    try {
+      const templates = await this.api.getMessageTemplates();
+      const template = templates.find((entry) => entry.id === templateId);
+      // No template match → no filtering: Pancake answers "Template not found".
+      this.templateParamsCache = template
+        ? { fetchedAt: Date.now(), names: declaredBodyParams(template) }
+        : { fetchedAt: Date.now(), names: null };
+      return this.templateParamsCache.names ?? [];
+    } catch {
+      this.templateParamsCache = null;
+      return [];
+    }
   }
 
   private async resolveConversation(to: string): Promise<string | null> {

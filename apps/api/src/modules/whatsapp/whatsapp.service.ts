@@ -472,8 +472,14 @@ export class WhatsappService {
         },
       });
     } catch (error) {
+      // Pancake rejections must be logged: the CRM otherwise records nothing
+      // about why a send was blocked (see specs/API-Pancake/integration.md).
+      this.logger.error(
+        `automatic send failed automation=${automation.uuid}`,
+        error instanceof Error ? error.message : String(error),
+      );
       const reason =
-        error instanceof ProviderSendError
+        error instanceof ProviderSendError || error instanceof PancakeError
           ? 'provider_error'
           : 'internal_error';
       await this.failMessage(message, automation.organizationId, reason);
@@ -687,8 +693,12 @@ export class WhatsappService {
         metadata: { messageId: message.uuid },
       });
     } catch (error) {
+      this.logger.error(
+        `manual send failed customer=${customer.uuid}`,
+        error instanceof Error ? error.message : String(error),
+      );
       const reason =
-        error instanceof ProviderSendError
+        error instanceof ProviderSendError || error instanceof PancakeError
           ? 'provider_error'
           : 'internal_error';
       await this.failMessage(message, customer.organizationId, reason);
@@ -824,8 +834,12 @@ export class WhatsappService {
         metadata: { messageId: message.uuid },
       });
     } catch (error) {
+      this.logger.error(
+        `reply send failed conversation=${conversationUuid}`,
+        error instanceof Error ? error.message : String(error),
+      );
       const reason =
-        error instanceof ProviderSendError
+        error instanceof ProviderSendError || error instanceof PancakeError
           ? 'provider_error'
           : 'internal_error';
       await this.failMessage(message, conversation.organizationId, reason);
