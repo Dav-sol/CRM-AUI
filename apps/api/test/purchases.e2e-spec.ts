@@ -96,6 +96,25 @@ describe('Purchases (e2e) — US1..US6', () => {
     prisma = app.get(PrismaService);
 
     await prisma.audit.deleteMany({ where: { module: 'purchases' } });
+    // Delete children before purchase: purchases create automations and one
+    // commercial cycle each, and those hold FKs to the purchase row
+    // (automations.e2e-spec.ts uses this same order).
+    await prisma.message.deleteMany({
+      where: { organization: { slug: { in: ['purch-org-1', 'purch-org-2'] } } },
+    });
+    await prisma.conversation.deleteMany({
+      where: { organization: { slug: { in: ['purch-org-1', 'purch-org-2'] } } },
+    });
+    await prisma.automation.deleteMany({
+      where: { organization: { slug: { in: ['purch-org-1', 'purch-org-2'] } } },
+    });
+    await prisma.commercialCycle.deleteMany({
+      where: {
+        purchase: {
+          organization: { slug: { in: ['purch-org-1', 'purch-org-2'] } },
+        },
+      },
+    });
     await prisma.purchase.deleteMany({
       where: {
         organization: { slug: { in: ['purch-org-1', 'purch-org-2'] } },
@@ -250,6 +269,24 @@ describe('Purchases (e2e) — US1..US6', () => {
 
   afterAll(async () => {
     await prisma.audit.deleteMany({ where: { module: 'purchases' } });
+    // Same child-first order as beforeAll; otherwise this block throws
+    // commercial_cycles_purchase_id_fkey and the fixture rows survive.
+    await prisma.message.deleteMany({
+      where: { organization: { slug: { in: ['purch-org-1', 'purch-org-2'] } } },
+    });
+    await prisma.conversation.deleteMany({
+      where: { organization: { slug: { in: ['purch-org-1', 'purch-org-2'] } } },
+    });
+    await prisma.automation.deleteMany({
+      where: { organization: { slug: { in: ['purch-org-1', 'purch-org-2'] } } },
+    });
+    await prisma.commercialCycle.deleteMany({
+      where: {
+        purchase: {
+          organization: { slug: { in: ['purch-org-1', 'purch-org-2'] } },
+        },
+      },
+    });
     await prisma.purchase.deleteMany({
       where: { organization: { slug: { in: ['purch-org-1', 'purch-org-2'] } } },
     });
