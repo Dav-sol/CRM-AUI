@@ -109,9 +109,9 @@ Ver `apps/api/.env.example`. Variables (todas opcionales):
   Wallet prepago**, que es donde corta el envío. Recargar el método de pago de Meta
   **no** pone saldo en el wallet de Pancake.
 - **Discrepancia de divisa a resolver** (captura 2026-09-25): en el panel de Pancake
-  el bloque *Método de pago* dice **"Otro / No configurado"** con insignia **COP** y
-  el tooltip advierte: *"La moneda debe ser USD. Cámbiala en la configuración de tu
-  cuenta de WhatsApp Business en Meta Business Manager."* Confirmar divisa/cobro
+  el bloque _Método de pago_ dice **"Otro / No configurado"** con insignia **COP** y
+  el tooltip advierte: _"La moneda debe ser USD. Cámbiala en la configuración de tu
+  cuenta de WhatsApp Business en Meta Business Manager."_ Confirmar divisa/cobro
   antes de recargar el wallet.
 - **Nuevo requisito Pancake (docs.pancake.biz, `Create a Wallet on Pancake`):** para
   usar la API de WhatsApp se exige un **Wallet prepago** que paga los fees de
@@ -136,7 +136,7 @@ POST `/v1/pages/{page}/conversations/{id}/messages` con credenciales reales:
 | --- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | `template_id` inexistente                               | `{"message":"Template not found","success":false}` → la plantilla se valida **antes** que la conversación                                                              |
 | 2   | Plantilla `google_reseas` + número **sin conversación** | `{"id":"waba_1146111635255630_","message":"Wallet not enough money","success":false,"wallet_id":"b9cd07ce-e95c-4833-8e71-1d6f482d9be1","message_code":"waba_1999667"}` |
-| 3   | Repetición del POST (mismo payload, 2026-09-25)          | **Mismo resultado**: `Wallet not enough money` / `waba_1999667` → el wallet siguió sin saldo tras revisar el panel de Meta; no cambia el diagnóstico |
+| 3   | Repetición del POST (mismo payload, 2026-09-25)         | **Mismo resultado**: `Wallet not enough money` / `waba_1999667` → el wallet siguió sin saldo tras revisar el panel de Meta; no cambia el diagnóstico                   |
 
 **Conclusión: el bloqueo es el Wallet prepago de Pancake sin saldo.**
 
@@ -150,6 +150,31 @@ POST `/v1/pages/{page}/conversations/{id}/messages` con credenciales reales:
   Repetir la prueba tras recargar el wallet.
 - La respuesta trae `message_code` (no `error_code`); ambos se conservan ahora en
   `PancakeApiError` (`messageCode` / `errorCode`).
+
+### Verificación end-to-end del CRM (2026-09-25) — el flujo corre hasta el bloqueo
+
+Prueba real con la API compilada en marcha (`node dist/main`), con
+`PANCAKE_ORGANIZATION_ID` apuntando a una organización temporal creada solo para
+la prueba (datos y proceso eliminados al terminar):
+
+| Paso | Comprobación                                                      | Resultado                                                                                                                                           |
+| ---- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `POST /api/v1/auth/login`                                         | 200 + JWT (usuario con rol `ADMINISTRADOR`; sin rol → `resolveClaims` devuelve 401, comportamiento verificado por el camino)                        |
+| 2    | `POST /api/v1/messages` (cliente con el número `ALTIRIA_TEST_TO`) | **HTTP 502 `PROVIDER_ERROR`** — clasificación nueva, ya no 500                                                                                      |
+| 3    | Log de la API                                                     | `ERROR [WhatsappService] manual send failed customer=…` + `Pancake API returned success=false: Wallet not enough money (message_code=waba_1999667)` |
+| 4    | Auditoría (`audits`)                                              | `message.send` / outcome `failure` / `metadata.reason = provider_error`                                                                             |
+| 5    | Fila en `messages`                                                | `status = FAILED`                                                                                                                                   |
+
+**Qué demuestra:** el CRM arma la llamada (plantilla aprobada, parámetros
+alineados a los `BODY_PARAMS` declarados, `conversation_id` compuesto), invoca la
+API real de Pancake, clasifica el fallo como `provider_error` (502, no 500),
+registra la causa textual en el log y en la auditoría, y marca el mensaje como
+`FAILED`. El único motivo del rechazo sigue siendo **el wallet sin saldo**, no el
+código.
+
+Observación: `messages.failure_reason` queda `NULL` en los envíos WhatsApp porque
+la columna la crea la migración SMS (WIP) y la ruta WhatsApp aún no la escribe;
+la causa se expone vía log + auditoría + evento `MessageFailed`.
 
 ## Errores de la API y su manejo en el CRM
 
@@ -169,7 +194,7 @@ como `Pancake API returned success=false`:
    divisa de la cuenta WhatsApp Business en Meta Business Manager.
 2. **Crear/recargar el Wallet prepago de Pancake** (obligatorio para la API de
    WhatsApp; se consulta solo en el dashboard, no tiene endpoint público) y
-   revisar que el *Método de pago* del panel de Pancake deje de decir
+   revisar que el _Método de pago_ del panel de Pancake deje de decir
    "Otro / No configurado".
 3. `.env`: setear `PANCAKE_TEMPLATE_ID=1767216054194651` y descomentar
    `PANCAKE_ORGANIZATION_ID` (org de Baterías del Caribe).
