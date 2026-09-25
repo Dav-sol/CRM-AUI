@@ -28,6 +28,10 @@ export interface ProductItem {
   status: Product['status'];
   warrantyMonths: number | null;
   price: number | null;
+  // Actor audit fields (specs/014-products-v1/contracts/products-api.md: the
+  // create/update responses carry createdBy/updatedBy).
+  createdBy: string | null;
+  updatedBy: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -43,6 +47,8 @@ function toProductItem(product: Product): ProductItem {
     status: product.status,
     warrantyMonths: product.warrantyMonths,
     price: product.price ? product.price.toNumber() : null,
+    createdBy: product.createdBy,
+    updatedBy: product.updatedBy,
     createdAt: product.createdAt,
     updatedAt: product.updatedAt,
   };
