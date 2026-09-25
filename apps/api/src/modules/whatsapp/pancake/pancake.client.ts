@@ -137,7 +137,9 @@ export class PancakeClient {
       }
       this.logger.warn(
         'pancake network request failed',
-        error instanceof Error ? error.message : String(error),
+        // fetch failures quote the request URL, which carries the
+        // page_access_token query param: redact before it reaches the log.
+        this.redact(error instanceof Error ? error.message : String(error)),
       );
       const network = new PancakeServerError(
         'Pancake request failed (network)',
@@ -237,14 +239,16 @@ export class PancakeClient {
 
   private redact(value: string): string {
     let out = value;
-    const token = this.config.apiToken;
-    if (token) {
-      out = out.split(token).join('[redacted]');
+    // Both credentials must never reach a log line or an error message: the
+    // Pancake page_access_token (query param) and the botcake.io Bearer token.
+    for (const token of [this.config.apiToken, this.config.botcakeApiToken]) {
+      if (token) {
+        out = out.split(token).join('[redacted]');
+      }
     }
-    return out.replace(
-      /page_access_token=[^&\s]+/gi,
-      'page_access_token=[redacted]',
-    );
+    return out
+      .replace(/page_access_token=[^&\s]+/gi, 'page_access_token=[redacted]')
+      .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/g, 'Bearer [redacted]');
   }
 
   // Pancake limits public API calls to ~5 per page per second (document.md).

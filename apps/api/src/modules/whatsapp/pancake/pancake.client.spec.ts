@@ -197,6 +197,45 @@ describe('PancakeClient', () => {
     expect(error.message).toContain('page_access_token=[redacted]');
   });
 
+  it('redacts the botcake Bearer token from a Pancake failure message', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(
+      jsonResponse({
+        success: false,
+        message: `unauthorized Bearer ${CONFIG.botcakeApiToken} for template list`,
+      }),
+    );
+
+    const error = (await client
+      .get('/pages/p1/message_templates', CONFIG.templatesApiUrl)
+      .catch((caught: unknown) => caught)) as PancakeApiError;
+
+    expect(error.message).not.toContain(CONFIG.botcakeApiToken);
+    expect(error.message).toContain('Bearer [redacted]');
+  });
+
+  it('redacts the token from the network failure log', async () => {
+    (global.fetch as jest.Mock).mockRejectedValue(
+      new Error(
+        `getaddrinfo ENOTFOUND ${CONFIG.apiBaseUrl}/v2/pages/p1/conversations?page_access_token=${CONFIG.apiToken}`,
+      ),
+    );
+    const warn = jest.spyOn(
+      (client as unknown as { logger: { warn: (...args: unknown[]) => void } })
+        .logger,
+      'warn',
+    );
+
+    await expect(
+      client.get('/v2/pages/p1/conversations', CONFIG.apiBaseUrl),
+    ).rejects.toBeInstanceOf(PancakeServerError);
+
+    expect(warn).toHaveBeenCalled();
+    const logged = warn.mock.calls.map((call) => String(call[1])).join(' ');
+    expect(logged).not.toContain(CONFIG.apiToken);
+    expect(logged).toContain('[redacted]');
+    warn.mockRestore();
+  });
+
   it('maps 401/403 to PancakeAuthError', async () => {
     for (const status of [401, 403]) {
       (global.fetch as jest.Mock).mockResolvedValue(jsonResponse({}, status));
