@@ -438,7 +438,9 @@ export class DashboardService {
         where: {
           organizationId,
           deletedAt: null,
-          status: { in: ['ACTIVE', 'APPROVED'] },
+          // spec 020 FR-002/Q3 (HG-3): upcoming = ACTIVE with future startAt
+          // only. APPROVED campaigns are not scheduled yet.
+          status: 'ACTIVE',
           startAt: { gt: new Date() },
         },
         orderBy: { startAt: 'asc' },
