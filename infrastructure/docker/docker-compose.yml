@@ -1,4 +1,39 @@
 services:
+  api:
+    build:
+      context: ../../
+      dockerfile: apps/api/Dockerfile
+    container_name: automatizeit-api
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      DATABASE_URL: postgresql://automatizeit:automatizeit@postgres:5432/automatizeit
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      # src/core/config/env.validation.ts (Joi) rejects the container at boot if
+      # any of these is missing or too short, so `docker compose up` fails fast
+      # here with a readable message instead of crash-looping inside the app.
+      # Set them in infrastructure/docker/.env — see apps/api/.env.example.
+      # Generate with: openssl rand -hex 32
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requerido - minimo 32 caracteres}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET requerido - minimo 32 caracteres}
+      WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:?WHATSAPP_API_TOKEN requerido}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:?WHATSAPP_PHONE_NUMBER_ID requerido}
+      WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:?WHATSAPP_WEBHOOK_VERIFY_TOKEN requerido}
+      WHATSAPP_WEBHOOK_SECRET: ${WHATSAPP_WEBHOOK_SECRET:?WHATSAPP_WEBHOOK_SECRET requerido}
+      WHATSAPP_DEFAULT_ORGANIZATION_ID: ${WHATSAPP_DEFAULT_ORGANIZATION_ID:?WHATSAPP_DEFAULT_ORGANIZATION_ID requerido}
+      # Optional integrations (Pancake/SMS) are NOT declared here on purpose: an
+      # empty value would be rejected by Joi ("not allowed to be empty"). Add the
+      # keys you actually enable to infrastructure/docker/.env instead.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   postgres:
     image: postgres:16
     container_name: automatizeit-postgres
@@ -15,6 +50,12 @@ services:
     volumes:
       - automatizeit_postgres_data:/var/lib/postgresql/data
 
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U automatizeit"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:7-alpine
     container_name: automatizeit-redis
@@ -25,6 +66,12 @@ services:
 
     volumes:
       - automatizeit_redis_data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   automatizeit_postgres_data:

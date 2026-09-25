@@ -98,10 +98,21 @@ Ver `apps/api/.env.example`. Variables (todas opcionales):
 ## Estado de la cuenta (validado 2026-09-10, actualizado 2026-09-25)
 
 - BM **Verificado** (antes "No revisado"), WABA Activo, Teléfono Activo.
-- MMLITE: **"Pending valid payment method"** → reportado como bloqueo de envío (POST)
-  en 2026-09-10. Estado actual **sin confirmar** (no comprobable desde aquí; hay que
-  revisarlo en Meta Business Settings). El envío de 2026-09-25 ni llegó a Meta
-  (cortó en el wallet), así que sigue sin descartarse.
+- MMLITE: ~~"Pending valid payment method"~~ **resuelto en Meta** (captura del
+  dashboard de Pancake, 2026-09-25): BM `1325840808019493` **Verificado**, WABA
+  `1551419516419540` **Activo**, MMLITE **Implementado**, límite **2.000
+  msgsg/24h**, cuenta **Aprobada** y método de pago **VISA \*2370 (caduca
+  11/2028)** en Meta Business. El envío de 2026-09-25 tampoco llegó a Meta (cortó
+  en el wallet), así que el error `132000`/parámetros sigue sin poder observarse.
+- **Dos capas de pago distintas** (no confundir): Meta factura la conversación de
+  plantilla (aquí aparece VISA y todo verde) y **Pancake cobra por adelantado en su
+  Wallet prepago**, que es donde corta el envío. Recargar el método de pago de Meta
+  **no** pone saldo en el wallet de Pancake.
+- **Discrepancia de divisa a resolver** (captura 2026-09-25): en el panel de Pancake
+  el bloque *Método de pago* dice **"Otro / No configurado"** con insignia **COP** y
+  el tooltip advierte: *"La moneda debe ser USD. Cámbiala en la configuración de tu
+  cuenta de WhatsApp Business en Meta Business Manager."* Confirmar divisa/cobro
+  antes de recargar el wallet.
 - **Nuevo requisito Pancake (docs.pancake.biz, `Create a Wallet on Pancake`):** para
   usar la API de WhatsApp se exige un **Wallet prepago** que paga los fees de
   plantilla. No hay endpoint público para consultarlo (GET probado en `pages.fm` y
@@ -125,6 +136,7 @@ POST `/v1/pages/{page}/conversations/{id}/messages` con credenciales reales:
 | --- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | `template_id` inexistente                               | `{"message":"Template not found","success":false}` → la plantilla se valida **antes** que la conversación                                                              |
 | 2   | Plantilla `google_reseas` + número **sin conversación** | `{"id":"waba_1146111635255630_","message":"Wallet not enough money","success":false,"wallet_id":"b9cd07ce-e95c-4833-8e71-1d6f482d9be1","message_code":"waba_1999667"}` |
+| 3   | Repetición del POST (mismo payload, 2026-09-25)          | **Mismo resultado**: `Wallet not enough money` / `waba_1999667` → el wallet siguió sin saldo tras revisar el panel de Meta; no cambia el diagnóstico |
 
 **Conclusión: el bloqueo es el Wallet prepago de Pancake sin saldo.**
 
@@ -151,9 +163,14 @@ como `Pancake API returned success=false`:
 
 ## Activación (checklist)
 
-1. MMLITE con método de pago válido (Meta Business Settings).
+1. ~~MMLITE con método de pago válido (Meta Business Settings)~~ — **hecho**
+   (VISA \*2370, MMLITE "Implementado", cuenta Aprobada; ver captura 2026-09-25).
+   **Pendiente**: la insignia COP del panel de Pancake exige USD → confirmar la
+   divisa de la cuenta WhatsApp Business en Meta Business Manager.
 2. **Crear/recargar el Wallet prepago de Pancake** (obligatorio para la API de
-   WhatsApp; se consulta solo en el dashboard, no tiene endpoint público).
+   WhatsApp; se consulta solo en el dashboard, no tiene endpoint público) y
+   revisar que el *Método de pago* del panel de Pancake deje de decir
+   "Otro / No configurado".
 3. `.env`: setear `PANCAKE_TEMPLATE_ID=1767216054194651` y descomentar
    `PANCAKE_ORGANIZATION_ID` (org de Baterías del Caribe).
 4. POST diagnóstico a un número acordado (verifica plantilla + wallet + número nuevo).
@@ -167,10 +184,13 @@ así que el paso 3 se hace solo cuando 1 y 2 estén listos.
 ## Prerequisitos de activación (Baterías del Caribe)
 
 1. ~~Verificar el Business Manager~~ (Verificado, 2026-09-10).
-2. Configurar **método de pago válido** (MMLITE) — pendiente de confirmar.
+2. ~~Configurar **método de pago válido** (MMLITE)~~ — VISA \*2370 + MMLITE
+   "Implementado" el 2026-09-25 (captura). Queda confirmar la divisa (USD) que
+   exige el panel de Pancake.
 3. ~~Crear las **plantillas propias en español**~~ — `google_reseas` (`es_CO`)
    APPROVED desde antes de 2026-09-25; declara 2 variables.
-4. **Wallet prepago de Pancake** con saldo — pendiente de confirmar.
+4. **Wallet prepago de Pancake** con saldo — **único bloqueo que queda**
+   (comprobado dos veces el 2026-09-25: `waba_1999667`).
 5. Recién entonces el POST de plantilla debería devolver `success:true`.
 
 ## Archivos
