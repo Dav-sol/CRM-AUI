@@ -2,6 +2,9 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+// Must match ORG_SLUG in seed-demo.ts (importing it would run its main()).
+const DEMO_ORG_SLUG = 'baterias-del-caribe';
+
 const macBatteries = [
   { id: 1, brand: 'MAC', name: 'Mac Silver 700 / Caja NS40HDL', model: '', voltage: '12V', cca: '350', warranty: '15 meses', price: '$300.000', polarity: 'Derecha', reserveCapacity: '55' },
   { id: 2, brand: 'MAC', name: 'Mac Silver 700 / Caja NS40L', model: '', voltage: '12V', cca: '350', warranty: '15 meses', price: '$300.000', polarity: 'Derecha', reserveCapacity: '55' },
@@ -87,9 +90,16 @@ function generateCode(brand: string, name: string, id: number): string {
 async function main() {
   console.log('Seeding products...');
 
-  const org = await prisma.organization.findFirst({
-    where: { status: 'ACTIVE' },
-  });
+  // Prefer the demo organization (seed-demo-org.ts creates it first) so the
+  // catalog lands in the right tenant; any other active organization keeps the
+  // previous behaviour as a fallback.
+  const org =
+    (await prisma.organization.findFirst({
+      where: { status: 'ACTIVE', slug: DEMO_ORG_SLUG },
+    })) ??
+    (await prisma.organization.findFirst({
+      where: { status: 'ACTIVE' },
+    }));
 
   if (!org) {
     console.error('No active organization found. Create one first.');
