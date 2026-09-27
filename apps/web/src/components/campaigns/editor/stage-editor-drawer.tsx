@@ -31,6 +31,7 @@ type StageEditorDrawerProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   stage: CampaignStage | null;
+  channel?: "WHATSAPP" | "SMS";
   onSave: (stage: CampaignStage) => void;
 };
 
@@ -41,6 +42,7 @@ export function StageEditorDrawer({
   open,
   onOpenChange,
   stage,
+  channel,
   onSave,
 }: StageEditorDrawerProps) {
   if (!stage) return null;
@@ -51,6 +53,7 @@ export function StageEditorDrawer({
       open={open}
       onOpenChange={onOpenChange}
       stage={stage}
+      channel={channel}
       onSave={onSave}
     />
   );
@@ -60,8 +63,10 @@ function StageEditorDrawerContent({
   open,
   onOpenChange,
   stage,
+  channel = "WHATSAPP",
   onSave,
 }: StageEditorDrawerProps & { stage: CampaignStage }) {
+  const maxLen = channel === "SMS" ? 160 : 4096;
   const [name, setName] = useState(stage.name);
   const [anchor, setAnchor] = useState<"PURCHASE_DATE" | "WARRANTY_EXPIRY">(
     stage.anchor,
@@ -150,7 +155,7 @@ function StageEditorDrawerContent({
             <Textarea
               placeholder="Hola {customerName}, tu batería {productName}..."
               rows={4}
-              maxLength={4096}
+              maxLength={maxLen}
               className="resize-none text-sm"
               value={template}
               onChange={(e) => setTemplate(e.target.value)}
@@ -177,7 +182,7 @@ function StageEditorDrawerContent({
             <Textarea
               placeholder="Oferta de recompra para clientes que ya pasaron esta etapa..."
               rows={3}
-              maxLength={4096}
+              maxLength={maxLen}
               className="resize-none text-sm"
               value={templateOnPast}
               onChange={(e) => setTemplateOnPast(e.target.value)}

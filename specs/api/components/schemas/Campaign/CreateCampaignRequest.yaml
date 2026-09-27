@@ -57,3 +57,12 @@ properties:
     type: string
     format: date-time
     description: Optional scheduled start (automations are scheduled for max(startAt, now)).
+
+  channel:
+    type: string
+    enum:
+      - SMS
+      - WHATSAPP_CLIENTS
+    description: |
+      Canal de envío de la campaña (Fase 1). Si no se envía, defaulta a WHATSAPP_CLIENTS.
+      Para SMS requiere al menos una ChannelAccount SMS configurada.

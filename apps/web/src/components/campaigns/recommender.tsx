@@ -47,7 +47,7 @@ const RECOMMENDATIONS = [
     icon: MessageSquareText,
     title: "Mensajes con alta entrega",
     description:
-      "Tus seguimientos tienen un 92% de entrega estimada por WhatsApp. Cuanto antes actives, mayor es el impacto en recompra.",
+      "Tus seguimientos tienen una alta tasa de entrega estimada. Cuanto antes actives, mayor es el impacto en recompra.",
     action: "Activar campaña de recompra",
   },
 ] as const;

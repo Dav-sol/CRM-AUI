@@ -1419,6 +1419,11 @@
                 description: |
                   Tipo de campaña para estimar la tarifa por propósito
                   (transaccional vs comercial, Fase P0.2).
+              channel:
+                type: string
+                enum: [SMS, WHATSAPP_CLIENTS]
+                description: |
+                  Canal de envío para estimar costo por segmentos SMS (Fase 1).
 
     responses:
 

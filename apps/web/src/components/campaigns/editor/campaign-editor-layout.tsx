@@ -38,6 +38,7 @@ import { CampaignReview } from "./campaign-review";
 import { StageEditorDrawer } from "./stage-editor-drawer";
 import { GeneralInfo } from "./general-info";
 import { findCampaignPreset } from "./presets";
+import { ChannelSelector, type Channel } from "./channel-selector";
 
 type CampaignEditorProps = {
   campaignUuid?: string;
@@ -69,6 +70,7 @@ const EMPTY_FORM: CampaignFormValues = {
   template: "",
   startAt: "",
   segment: undefined,
+  channel: "WHATSAPP" as const,
 };
 
 export function CampaignEditor({ campaignUuid, initialPreset }: CampaignEditorProps) {
@@ -88,6 +90,7 @@ export function CampaignEditor({ campaignUuid, initialPreset }: CampaignEditorPr
   const [sequenceStages, setSequenceStages] = useState<CampaignStage[]>([]);
   const [editingStage, setEditingStage] = useState<CampaignStage | null>(null);
   const [stageDrawerOpen, setStageDrawerOpen] = useState(false);
+  const [channel, setChannel] = useState<Channel>("WHATSAPP");
 
   const isTemplateOnly = isEdit && campaignStatus === "ACTIVE";
 
@@ -139,6 +142,12 @@ export function CampaignEditor({ campaignUuid, initialPreset }: CampaignEditorPr
       try {
         const campaign = await apiGetCampaign(campaignUuid!);
         setCampaignStatus(campaign.status);
+
+        // Fase 1: restaurar canal del backend.
+        const campaignChannel =
+          campaign.channel === "SMS" ? "SMS" : "WHATSAPP";
+        setChannel(campaignChannel);
+
         reset({
           name: campaign.name,
           description: campaign.description ?? "",
@@ -278,6 +287,7 @@ export function CampaignEditor({ campaignUuid, initialPreset }: CampaignEditorPr
           template: string;
           startAt?: string;
           segment?: Record<string, unknown>;
+          channel?: "SMS" | "WHATSAPP_CLIENTS";
           stages?: Array<{
             name?: string;
             anchor: "PURCHASE_DATE" | "WARRANTY_EXPIRY";
@@ -291,6 +301,13 @@ export function CampaignEditor({ campaignUuid, initialPreset }: CampaignEditorPr
           type: watchedValues.type,
           template: watchedValues.template || "",
         };
+
+        // Fase 1: persistir canal seleccionado al backend.
+        // El canal se envía una vez al crear; en edición solo si el
+        // estado lo permite (DRAFT/APPROVED).
+        if (!isEdit) {
+          body.channel = channel === "SMS" ? "SMS" : "WHATSAPP_CLIENTS";
+        }
 
         // Only include fields that are allowed for the current status
         if (!isTemplateOnly) {
@@ -332,7 +349,7 @@ export function CampaignEditor({ campaignUuid, initialPreset }: CampaignEditorPr
         setSaving(false);
       }
     },
-    [watchedValues, isEdit, campaignUuid, router, stages],
+    [watchedValues, isEdit, campaignUuid, router, stages, channel],
   );
 
   const handleCreateCampaign = useCallback(() => {
@@ -444,12 +461,18 @@ export function CampaignEditor({ campaignUuid, initialPreset }: CampaignEditorPr
                   else if (field === "startAt") setValue("startAt", value);
                 }}
               />
+              <ChannelSelector
+                value={channel}
+                onChange={setChannel}
+                disabled={isTemplateOnly}
+              />
               {!isTemplateOnly && (
                 <SegmentBuilder
                   products={products}
                   segment={watchedValues.segment}
                   followUpSequenceId={watchedValues.followUpSequenceId}
                   type={watchedValues.type}
+                  channel={channel}
                   onChange={(segment) => setValue("segment", segment)}
                 />
               )}
@@ -473,6 +496,7 @@ export function CampaignEditor({ campaignUuid, initialPreset }: CampaignEditorPr
               stages={selectedSequence ? sequenceStages : stages}
               sequence={selectedSequence}
               products={products}
+              channel={channel}
             />
           )}
         </div>
@@ -534,6 +558,7 @@ export function CampaignEditor({ campaignUuid, initialPreset }: CampaignEditorPr
         open={stageDrawerOpen}
         onOpenChange={setStageDrawerOpen}
         stage={editingStage}
+        channel={channel}
         onSave={handleSaveStage}
       />
     </div>

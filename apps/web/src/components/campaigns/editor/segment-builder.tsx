@@ -33,6 +33,7 @@ type SegmentBuilderProps = {
   segment?: Record<string, unknown>;
   followUpSequenceId?: string;
   type?: string;
+  channel?: "WHATSAPP" | "SMS";
   onChange: (segment: Record<string, unknown> | undefined) => void;
 };
 
@@ -41,12 +42,16 @@ export function SegmentBuilder({
   segment,
   followUpSequenceId,
   type,
+  channel,
   onChange,
 }: SegmentBuilderProps) {
   const [preview, setPreview] = useState<{
     count: number;
     estimatedAutomations: number;
     estimatedCost: number;
+    estimatedSegments?: number;
+    estimatedMessages?: number;
+    currency?: string;
   } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -116,6 +121,7 @@ export function SegmentBuilder({
         segment: criterion as Record<string, unknown>,
         followUpSequenceId: followUpSequenceId || undefined,
         type: type as "AUTOMATIC" | "MANUAL" | "REPURCHASE" | "SPECIAL" | undefined,
+        channel: channel === "SMS" ? "SMS" : "WHATSAPP_CLIENTS",
       });
       setPreview(result);
     } catch (error) {
@@ -124,7 +130,7 @@ export function SegmentBuilder({
     } finally {
       setPreviewLoading(false);
     }
-  }, [criterion, followUpSequenceId, type]);
+  }, [criterion, followUpSequenceId, type, channel]);
 
   return (
     <div className="space-y-6">
@@ -332,10 +338,17 @@ export function SegmentBuilder({
               ~{preview.count} clientes · ~{preview.estimatedAutomations}{" "}
               mensajes
             </p>
-            <p className="mt-0.5 text-muted-foreground">
-              Costo estimado: ~${formatCurrency(preview.estimatedCost)} COP por
-              mensaje
-            </p>
+            {channel === "SMS" && preview.estimatedSegments ? (
+              <p className="mt-0.5 text-muted-foreground">
+                ~{preview.estimatedSegments} segmentos SMS · Costo estimado: ~$
+                {formatCurrency(preview.estimatedCost)} {preview.currency ?? "COP"}
+              </p>
+            ) : (
+              <p className="mt-0.5 text-muted-foreground">
+                Costo estimado: ~${formatCurrency(preview.estimatedCost)} COP por
+                mensaje
+              </p>
+            )}
           </div>
         )}
       </div>

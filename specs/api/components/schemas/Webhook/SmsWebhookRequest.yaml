@@ -1,0 +1,45 @@
+type: object
+
+description: SMS provider webhook payload.
+
+required:
+  - messageId
+  - status
+
+properties:
+
+  messageId:
+    type: string
+    description: Internal message UUID (from provider callback).
+
+  status:
+    type: string
+    enum:
+      - QUEUED
+      - SENT
+      - DELIVERED
+      - READ
+      - FAILED
+    description: New delivery status from the provider.
+
+  providerMessageId:
+    type: string
+    description: Provider-assigned external message ID (for reconciliation).
+
+  failureReason:
+    type: string
+    description: Human-readable failure reason when status=FAILED.
+
+  cost:
+    type: number
+    format: float
+    description: Actual cost charged by the provider (COP).
+
+  segments:
+    type: integer
+    description: Actual number of segments billed by the provider.
+
+  timestamp:
+    type: string
+    format: date-time
+    description: Timestamp of the status change at the provider.

@@ -55,6 +55,14 @@ properties:
     nullable: true
     description: Scheduled start; automations are scheduled for max(startAt, now).
 
+  channel:
+    type: string
+    enum:
+      - SMS
+      - WHATSAPP_CLIENTS
+    description: |
+      Canal de envío de la campaña (Fase 1). Default WHATSAPP_CLIENTS.
+
   segment:
     type: object
     allOf:

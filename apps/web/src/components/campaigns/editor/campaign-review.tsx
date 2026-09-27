@@ -6,6 +6,8 @@ import {
   Shield,
   Tag,
   Calendar,
+  MessageCircle,
+  MessageSquare,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +37,7 @@ type CampaignReviewProps = {
   stages: CampaignStage[];
   sequence: FollowUpSequenceDetail | null;
   products: ProductItem[];
+  channel?: "WHATSAPP" | "SMS";
 };
 
 export function CampaignReview({
@@ -42,6 +45,7 @@ export function CampaignReview({
   stages,
   sequence,
   products,
+  channel = "WHATSAPP",
 }: CampaignReviewProps) {
   const segment = values.segment as Record<string, unknown> | undefined;
 
@@ -101,6 +105,14 @@ export function CampaignReview({
               <div className="mt-2 flex flex-wrap gap-2">
                 <Badge variant="secondary" className="text-[11px]">
                   {CAMPAIGN_TYPE_LABELS[values.type] ?? values.type}
+                </Badge>
+                <Badge variant="secondary" className="text-[11px] flex items-center gap-1">
+                  {channel === "WHATSAPP" ? (
+                    <MessageCircle className="size-3" />
+                  ) : (
+                    <MessageSquare className="size-3" />
+                  )}
+                  {channel === "WHATSAPP" ? "WhatsApp" : "SMS"}
                 </Badge>
                 {sequence && (
                   <Badge variant="secondary" className="text-[11px]">

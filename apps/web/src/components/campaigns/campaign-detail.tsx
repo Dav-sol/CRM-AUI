@@ -244,8 +244,9 @@ export function CampaignDetailView({ uuid }: { uuid: string }) {
                 {formatNumber(campaign.sales)} ventas
               </p>
               <p className="text-xs text-muted-foreground">
-                ${formatCurrency(campaign.revenue)} ingresos · Costo $
-                {formatCurrency(campaign.whatsappCost)} · ROI{" "}
+                ${formatCurrency(campaign.revenue)} ingresos · Costo{" "}
+                {campaign.channel === "SMS" ? "SMS" : "WhatsApp"} $
+                {formatCurrency(campaign.estimatedCost)} · ROI{" "}
                 {campaign.roi !== null && campaign.roi !== undefined
                   ? `${(campaign.roi * 100).toFixed(0)}%`
                   : "—"}

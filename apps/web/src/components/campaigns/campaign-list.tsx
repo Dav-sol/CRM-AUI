@@ -315,8 +315,9 @@ export function CampaignList({ items, error, onChanged }: CampaignListProps) {
                         {formatCurrency(detail.revenue)} ingresos
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Costo estimado $
-                        {formatCurrency(detail.whatsappCost)} · ROI{" "}
+                        Costo{" "}
+                        {detail.channel === "SMS" ? "SMS" : "estimado"} $
+                        {formatCurrency(detail.estimatedCost)} · ROI{" "}
                         {detail.roi !== null && detail.roi !== undefined
                           ? `${(detail.roi * 100).toFixed(0)}%`
                           : "—"}

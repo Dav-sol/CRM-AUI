@@ -116,15 +116,15 @@ properties:
     description: |
       Suma de los valores de las ventas atribuidas a esta campaña.
 
-  whatsappCost:
+  estimatedCost:
     type: number
     description: |
-      Costo estimado de WhatsApp = mensajes enviados × tarifa configurada
-      (WHATSAPP_MESSAGE_COST). Estimado, no facturación.
+      Costo estimado de envío = mensajes enviados × tarifa configurada
+      por canal. Estimado, no facturación.
 
   roi:
     type: number
     nullable: true
     description: |
-      Retorno estimado = (revenue − whatsappCost) / whatsappCost. Null si no
+      Retorno estimado = (revenue − estimatedCost) / estimatedCost. Null si no
       hay costo.

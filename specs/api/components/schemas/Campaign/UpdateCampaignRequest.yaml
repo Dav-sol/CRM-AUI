@@ -49,3 +49,11 @@ properties:
   startAt:
     type: string
     format: date-time
+
+  channel:
+    type: string
+    enum:
+      - SMS
+      - WHATSAPP_CLIENTS
+    description: |
+      Canal de envío (Fase 1). Solo editable en DRAFT/APPROVED.

@@ -13,7 +13,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { CampaignType } from '@prisma/client';
+import { CampaignType, ChannelType } from '@prisma/client';
 import {
   CampaignSegmentDto,
   SegmentHasCriterionConstraint,
@@ -33,6 +33,11 @@ export class CreateCampaignDto {
 
   @IsEnum(CampaignType)
   type!: CampaignType; // informational in v1 (AUTOMATIC/MANUAL/REPURCHASE/SPECIAL)
+
+  // Fase 1: canal de envío. V1 solo permite SMS para nuevas campañas.
+  @IsOptional()
+  @IsEnum(ChannelType)
+  channel?: ChannelType;
 
   @IsOptional()
   @IsUUID()

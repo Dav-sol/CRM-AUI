@@ -6,7 +6,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { VariableInserter } from "@/components/campaigns/variable-inserter";
 import { renderPreviewMessage, stageMomentLabel } from "@/lib/preview";
-import type { FollowUpSequenceDetail } from "@/lib/sdk-types";
 
 type CampaignStage = {
   id: string;
@@ -21,6 +20,7 @@ type MessageEditorProps = {
   stages: CampaignStage[];
   template: string;
   readOnly?: boolean;
+  channel?: "WHATSAPP" | "SMS";
   onTemplateChange: (template: string) => void;
   onStageChange: (
     stageId: string,
@@ -28,13 +28,20 @@ type MessageEditorProps = {
   ) => void;
 };
 
+const MAX_LENGTH: Record<string, number> = {
+  WHATSAPP: 4096,
+  SMS: 160,
+};
+
 export function MessageEditor({
   stages,
   template,
   readOnly = false,
+  channel = "WHATSAPP",
   onTemplateChange,
   onStageChange,
 }: MessageEditorProps) {
+  const maxLen = MAX_LENGTH[channel] ?? MAX_LENGTH.WHATSAPP;
   return (
     <div className="space-y-6">
       <div>
@@ -58,7 +65,7 @@ export function MessageEditor({
           id="main-template"
           placeholder="Hola {customerName}, tu batería {productName} tiene garantía vigente…"
           rows={4}
-          maxLength={4096}
+          maxLength={maxLen}
           className="resize-none text-sm"
           value={template}
           onChange={(e) => onTemplateChange(e.target.value)}
@@ -120,7 +127,7 @@ export function MessageEditor({
                         <Textarea
                           placeholder="Usa el mensaje principal si está vacío"
                           rows={2}
-                          maxLength={4096}
+                          maxLength={maxLen}
                           className="mt-1 resize-none text-xs"
                           value={stage.template}
                           onChange={(e) =>
@@ -140,7 +147,7 @@ export function MessageEditor({
                         <Textarea
                           placeholder="Oferta de recompra para clientes que ya pasaron esta etapa"
                           rows={2}
-                          maxLength={4096}
+                          maxLength={maxLen}
                           className="mt-1 resize-none text-xs"
                           value={stage.templateOnPast ?? ""}
                           onChange={(e) =>

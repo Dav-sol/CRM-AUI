@@ -6,7 +6,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { CampaignType } from '@prisma/client';
+import { CampaignType, ChannelType } from '@prisma/client';
 import { CampaignSegmentDto } from './campaign-segment.dto';
 
 // Fase 3 (P0-5): preview stateless para el creador de campañas (sin uuid).
@@ -26,4 +26,9 @@ export class PreviewSegmentDraftDto {
   @IsOptional()
   @IsEnum(CampaignType)
   type?: CampaignType;
+
+  // Fase 1: canal para estimar costo por segmentos SMS.
+  @IsOptional()
+  @IsEnum(ChannelType)
+  channel?: ChannelType;
 }

@@ -62,6 +62,7 @@ export function CampaignActions({
     estimatedAutomations: number;
     estimatedCost: number;
     startAt: string | null;
+    channel?: "WHATSAPP_CLIENTS" | "SMS";
     stages: Array<{
       uuid: string;
       name: string;
@@ -91,6 +92,7 @@ export function CampaignActions({
         estimatedAutomations: preview.estimatedAutomations,
         estimatedCost: preview.estimatedCost,
         startAt: campaign.startAt ?? null,
+        channel: campaign.channel,
         stages: (campaign.followUpSequence?.stages ?? []).map((stage) => ({
           uuid: stage.uuid,
           name: stage.name,
@@ -314,7 +316,9 @@ export function CampaignActions({
                 </div>
               )}
               <p className="rounded-md border border-border/60 bg-muted/30 p-2 text-xs text-muted-foreground">
-                Es un estimado: WhatsApp tiene costo real por mensaje. Algunos
+                {confirmData.channel === "SMS"
+                  ? "Es un estimado: SMS tiene costo real por mensaje. Algunos"
+                  : "Es un estimado: WhatsApp tiene costo real por mensaje. Algunos"}{" "}
                 clientes pueden quedar fuera por reglas de frecuencia o por
                 haber pedido no recibir comunicaciones.
               </p>

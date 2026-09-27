@@ -32,3 +32,21 @@ properties:
         description: |
           Estimated WhatsApp cost (COP) = estimatedAutomations × configured
           per-message rate. Estimate only; no billing in v1 (playbook §24).
+
+      estimatedSegments:
+        type: integer
+        description: |
+          Total de segmentos SMS estimados (Fase 1). Cada segmento = 160
+          caracteres GSM-7 o 70 UCS-2. Solo aplica para channel=SMS.
+
+      estimatedMessages:
+        type: integer
+        description: |
+          Total de mensajes SMS estimados (Fase 1). Para SMS, messages =
+          segments. Solo aplica para channel=SMS.
+
+      currency:
+        type: string
+        description: |
+          Moneda del costo estimado (COP para SMS). Solo incluido cuando
+          channel=SMS.

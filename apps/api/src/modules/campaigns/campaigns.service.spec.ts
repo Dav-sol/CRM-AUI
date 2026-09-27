@@ -209,6 +209,9 @@ describe('CampaignsService', () => {
           templateD3: undefined,
           templateD180: undefined,
           templateD365: undefined,
+          // Fase 1 (022): toda campaña nace con canal explícito; sin canal en
+          // el DTO se persiste el de WhatsApp.
+          channel: 'WHATSAPP_CLIENTS',
           segment: undefined,
           startAt: undefined,
           followUpSequenceId: null,
@@ -1739,10 +1742,15 @@ describe('CampaignsService', () => {
 
       const result = await service.previewSegment(orgUser, 'cu-1');
 
+      // Fase 1 (022): el estimado viaja siempre con count/automations/cost;
+      // segments/messages/currency son los campos de coste por canal.
       expect(result).toEqual({
         count: 1,
         estimatedAutomations: 1,
         estimatedCost: 400,
+        estimatedMessages: 1,
+        estimatedSegments: 1,
+        currency: 'COP',
       });
       expect(auditService.record).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'campaign.preview_segment' }),
@@ -1766,6 +1774,9 @@ describe('CampaignsService', () => {
         count: 1,
         estimatedAutomations: 1,
         estimatedCost: 400,
+        estimatedMessages: 1,
+        estimatedSegments: 1,
+        currency: 'COP',
       });
       expect(prisma.purchase.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1809,6 +1820,9 @@ describe('CampaignsService', () => {
         count: 0,
         estimatedAutomations: 0,
         estimatedCost: 0,
+        estimatedMessages: 0,
+        estimatedSegments: 0,
+        currency: 'COP',
       });
     });
 

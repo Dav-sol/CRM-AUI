@@ -13,7 +13,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { CampaignType } from '@prisma/client';
+import { CampaignType, ChannelType } from '@prisma/client';
 import {
   CampaignSegmentDto,
   SegmentHasCriterionConstraint,
@@ -35,6 +35,11 @@ export class UpdateCampaignDto {
   @IsOptional()
   @IsEnum(CampaignType)
   type?: CampaignType;
+
+  // Fase 1: canal de envío (mutable solo mientras DRAFT/APPROVED).
+  @IsOptional()
+  @IsEnum(ChannelType)
+  channel?: ChannelType;
 
   @IsOptional()
   @IsUUID()

@@ -1,0 +1,50 @@
+/webhooks/sms:
+  post:
+    tags:
+      - Webhooks
+
+    summary: SMS delivery status webhook
+
+    description: |
+      Receives delivery status callbacks from the SMS provider (Fase 1).
+      The endpoint validates the provider signature, updates the Message
+      status, and triggers billing cost updates.
+
+      Supported statuses: QUEUED → SENT → DELIVERED → READ → FAILED.
+
+      The endpoint is idempotent: repeated calls with the same messageId
+      are silently ignored.
+
+    operationId: smsWebhook
+
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/Webhook/SmsWebhookRequest.yaml"
+
+    responses:
+
+      "200":
+        description: Status updated or duplicate ignored
+
+        content:
+
+          application/json:
+
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+
+      "400":
+        description: Invalid payload
+
+      "401":
+        description: Invalid webhook signature
+
+      "404":
+        description: Message not found

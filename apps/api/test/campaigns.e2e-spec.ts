@@ -325,9 +325,19 @@ describe('Campaigns (e2e) — Flujo 08, US1..US8, FR-001..FR-010', () => {
       .expect(200);
 
     // Ana + Bruno (Lima) own product1; one automation per customer.
-    expect((res.body as { data: Record<string, unknown> }).data).toEqual({
-      count: 2,
-    });
+    // Fase 1 (022): el dry-run devuelve el estimado completo, no sólo count.
+    expect((res.body as { data: Record<string, unknown> }).data).toEqual(
+      expect.objectContaining({ count: 2 }),
+    );
+    expect((res.body as { data: Record<string, unknown> }).data).toEqual(
+      expect.objectContaining({
+        estimatedAutomations: expect.any(Number),
+        estimatedCost: expect.any(Number),
+        estimatedMessages: expect.any(Number),
+        estimatedSegments: expect.any(Number),
+        currency: expect.any(String),
+      }),
+    );
   });
 
   it('C4 — activates a campaign and generates one automation per customer', async () => {
