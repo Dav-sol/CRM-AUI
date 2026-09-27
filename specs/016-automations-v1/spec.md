@@ -34,7 +34,7 @@ The Automatizaciones module (Módulo 05, `specs/02-modules.md:136-162`) programs
 
 - **FR-001**: Consumer `@OnEvent('PurchaseImported')` (`07:164`): loads the purchase by `purchaseId`; if a CommercialCycle already exists for that `purchaseId` → no-op (idempotent, US8, Q12).
 - **FR-002**: On first consumption, create in ONE transaction: CommercialCycle (ACTIVE, `startDate = purchaseDate`, `purchaseId`) + three Automation records with `status = SCHEDULED`, `commercialCycleId`, `scheduledDate = purchaseDate + 3d / +6m / +12m` (AU-001, US1, Q5).
-- **FR-003**: AU-003 (US2): when a purchase is imported for a customer with an ACTIVE cycle, the existing cycle's PENDING/SCHEDULED automations → CANCELLED, the cycle → CANCELLED (`endDate = now`), then a new ACTIVE cycle + 3 automations are created (transactional; Q6).
+- **FR-003**: AU-003 (US2): when a purchase is imported for a customer with an ACTIVE cycle, the existing cycle's PENDING/SCHEDULED automations → CANCELLED, the cycle → CANCELLED (`endDate = now`), then a new ACTIVE cycle + 3 automations are created (transactional; Q6). **[SUPERSEDED by C-06 — human decision 2026-09-27: Q6/US2 govern, no automatic cancellation.]**
 - **FR-004**: `GET /commercial-cycles` list: filters `status`, `customerId`, `purchaseId`, `createdFrom`, `createdTo`, pagination page/limit (≤100), sort whitelist (`-createdAt` default); tenant-scoped (US3).
 - **FR-005**: `GET /commercial-cycles/{uuid}`: detail including automations; cross-tenant/unknown → 404 `COMMERCIAL_CYCLE_NOT_FOUND` (US3).
 - **FR-006**: `GET /automations` list: filters `status`, `purpose` (TRANSACTIONAL|COMMERCIAL, anti-spam playbook §14), `commercialCycleId`, `customerId`, `search` (customer/product name, case-insensitive), `scheduledFrom`, `scheduledTo`, pagination, sort whitelist (`-createdAt` default, most recent first); tenant-scoped (US4).
@@ -65,7 +65,7 @@ The Automatizaciones module (Módulo 05, `specs/02-modules.md:136-162`) programs
 
 - **AS-001**: `PurchaseImported` for a purchase → one ACTIVE cycle + 3 SCHEDULED automations created with correct dates (US1, FR-002).
 - **AS-002**: Same `PurchaseImported` replayed → no-op, no duplicate cycle (US8, FR-001).
-- **AS-003**: New purchase for a customer with ACTIVE cycle → previous cycle CANCELLED with endDate set, its PENDING/SCHEDULED automations CANCELLED, new ACTIVE cycle + 3 automations created (US2, FR-003).
+- **AS-003**: New purchase for a customer with ACTIVE cycle → previous cycle CANCELLED with endDate set, its PENDING/SCHEDULED automations CANCELLED, new ACTIVE cycle + 3 automations created (US2, FR-003). **[SUPERSEDED by C-06 — human decision 2026-09-27: the previous cycle and its automations remain active.]**
 - **AS-004**: Cycle detail returns its automations (US3, FR-005).
 - **AS-005**: Automation list filtered by status/customer/scheduled dates with pagination (US4, FR-006).
 - **AS-006**: Cancel a SCHEDULED automation → 200, status CANCELLED (US5, FR-008).
@@ -98,6 +98,7 @@ The Automatizaciones module (Módulo 05, `specs/02-modules.md:136-162`) programs
 - **C-03** (AU-009/010 dependencies): business hours (Configuración) and campaign priority (Campañas) modules do not exist. → **HG-3/HG-4**: deferred; `priority` field retained on the model.
 - **C-04** (state naming): AU-002 lists five states (Pendiente/Programada/Ejecutada/Cancelada/Error); the Prisma enum adds `PAUSED` (schema.prisma:475-482). → **HG-3**: AU-002 states map to the enum; PAUSED reserved (no conflict, additive).
 - **C-05** (AU-003 per-automation cancellation events): FR-012/Q9 list `AutomationCancelled` "on cancellation"; the AU-003 batch flow (`updateMany`) must also emit one `AutomationCancelled` per cancelled automation, not only `CommercialCycleCancelled`. → **HG-6**: the consumer fetches the PENDING/SCHEDULED automations to cancel within the transaction and emits `AutomationCancelled` (userId null, system-triggered) for each after commit; idempotency preserved (P2002 no-op unchanged).
+- **C-06** (does a new purchase cancel the previous cycle?): FR-003 body and AS-003 (AU-003, `03:199-205`) say the previous ACTIVE cycle and its PENDING/SCHEDULED automations are cancelled; Q6/US2 (Marketing Playbook §15) say they are **not** cancelled because they may belong to another purchase/warranty still valid. The code follows Q6 (`automations.service.ts` → `createCycleFromPurchase`). → **Human decision (2026-09-27)**: **Q6/US2 win — no automatic cancellation.** Rationale: the CRM does not record vehicles, so it cannot know whether a new purchase replaces a battery or belongs to another vehicle; cancelling is a human decision (V2). FR-003 body and AS-003 are superseded. Campaigns reach the same conclusion independently: each purchase keeps its own lifecycle (`specs/019-campaigns-v1/spec.md` C-09/FR-016).
 
 ## 9. Dependency Justification (AGENTS.md)
 

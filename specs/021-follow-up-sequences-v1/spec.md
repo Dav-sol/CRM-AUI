@@ -50,16 +50,38 @@ partially documented in the OpenAPI contracts
   "skip purchases without warranty" behavior.
 
 - **Q6: What happens to a stage whose computed date is before the campaign
-  start?** → A6 (HG-SEM-03, refined): the campaign starts operating on
-  `reference = max(startAt, now)` (captured once at activation). A stage whose
-  computed date is before `reference` is **never sent historically**:
-  - `WARRANTY_EXPIRY` stages become an immediate repurchase opportunity:
-    at most one per purchase (dedupe), using the most advanced past
-    warranty stage (largest computed `scheduledDate`; tie-break: larger
-    `offsetDays`, then stage order). `scheduledDate = reference` and
+  start?** → A6 (HG-SEM-03, refined; refined again 2026-09-27, human decision):
+  the campaign starts operating on `reference = max(startAt, now)` (captured
+  once at activation). A stage whose computed date is before `reference` is
+  **never sent historically**. Its outcome depends on the stage's **offset in
+  the lifecycle** *and* on that purchase's real warranty state
+  (`warrantyExpiresAt <= reference`) — never on `scheduledDate < reference`
+  alone:
+  - `WARRANTY_EXPIRY` stage with `offsetDays >= 0` (the moment falls on/after
+    the expiry) that already passed ⟹ the warranty of that purchase really
+    expired ⟹ **immediate repurchase conversion**: at most one per purchase
+    (dedupe: largest computed `scheduledDate`; tie-break: larger `offsetDays`,
+    then stage order), `scheduledDate = reference` and
     `messageTemplate = stage.templateOnPast ?? campaign.template`. The message
     communicates a renewal/repurchase window (never "just happened").
+  - `WARRANTY_EXPIRY` stage with `offsetDays < 0` (D−60/D−30, before the
+    expiry) that passed **while the warranty is still valid** is *not* a
+    repurchase: one catch-up automation per purchase (the most advanced
+    pre-expiry stage), `scheduledDate = reference`,
+    `purpose = TRANSACTIONAL` and `messageTemplate = stage.template` — the
+    proximity message, never the warranty-expired one. F4 does **not**
+    substitute later `offsetDays > 0` stages in this case.
+  - `WARRANTY_EXPIRY` stage with `offsetDays < 0` that passed **after** the
+    warranty expired: not sent at all (it would announce an expiry that
+    already happened). It only triggers the conversion above, whose message
+    comes from a post-expiry stage: the most advanced past one, or — when only
+    pre-expiry stages passed — the first `offsetDays >= 0` stage of the
+    sequence (`templateOnPast ?? template ?? campaign.template`).
   - `PURCHASE_DATE` stages are simply **omitted** (no repurchase conversion).
+
+  The conversion/catch-up decision is computed **before** any automation is
+  created, so F4 (one renovation contact per cycle) does not depend on the
+  order of the stages array.
   Stages whose computed date is `reference` or later keep their original
   `scheduledDate` and `messageTemplate`.
 
@@ -124,10 +146,17 @@ default `WARRANTY_EXPIRY`) and `template_on_past` (nullable) — non-destructive
   resolve `base` from the anchor and compute `scheduledDate`; apply the
   HG-SEM-05 per-anchor skip and the HG-SEM-03 repurchase conversion using
   `reference = max(startAt, now)`.
-- **FR-005**: The repurchase conversion applies only to `WARRANTY_EXPIRY`
-  stages before `reference`; it writes `scheduledDate = reference` and
-  `messageTemplate = templateOnPast ?? campaign.template` (Q6); at most one per
-  purchase. `PURCHASE_DATE` stages before `reference` are omitted.
+- **FR-005**: Past-stage resolution (Q6): computed **before** creating any
+  automation, per purchase:
+  - repurchase conversion applies only when `WARRANTY_EXPIRY` stages are
+    before `reference` **and** `warrantyExpiresAt <= reference`; it writes
+    `scheduledDate = reference`, `purpose = COMMERCIAL` (anti-spam §14),
+    `messageTemplate = templateOnPast ?? campaign.template` from a
+    `offsetDays >= 0` stage, at most one per purchase;
+  - a `offsetDays < 0` stage before `reference` with `warrantyExpiresAt >
+    reference` yields one `TRANSACTIONAL` catch-up at `reference` with its own
+    `stage.template` (most advanced stage);
+  - `PURCHASE_DATE` stages before `reference` are omitted.
 - **FR-006**: Snapshot semantics preserved: generated `Automation` rows store
   the resolved date and message template (Q10).
 - **FR-007**: Tenant isolation unchanged: sequences are org-scoped; campaign

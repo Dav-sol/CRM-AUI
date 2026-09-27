@@ -55,6 +55,16 @@ interface AutomationExecutedEnvelope {
   };
 }
 
+// Emitido por AutomationsModule (automations.events.ts) después de crear el
+// ciclo comercial de una compra recién registrada: alta manual o importación.
+interface CommercialCycleStartedEnvelope {
+  organizationId?: string;
+  payload?: {
+    // uuid de la compra (no el id interno).
+    purchaseId?: string;
+  };
+}
+
 interface CampaignStats {
   automationCount: number;
   executedCount: number;
@@ -152,7 +162,9 @@ interface InlineCampaignStage {
   templateOnPast: string | null;
 }
 
-function parseInlineStages(raw: Prisma.JsonValue | null): InlineCampaignStage[] {
+function parseInlineStages(
+  raw: Prisma.JsonValue | null,
+): InlineCampaignStage[] {
   if (!Array.isArray(raw)) {
     return [];
   }
@@ -169,7 +181,8 @@ function parseInlineStages(raw: Prisma.JsonValue | null): InlineCampaignStage[] 
     }
     const stage = item as Record<string, unknown>;
     if (
-      (stage.anchor !== 'PURCHASE_DATE' && stage.anchor !== 'WARRANTY_EXPIRY') ||
+      (stage.anchor !== 'PURCHASE_DATE' &&
+        stage.anchor !== 'WARRANTY_EXPIRY') ||
       typeof stage.offsetDays !== 'number' ||
       typeof stage.template !== 'string'
     ) {
@@ -181,7 +194,8 @@ function parseInlineStages(raw: Prisma.JsonValue | null): InlineCampaignStage[] 
       offsetDays: stage.offsetDays,
       template: stage.template,
       templateOnPast:
-        typeof stage.templateOnPast === 'string' && stage.templateOnPast.length > 0
+        typeof stage.templateOnPast === 'string' &&
+        stage.templateOnPast.length > 0
           ? stage.templateOnPast
           : null,
     });
@@ -491,11 +505,7 @@ export class CampaignsService {
       dto.followUpSequenceId !== undefined
         ? dto.followUpSequenceId
         : campaign.followUpSequenceId;
-    if (
-      effectiveSequenceId &&
-      dto.stages &&
-      dto.stages.length > 0
-    ) {
+    if (effectiveSequenceId && dto.stages && dto.stages.length > 0) {
       throw new BadRequestException({
         error: {
           code: 'VALIDATION_ERROR',
@@ -861,7 +871,10 @@ export class CampaignsService {
     uuid: string,
   ): Promise<{ uuid: string; status: CampaignStatus }> {
     const organizationId = this.requireOrg(user);
-    const campaign = await this.findScopedCampaignWithSequence(organizationId, uuid);
+    const campaign = await this.findScopedCampaignWithSequence(
+      organizationId,
+      uuid,
+    );
     if (!campaign) {
       throw this.campaignNotFound();
     }
@@ -1294,6 +1307,183 @@ export class CampaignsService {
   }
 
   // ---------------------------------------------------------------------------
+  // Inscripción de compras nuevas (lifecycle por compra)
+  // ---------------------------------------------------------------------------
+  //
+  // Activar una campaña genera las etapas SOLO para las compras que existen
+  // en ese momento. Una compra registrada después nace con su propio ciclo
+  // (PurchaseImported -> CommercialCycleStarted) y debe entrar en el lifecycle
+  // de las campañas ACTIVE que le correspondan: si no, una batería nueva nunca
+  // recibiría el día +2, las revisiones ni las etapas de garantía.
+  //
+  // No se cancela nada de las compras anteriores del mismo cliente (decisión
+  // humana 2026-09-27, specs/016-automations-v1 FR-003 vs Q6): el CRM no
+  // registra vehículos, así que no puede saber si la nueva compra reemplaza a
+  // una batería o corresponde a otro vehículo del cliente. Cada compra mantiene
+  // su lifecycle de forma independiente.
+  @OnEvent('CommercialCycleStarted')
+  async handleCommercialCycleStarted(
+    event: CommercialCycleStartedEnvelope,
+  ): Promise<void> {
+    const purchaseUuid = event?.payload?.purchaseId;
+    if (!purchaseUuid) {
+      return;
+    }
+    try {
+      await this.enrollPurchaseInActiveCampaigns(purchaseUuid);
+    } catch (error) {
+      this.logger.error(
+        `campaign enrollment failed purchase=${purchaseUuid}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
+
+  private async enrollPurchaseInActiveCampaigns(
+    purchaseUuid: string,
+  ): Promise<void> {
+    const purchase = await this.prisma.purchase.findFirst({
+      where: { uuid: purchaseUuid, deletedAt: null },
+      select: {
+        id: true,
+        customerId: true,
+        organizationId: true,
+        purchaseDate: true,
+        customer: { select: { deletedAt: true, noContactAt: true } },
+      },
+    });
+    if (
+      !purchase ||
+      purchase.customer.deletedAt ||
+      purchase.customer.noContactAt
+    ) {
+      return;
+    }
+
+    const campaigns = await this.prisma.campaign.findMany({
+      where: {
+        organizationId: purchase.organizationId,
+        status: 'ACTIVE',
+        deletedAt: null,
+      },
+      include: {
+        followUpSequence: {
+          include: {
+            stages: {
+              where: { deletedAt: null },
+              orderBy: [{ anchor: 'asc' }, { offsetDays: 'asc' }],
+            },
+          },
+        },
+      },
+    });
+
+    const now = new Date();
+    for (const campaign of campaigns) {
+      const segment = campaign.segment as CampaignSegmentDto | null;
+      const segmentWhere = this.buildSegmentWhere(
+        segment,
+        purchase.organizationId,
+      );
+
+      // Misma regla que la activación (C-06/HG-6): una sola compra por
+      // cliente, y sólo si esta es la más reciente dentro del segmento.
+      const inSegment = await this.prisma.purchase.count({
+        where: { AND: [segmentWhere, { id: purchase.id }] },
+      });
+      if (inSegment === 0) {
+        continue;
+      }
+      const newer = await this.prisma.purchase.count({
+        where: {
+          AND: [
+            segmentWhere,
+            {
+              customerId: purchase.customerId,
+              purchaseDate: { gt: purchase.purchaseDate },
+            },
+          ],
+        },
+      });
+      if (newer > 0) {
+        continue;
+      }
+
+      // Idempotencia (AU-011): el evento puede repetirse en un reintento de
+      // importación, y la compra pudo haberse inscrito en un intento previo.
+      const enrolled = await this.prisma.automation.findFirst({
+        where: {
+          campaignId: campaign.id,
+          purchaseId: purchase.id,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (enrolled) {
+        continue;
+      }
+
+      const stages = campaign.followUpSequence
+        ? campaign.followUpSequence.stages.map((stage) => ({
+            uuid: stage.uuid,
+            name: stage.name,
+            anchor: stage.anchor,
+            offsetDays: stage.offsetDays,
+            template: stage.template,
+            templateOnPast: stage.templateOnPast,
+          }))
+        : parseInlineStages(campaign.stages).map((stage) => ({
+            uuid: '',
+            name: stage.name ?? 'Etapa',
+            anchor: stage.anchor,
+            offsetDays: stage.offsetDays,
+            template: stage.template,
+            templateOnPast: stage.templateOnPast,
+          }));
+      if (stages.length === 0) {
+        continue;
+      }
+
+      const generated = await this.prisma.automation.count({
+        where: { campaignId: campaign.id, deletedAt: null },
+      });
+      if (generated + stages.length > MAX_AUTOMATIONS_PER_CAMPAIGN) {
+        this.logger.warn(
+          `campaign ${campaign.uuid} reached the ${MAX_AUTOMATIONS_PER_CAMPAIGN} automation limit: purchase ${purchaseUuid} was not enrolled`,
+        );
+        continue;
+      }
+
+      // Misma reference que en la activación: max(startAt, now). Las etapas
+      // anteriores a la entrada en vigor no se envían históricamente.
+      const reference =
+        campaign.startAt && campaign.startAt > now ? campaign.startAt : now;
+      const result = await this.prisma.$transaction((tx) =>
+        this.generateAutomationsFromSequence(
+          tx,
+          campaign.id,
+          purchase.organizationId,
+          [
+            {
+              purchaseId: purchase.id,
+              customerId: purchase.customerId,
+              purchaseDate: purchase.purchaseDate,
+            },
+          ],
+          stages,
+          campaign.template,
+          reference,
+        ),
+      );
+      if (result.count > 0) {
+        this.logger.log(
+          `purchase ${purchaseUuid} enrolled in campaign ${campaign.uuid}: ${result.count} automation(s)`,
+        );
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
 
@@ -1443,13 +1633,67 @@ export class CampaignsService {
           cycleId = existing.id;
         }
 
-        // HG-SEM-03: stages whose computed date is before the campaign start
-        // reference (max(startAt, now)) become a repurchase opportunity when
-        // warranty-anchored; purchase-anchored past stages are omitted.
-        let repurchaseStage: {
+        // Estado real de la garantía de ESTA compra respecto de la referencia
+        // de generación (max(startAt, now)). Junto con el offset de cada etapa
+        // en el lifecycle decide qué significa una etapa que ya pasó; nunca
+        // sólo el hecho de que scheduledDate < referencia.
+        const warrantyExpired =
+          !!warrantyExpiresAt &&
+          warrantyExpiresAt.getTime() <= reference.getTime();
+
+        // Fechas de las etapas de garantía con la MISMA fórmula que el bucle
+        // de creación (HG-SEM-05: sin warrantyExpiresAt no hay esas etapas).
+        const warrantyStageDates: {
           stage: (typeof stages)[number];
           computed: Date;
-        } | null = null;
+        }[] = stages
+          .filter(
+            (stage) =>
+              stage.anchor === FollowUpStageAnchor.WARRANTY_EXPIRY &&
+              !!warrantyExpiresAt,
+          )
+          .map((stage) => {
+            const computed = new Date(warrantyExpiresAt as Date);
+            computed.setDate(computed.getDate() + stage.offsetDays);
+            return { stage, computed };
+          });
+
+        const pastWarrantyStages = warrantyStageDates.filter(
+          (entry) => entry.computed.getTime() < reference.getTime(),
+        );
+        // Etapa más avanzada de la lista: evita un contacto por cada etapa
+        // atrasada del mismo ciclo.
+        const latest = (
+          entries: typeof pastWarrantyStages,
+        ): (typeof pastWarrantyStages)[number] | null =>
+          [...entries].sort(
+            (a, b) => b.computed.getTime() - a.computed.getTime(),
+          )[0] ?? null;
+
+        // offset >= 0 (la etapa llega en o después del vencimiento): si ya
+        // pasó, la garantía de ESA compra venció → alimenta la conversión con
+        // SU texto (Recompra / renovación).
+        const repurchaseStage = latest(
+          pastWarrantyStages.filter((entry) => entry.stage.offsetDays >= 0),
+        );
+        // offset < 0 (D−60/D−30, antes del vencimiento): pasar NO implica
+        // vencimiento; su significado lo da warrantyExpired.
+        const pastPreExpiryStage = latest(
+          pastWarrantyStages.filter((entry) => entry.stage.offsetDays < 0),
+        );
+        // HG-SEM-03 + F4: una sola conversión por compra, y sólo cuando la
+        // garantía REALMENTE venció. Se decide aquí, antes de crear nada, para
+        // que F4 no dependa del orden del array ni de que D−30 haya quedado en
+        // el pasado.
+        const warrantyConverted =
+          warrantyExpired &&
+          (repurchaseStage !== null || pastPreExpiryStage !== null);
+        // D−30 atrasado con garantía todavía vigente: sigue siendo
+        // "vencimiento cercano", con SU mensaje (no uno de garantía vencida).
+        const preExpiryCatchUp =
+          !warrantyExpired && pastPreExpiryStage !== null
+            ? pastPreExpiryStage
+            : null;
 
         // Create one automation per stage
         for (const stage of stages) {
@@ -1469,30 +1713,38 @@ export class CampaignsService {
           const computed = new Date(base);
           computed.setDate(computed.getDate() + stage.offsetDays);
 
-          if (computed.getTime() < reference.getTime()) {
-            // The stage moment precedes the campaign start: no historical send.
-            // WARRANTY_EXPIRY stages become a repurchase candidate (the most
-            // advanced past warranty stage); PURCHASE_DATE stages are omitted.
-            if (stage.anchor === FollowUpStageAnchor.WARRANTY_EXPIRY) {
-              if (
-                !repurchaseStage ||
-                computed.getTime() > repurchaseStage.computed.getTime() ||
-                (computed.getTime() === repurchaseStage.computed.getTime() &&
-                  stage.offsetDays > repurchaseStage.stage.offsetDays)
-              ) {
-                repurchaseStage = { stage, computed };
-              }
-            }
+          // Lifecycle batería: una etapa anclada a la COMPRA no se genera si
+          // cae DESPUÉS del vencimiento de garantía de ESA compra. El tope es
+          // la fecha real de warrantyExpiresAt de la compra (nunca una
+          // duración fija por meses), de modo que las revisiones +60/+120/…
+          // cubren toda la garantía de cada batería y no se pide "revisar
+          // para respaldar la garantía" cuando la garantía ya terminó. Sin
+          // warrantyExpiresAt no hay tope, igual que HG-SEM-05 omite las
+          // etapas de garantía.
+          if (
+            stage.anchor === FollowUpStageAnchor.PURCHASE_DATE &&
+            warrantyExpiresAt &&
+            computed.getTime() > warrantyExpiresAt.getTime()
+          ) {
             continue;
           }
 
-          // F4: when a past WARRANTY_EXPIRY stage fired the repurchase
-          // conversion for this purchase, later post-warranty recompra stages
-          // (offsetDays > 0) are substituted by that single conversion — one
-          // renovation contact per cycle (playbook §11). Transactional /
+          if (computed.getTime() < reference.getTime()) {
+            // HG-SEM-03: no historical send. Las etapas de garantía pasadas ya
+            // se resolvieron ANTES de crear nada: catch-up si la garantía sigue
+            // vigente, conversión si ya venció (según offset + warrantyExpiresAt);
+            // PURCHASE_DATE pasadas se omiten.
+            continue;
+          }
+
+          // F4: cuando la conversión de garantía vencida aplica a esta compra,
+          // las etapas de recompra posteriores (offsetDays > 0) se sustituyen
+          // por esa única conversión — un solo contacto de renovación por
+          // ciclo (playbook §11). La decisión es warrantyConverted, no el mero
+          // hecho de que D−30 haya quedado en el pasado. Transactional /
           // warranty stages are untouched.
           if (
-            repurchaseStage &&
+            warrantyConverted &&
             stage.anchor === FollowUpStageAnchor.WARRANTY_EXPIRY &&
             stage.offsetDays > 0
           ) {
@@ -1522,7 +1774,38 @@ export class CampaignsService {
           automationCount++;
         }
 
-        if (repurchaseStage) {
+        // D−60/D−30 atrasados con la garantía todavía VIGENTE: se envía una
+        // sola vez (la etapa más avanzada), en este momento, con el mensaje de
+        // vencimiento cercano de ESA etapa y propósito TRANSACCIONAL (igual que
+        // si llegara programada). No es una conversión: no hay garantía
+        // vencida, así que F4 no suprime +60/+90.
+        if (preExpiryCatchUp) {
+          const { stage } = preExpiryCatchUp;
+          await tx.automation.create({
+            data: {
+              organizationId,
+              purchaseId: row.purchaseId,
+              campaignId,
+              commercialCycleId: cycleId,
+              scheduledDate: reference,
+              status: 'SCHEDULED',
+              priority: 0,
+              purpose: 'TRANSACTIONAL',
+              stageName: stage.name,
+              messageTemplate: stage.template,
+            },
+          });
+          automationCount++;
+        }
+
+        // Conversión de garantía vencida (HG-SEM-03 + F4): una sola vez por
+        // compra y sólo cuando la garantía REALMENTE venció respecto de la
+        // referencia de generación. El mensaje sale siempre de una etapa
+        // post-vencimiento (offset >= 0): la más avanzada que ya pasó; y si
+        // sólo pasaron etapas previas al vencimiento (D−30), de la primera
+        // etapa post-vencimiento de la secuencia (D+60). Nunca de D−30: esa
+        // etapa siempre habla de "vencimiento cercano".
+        if (warrantyConverted) {
           // Repurchase conversion is COMMERCIAL: respect the anti-spam limits
           // per customer (playbook §14). Transactional never blocks.
           const allowed = await this.commercialAllowed(
@@ -1538,7 +1821,23 @@ export class CampaignsService {
             }
             continue;
           }
-          const { stage } = repurchaseStage;
+          let messageTemplate = campaignTemplate;
+          if (repurchaseStage) {
+            // Etapa post-vencimiento ya pasada: su propio texto "on past".
+            messageTemplate =
+              repurchaseStage.stage.templateOnPast ?? campaignTemplate;
+          } else {
+            // Sólo pasaron etapas previas al vencimiento (D−30): el mensaje
+            // sale de la primera etapa post-vencimiento (D+60), nunca del de
+            // vencimiento cercano.
+            const upcomingPostExpiry = warrantyStageDates
+              .filter((entry) => entry.stage.offsetDays >= 0)
+              .sort((a, b) => a.computed.getTime() - b.computed.getTime())[0];
+            messageTemplate =
+              upcomingPostExpiry?.stage.templateOnPast ??
+              upcomingPostExpiry?.stage.template ??
+              campaignTemplate;
+          }
           await tx.automation.create({
             data: {
               organizationId,
@@ -1550,7 +1849,7 @@ export class CampaignsService {
               priority: 0,
               purpose: 'COMMERCIAL',
               stageName: 'Recompra / renovación',
-              messageTemplate: stage.templateOnPast ?? campaignTemplate,
+              messageTemplate,
             },
           });
           automationCount++;
@@ -1728,9 +2027,8 @@ export class CampaignsService {
         stage.template,
         stage.templateOnPast ?? '',
       ]),
-    ].filter(
-      (template): template is string =>
-        Boolean(template && template.trim().length > 0),
+    ].filter((template): template is string =>
+      Boolean(template && template.trim().length > 0),
     );
 
     if (templates.length === 0) {

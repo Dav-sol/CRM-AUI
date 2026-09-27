@@ -96,6 +96,7 @@ describe('CampaignsService', () => {
     };
     automation: {
       findUnique: jest.Mock;
+      findFirst: jest.Mock;
       count: jest.Mock;
       groupBy: jest.Mock;
       create: jest.Mock;
@@ -107,7 +108,7 @@ describe('CampaignsService', () => {
       create: jest.Mock;
       update: jest.Mock;
     };
-    purchase: { findMany: jest.Mock };
+    purchase: { findMany: jest.Mock; findFirst: jest.Mock; count: jest.Mock };
     message: { count: jest.Mock };
     quote: { aggregate: jest.Mock };
     followUpSequence: { findFirst: jest.Mock };
@@ -128,6 +129,7 @@ describe('CampaignsService', () => {
       },
       automation: {
         findUnique: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
         count: jest.fn(),
         groupBy: jest.fn(),
         create: jest.fn(),
@@ -139,7 +141,11 @@ describe('CampaignsService', () => {
         create: jest.fn(),
         update: jest.fn(),
       },
-      purchase: { findMany: jest.fn(), count: jest.fn().mockResolvedValue(5) },
+      purchase: {
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+        count: jest.fn().mockResolvedValue(5),
+      },
       message: { count: jest.fn().mockResolvedValue(0) },
       quote: {
         aggregate: jest.fn().mockResolvedValue({
@@ -885,6 +891,112 @@ describe('CampaignsService', () => {
       );
     });
 
+    it('skips PURCHASE_DATE stages computed after the purchase warranty expiry (lifecycle cap)', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        approvedCampaign({
+          followUpSequence: {
+            uuid: 'fus-1',
+            warrantyMonths: 12,
+            stages: [
+              {
+                uuid: 'st-1',
+                name: 'Día 2',
+                anchor: 'PURCHASE_DATE',
+                offsetDays: 2,
+                template: 'p2',
+              },
+              {
+                uuid: 'st-2',
+                name: 'Revisión +60',
+                anchor: 'PURCHASE_DATE',
+                offsetDays: 60,
+                template: 'p60',
+              },
+              {
+                uuid: 'st-3',
+                name: 'Vence pronto',
+                anchor: 'WARRANTY_EXPIRY',
+                offsetDays: -10,
+                template: 'w-10',
+              },
+              {
+                uuid: 'st-4',
+                name: 'Vencida',
+                anchor: 'WARRANTY_EXPIRY',
+                offsetDays: 5,
+                template: 'w+5',
+              },
+            ],
+          },
+        }),
+      );
+      let txAutomationCreate: jest.Mock | undefined;
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = sequenceTransaction(
+            {
+              id: 'pu-1',
+              customerId: 'cu-a',
+              purchaseDate: '2027-01-01T12:00:00.000Z',
+            },
+            // Garantía de 30 días: la revisión +60 (2027-03-02) queda fuera.
+            new Date('2027-01-31T12:00:00.000Z'),
+          );
+          txAutomationCreate = tx.automation.create;
+          return fn(tx);
+        },
+      );
+
+      const result = await service.activate(orgUser, 'cu-1');
+
+      const templates = txAutomationCreate!.mock.calls.map(
+        (call: [{ data: { messageTemplate: string } }]) =>
+          call[0].data.messageTemplate,
+      );
+      expect(templates).toEqual(['p2', 'w-10', 'w+5']);
+      expect(result.automationCount).toBe(3);
+    });
+
+    it('does not cap PURCHASE_DATE stages when the purchase has no warranty expiration', async () => {
+      prisma.campaign.findFirst.mockResolvedValue(
+        approvedCampaign({
+          followUpSequence: {
+            uuid: 'fus-1',
+            warrantyMonths: 12,
+            stages: [
+              {
+                uuid: 'st-1',
+                name: 'Revisión +60',
+                anchor: 'PURCHASE_DATE',
+                offsetDays: 60,
+                template: 'p60',
+              },
+            ],
+          },
+        }),
+      );
+      let txAutomationCreate: jest.Mock | undefined;
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = sequenceTransaction(
+            {
+              id: 'pu-1',
+              customerId: 'cu-a',
+              purchaseDate: '2027-01-01T12:00:00.000Z',
+            },
+            null,
+          );
+          txAutomationCreate = tx.automation.create;
+          return fn(tx);
+        },
+      );
+
+      const result = await service.activate(orgUser, 'cu-1');
+
+      expect(result.automationCount).toBe(1);
+      expect(txAutomationCreate).toHaveBeenCalledTimes(1);
+    });
+
     it('converts a past WARRANTY_EXPIRY stage into an immediate repurchase automation using templateOnPast (HG-SEM-03)', async () => {
       prisma.campaign.findFirst.mockResolvedValue(
         approvedCampaign({
@@ -1082,6 +1194,175 @@ describe('CampaignsService', () => {
       ];
       expect(call.data.messageTemplate).toBe('r1');
       expect(call.data.scheduledDate.getTime()).toBeLessThanOrEqual(Date.now());
+    });
+
+    // Lifecycle batería aprobado: D−30 (vencimiento cercano, variante A),
+    // D+60 (garantía vencida / recuperación) y D+90 (reactivación). La
+    // semántica de una etapa que ya pasó depende de su offset en el lifecycle
+    // Y de warrantyExpiresAt, nunca sólo de que scheduledDate < referencia.
+    describe('lifecycle battery: past stage semantics', () => {
+      const lifecycleStages = [
+        {
+          uuid: 'st-1',
+          name: 'Vencimiento cercano',
+          anchor: 'WARRANTY_EXPIRY',
+          offsetDays: -30,
+          template: 'vencimiento cercano A',
+          templateOnPast: 'vencimiento cercano A',
+        },
+        {
+          uuid: 'st-2',
+          name: 'Garantía vencida',
+          anchor: 'WARRANTY_EXPIRY',
+          offsetDays: 60,
+          template: 'garantía vencida A',
+          templateOnPast: 'garantía vencida A',
+        },
+        {
+          uuid: 'st-3',
+          name: 'Reactivación',
+          anchor: 'WARRANTY_EXPIRY',
+          offsetDays: 90,
+          template: 'reactivación A',
+          templateOnPast: 'garantía vencida A',
+        },
+      ];
+
+      interface CreatedAutomation {
+        scheduledDate: Date;
+        purpose: string;
+        stageName: string;
+        messageTemplate: string;
+      }
+
+      async function generate(
+        warrantyExpiresAt: Date,
+        stages: typeof lifecycleStages = lifecycleStages,
+      ) {
+        prisma.campaign.findFirst.mockResolvedValue(
+          approvedCampaign({
+            followUpSequence: {
+              uuid: 'fus-1',
+              warrantyMonths: 15,
+              stages,
+            },
+          }),
+        );
+        let txAutomationCreate: jest.Mock | undefined;
+        prisma.$transaction.mockImplementation(
+          async (fn: (tx: unknown) => Promise<unknown>) => {
+            const tx = sequenceTransaction(
+              {
+                id: 'pu-1',
+                customerId: 'cu-a',
+                purchaseDate: '2026-09-01T12:00:00.000Z',
+              },
+              warrantyExpiresAt,
+            );
+            txAutomationCreate = tx.automation.create;
+            return fn(tx);
+          },
+        );
+
+        const before = Date.now();
+        const result = await service.activate(orgUser, 'cu-1');
+        const after = Date.now();
+        const created = txAutomationCreate!.mock.calls.map(
+          (call: [{ data: CreatedAutomation }]) => call[0].data,
+        );
+        return { result, created, before, after };
+      }
+
+      const summaryOf = (created: CreatedAutomation[]): string[] =>
+        created
+          .map((d) => `${d.stageName}|${d.purpose}|${d.messageTemplate}`)
+          .sort();
+
+      it('D-30 futuro → mensaje de vencimiento cercano con su propia fecha', async () => {
+        const { result, created } = await generate(
+          new Date(Date.now() + 60 * 86_400_000),
+        );
+
+        expect(result.automationCount).toBe(3);
+        expect(summaryOf(created)).toEqual([
+          'Garantía vencida|TRANSACTIONAL|garantía vencida A',
+          'Reactivación|TRANSACTIONAL|reactivación A',
+          'Vencimiento cercano|TRANSACTIONAL|vencimiento cercano A',
+        ]);
+        const d30 = created.find((d) => d.stageName === 'Vencimiento cercano');
+        expect(d30?.scheduledDate.getTime()).toBeGreaterThan(Date.now());
+        expect(created.some((d) => d.purpose === 'COMMERCIAL')).toBe(false);
+      });
+
+      it('D-30 pasado con garantía vigente → sigue siendo vencimiento cercano y conserva +60/+90', async () => {
+        // Vence en 20 días: D−30 (hace 10 días) ya pasó; D+60 y D+90 no.
+        const { result, created, before, after } = await generate(
+          new Date(Date.now() + 20 * 86_400_000),
+        );
+
+        expect(result.automationCount).toBe(3);
+        expect(summaryOf(created)).toEqual([
+          'Garantía vencida|TRANSACTIONAL|garantía vencida A',
+          'Reactivación|TRANSACTIONAL|reactivación A',
+          'Vencimiento cercano|TRANSACTIONAL|vencimiento cercano A',
+        ]);
+        // Catch-up: se lanza ahora con SU mensaje, no con el de garantía vencida.
+        const d30 = created.find((d) => d.stageName === 'Vencimiento cercano');
+        expect(d30?.scheduledDate.getTime()).toBeGreaterThanOrEqual(before);
+        expect(d30?.scheduledDate.getTime()).toBeLessThanOrEqual(after);
+        // F4 no suprime +60/+90 ni hay conversión COMMERCIAL.
+        expect(created.some((d) => d.purpose === 'COMMERCIAL')).toBe(false);
+        expect(
+          created.some((d) => d.stageName === 'Recompra / renovación'),
+        ).toBe(false);
+      });
+
+      it('garantía realmente vencida → una sola conversión y F4 colapsa +60/+90', async () => {
+        // Venció hace 100 días: D−30, D+60 y D+90 ya pasaron.
+        const { result, created, before, after } = await generate(
+          new Date(Date.now() - 100 * 86_400_000),
+        );
+
+        expect(result.automationCount).toBe(1);
+        expect(summaryOf(created)).toEqual([
+          'Recompra / renovación|COMMERCIAL|garantía vencida A',
+        ]);
+        const [conversion] = created;
+        expect(conversion.scheduledDate.getTime()).toBeGreaterThanOrEqual(
+          before,
+        );
+        expect(conversion.scheduledDate.getTime()).toBeLessThanOrEqual(after);
+      });
+
+      it('vencida hace menos de 60 días → conversión con el mensaje D+60 y F4 suprime +60/+90', async () => {
+        // Venció hace 30 días: sólo D−30 está en el pasado.
+        const { result, created } = await generate(
+          new Date(Date.now() - 30 * 86_400_000),
+        );
+
+        expect(result.automationCount).toBe(1);
+        expect(summaryOf(created)).toEqual([
+          'Recompra / renovación|COMMERCIAL|garantía vencida A',
+        ]);
+        // El texto de vencimiento cercano nunca se usa para un estado vencido.
+        expect(
+          created.some((d) => d.messageTemplate === 'vencimiento cercano A'),
+        ).toBe(false);
+      });
+
+      it('F4 no depende del orden del array de etapas', async () => {
+        // Mismo ciclo, orden invertido (+90 primero) y garantía vencida hace
+        // 70 días: D+60 pasó, D+90 aún no.
+        const { result, created } = await generate(
+          new Date(Date.now() - 70 * 86_400_000),
+          [lifecycleStages[2], lifecycleStages[1], lifecycleStages[0]],
+        );
+
+        expect(result.automationCount).toBe(1);
+        expect(summaryOf(created)).toEqual([
+          'Recompra / renovación|COMMERCIAL|garantía vencida A',
+        ]);
+      });
     });
 
     it('omits past PURCHASE_DATE stages without generating a repurchase', async () => {
@@ -2100,6 +2381,193 @@ describe('CampaignsService', () => {
           },
         },
       });
+    });
+  });
+
+  // Lifecycle por compra: activar la campaña sólo inscribe las compras que
+  // existen en ese momento; una compra registrada después (alta manual o
+  // importación) entra en las campañas ACTIVE cuando AutomationsModule emite
+  // CommercialCycleStarted. No se cancela nada de las compras anteriores.
+  describe('enrollment of new purchases (CommercialCycleStarted)', () => {
+    const purchaseRow = {
+      id: 'pu-9',
+      customerId: 'cu-a',
+      organizationId: 'org-1',
+      purchaseDate: new Date('2027-06-01T12:00:00.000Z'),
+      customer: { deletedAt: null, noContactAt: null },
+    };
+
+    const lifecycleStages = [
+      {
+        uuid: 'st-1',
+        name: 'Día 2',
+        anchor: 'PURCHASE_DATE',
+        offsetDays: 2,
+        template: 'p2',
+        templateOnPast: null,
+      },
+      {
+        uuid: 'st-2',
+        name: 'Vencimiento -30',
+        anchor: 'WARRANTY_EXPIRY',
+        offsetDays: -30,
+        template: 'w-30',
+        templateOnPast: null,
+      },
+    ];
+
+    function enrollmentTransaction() {
+      return sequenceTransaction(
+        {
+          id: 'pu-9',
+          customerId: 'cu-a',
+          purchaseDate: '2027-06-01T12:00:00.000Z',
+        },
+        new Date('2027-12-01T12:00:00.000Z'),
+      );
+    }
+
+    let txAutomationCreate: jest.Mock | undefined;
+
+    function activeCampaign() {
+      return campaignRow({
+        status: 'ACTIVE',
+        followUpSequenceId: null,
+        followUpSequence: { stages: lifecycleStages },
+        segment: { customerStatus: 'ACTIVE' },
+        startAt: null,
+      });
+    }
+
+    function mockHappyPath(): void {
+      prisma.purchase.findFirst.mockResolvedValue(purchaseRow);
+      prisma.campaign.findMany.mockResolvedValue([activeCampaign()]);
+      prisma.purchase.count
+        .mockResolvedValueOnce(1) // dentro del segmento
+        .mockResolvedValueOnce(0); // sin compras más recientes
+      prisma.automation.findFirst.mockResolvedValue(null);
+      prisma.automation.count.mockResolvedValue(0);
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = enrollmentTransaction();
+          txAutomationCreate = tx.automation.create;
+          return fn(tx);
+        },
+      );
+    }
+
+    it('enrolls the new purchase in ACTIVE campaigns whose segment matches', async () => {
+      mockHappyPath();
+
+      await service.handleCommercialCycleStarted({
+        payload: { purchaseId: 'pu-uuid-9' },
+      });
+
+      expect(prisma.purchase.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { uuid: 'pu-uuid-9', deletedAt: null },
+        }),
+      );
+      expect(prisma.campaign.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            organizationId: 'org-1',
+            status: 'ACTIVE',
+          }) as Prisma.CampaignWhereInput,
+        }),
+      );
+      const stageNames = txAutomationCreate!.mock.calls.map(
+        (call: [{ data: { stageName: string } }]) => call[0].data.stageName,
+      );
+      expect(stageNames).toEqual(['Día 2', 'Vencimiento -30']);
+    });
+
+    it('does not cancel the automations of previous purchases (C-06)', async () => {
+      mockHappyPath();
+
+      await service.handleCommercialCycleStarted({
+        payload: { purchaseId: 'pu-uuid-9' },
+      });
+
+      // C-06: las lifecycles anteriores conviven; nada se cancela ni se
+      // reprograma al inscribir la compra nueva.
+      expect(prisma.automation.updateMany).not.toHaveBeenCalled();
+      const created = txAutomationCreate!.mock.calls.map(
+        (call: [{ data: { purchaseId: string } }]) => call[0].data.purchaseId,
+      );
+      expect(created).toHaveLength(2);
+      expect(created.every((purchaseId) => purchaseId === 'pu-9')).toBe(true);
+    });
+
+    it('only looks at ACTIVE campaigns (DRAFT/APPROVED never enroll)', async () => {
+      prisma.purchase.findFirst.mockResolvedValue(purchaseRow);
+      prisma.campaign.findMany.mockResolvedValue([]);
+      prisma.purchase.count.mockResolvedValue(1);
+
+      await service.handleCommercialCycleStarted({
+        payload: { purchaseId: 'pu-uuid-9' },
+      });
+
+      expect(prisma.campaign.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            status: 'ACTIVE',
+          }) as Prisma.CampaignWhereInput,
+        }),
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('is idempotent: a purchase that already has campaign automations is not re-enrolled', async () => {
+      prisma.purchase.findFirst.mockResolvedValue(purchaseRow);
+      prisma.campaign.findMany.mockResolvedValue([activeCampaign()]);
+      prisma.purchase.count.mockResolvedValueOnce(1).mockResolvedValueOnce(0);
+      prisma.automation.findFirst.mockResolvedValue({ id: 'au-1' });
+
+      await service.handleCommercialCycleStarted({
+        payload: { purchaseId: 'pu-uuid-9' },
+      });
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('does not enroll an older purchase when a newer one is already in the segment', async () => {
+      prisma.purchase.findFirst.mockResolvedValue(purchaseRow);
+      prisma.campaign.findMany.mockResolvedValue([activeCampaign()]);
+      prisma.purchase.count
+        .mockResolvedValueOnce(1) // dentro del segmento
+        .mockResolvedValueOnce(1); // hay una compra más reciente
+
+      await service.handleCommercialCycleStarted({
+        payload: { purchaseId: 'pu-uuid-9' },
+      });
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('skips customers that opted out of contact', async () => {
+      prisma.purchase.findFirst.mockResolvedValue({
+        ...purchaseRow,
+        customer: { deletedAt: null, noContactAt: new Date('2026-01-01') },
+      });
+
+      await service.handleCommercialCycleStarted({
+        payload: { purchaseId: 'pu-uuid-9' },
+      });
+
+      expect(prisma.campaign.findMany).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('ignores unknown purchases and events without a purchaseId', async () => {
+      prisma.purchase.findFirst.mockResolvedValue(null);
+
+      await service.handleCommercialCycleStarted({
+        payload: { purchaseId: 'no-existe' },
+      });
+      await service.handleCommercialCycleStarted({});
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
   });
 });
