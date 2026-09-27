@@ -179,6 +179,7 @@ export const campaignSchema = z.object({
     })
     .partial()
     .optional(),
+  channel: z.enum(["WHATSAPP", "SMS"]).optional(),
 });
 
 export type CampaignFormValues = z.output<typeof campaignSchema>;

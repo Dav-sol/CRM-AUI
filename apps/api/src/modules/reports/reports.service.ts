@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import type { AuthUser } from '../../core/decorators/current-user.decorator';
 import { QueryReportDto } from './dto/query-report.dto';
@@ -89,10 +88,7 @@ export class ReportsService {
     return Object.keys(where).length > 0 ? where : undefined;
   }
 
-  private truncateDate(
-    date: Date,
-    groupBy: 'day' | 'week' | 'month',
-  ): string {
+  private truncateDate(date: Date, groupBy: 'day' | 'week' | 'month'): string {
     if (groupBy === 'day') {
       return date.toISOString().slice(0, 10);
     }
@@ -259,14 +255,11 @@ export class ReportsService {
       this.prisma.campaign.findMany({
         where: { organizationId, deletedAt: null },
         select: {
+          id: true,
+          uuid: true,
           name: true,
           status: true,
           type: true,
-          automationCount: true,
-          delivered: true,
-          responded: true,
-          sales: true,
-          revenue: true,
           createdAt: true,
         },
         orderBy: { createdAt: 'desc' },
@@ -279,23 +272,60 @@ export class ReportsService {
     let totalSales = 0;
     let totalRevenue = 0;
 
-    const rows: ReportRow[] = allCampaigns.map((c) => {
-      totalSent += c.automationCount;
-      totalDelivered += c.delivered;
-      totalResponded += c.responded;
-      totalSales += c.sales;
-      totalRevenue += Number(c.revenue);
-      return {
+    const rows: ReportRow[] = [];
+    for (const c of allCampaigns) {
+      const [delivered, responded, quoteAgg] = await Promise.all([
+        this.prisma.message.count({
+          where: {
+            type: 'AUTOMATIC',
+            direction: 'OUTBOUND',
+            automation: { campaignId: c.id },
+            status: { in: ['SENT', 'DELIVERED', 'READ'] },
+            deletedAt: null,
+          },
+        }),
+        this.prisma.message.count({
+          where: {
+            type: 'INCOMING',
+            direction: 'INBOUND',
+            inReplyToCampaignId: c.uuid,
+            deletedAt: null,
+          },
+        }),
+        this.prisma.quote.aggregate({
+          where: { campaignId: c.uuid, deletedAt: null },
+          _count: true,
+          _sum: { value: true },
+        }),
+      ]);
+
+      const salesCount = await this.prisma.quote.count({
+        where: {
+          campaignId: c.uuid,
+          deletedAt: null,
+          purchaseId: { not: null },
+        },
+      });
+      const revenue = Number(quoteAgg._sum.value ?? 0);
+      const sales = salesCount;
+
+      totalSent += delivered;
+      totalDelivered += delivered;
+      totalResponded += responded;
+      totalSales += sales;
+      totalRevenue += revenue;
+
+      rows.push({
         label: c.name,
-        value: c.automationCount,
+        value: delivered,
         status: c.status,
         type: c.type,
-        delivered: c.delivered,
-        responded: c.responded,
-        sales: c.sales,
-        revenue: Number(c.revenue),
-      };
-    });
+        delivered,
+        responded,
+        sales,
+        revenue,
+      });
+    }
 
     return {
       summary: {
@@ -323,9 +353,7 @@ export class ReportsService {
     const organizationId = this.requireOrg(user);
     const dateRange = this.buildDateRange(dto);
 
-    const dateFilter = dateRange
-      ? { scheduledDate: dateRange }
-      : {};
+    const dateFilter = dateRange ? { scheduledDate: dateRange } : {};
 
     const [total, pending, executed, errors, allAutomations] =
       await Promise.all([
@@ -444,7 +472,10 @@ export class ReportsService {
     const deliveryRate = sent > 0 ? (delivered / sent) * 100 : 0;
 
     // Group by period
-    const groups = new Map<string, { total: number; sent: number; failed: number }>();
+    const groups = new Map<
+      string,
+      { total: number; sent: number; failed: number }
+    >();
     for (const m of allMessages) {
       const key = this.truncateDate(m.createdAt, groupBy);
       const existing = groups.get(key) ?? { total: 0, sent: 0, failed: 0 };

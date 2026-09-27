@@ -896,10 +896,14 @@ export async function apiPreviewCampaignSegmentDraft(body: {
   segment?: Record<string, unknown>;
   followUpSequenceId?: string;
   type?: PreviewCampaignSegmentDraftBodyType;
+  channel?: "SMS" | "WHATSAPP_CLIENTS";
 }): Promise<{
   count: number;
   estimatedAutomations: number;
   estimatedCost: number;
+  estimatedSegments?: number;
+  estimatedMessages?: number;
+  currency?: string;
 }> {
   const res = await call((options) =>
     previewCampaignSegmentDraft(body, options),

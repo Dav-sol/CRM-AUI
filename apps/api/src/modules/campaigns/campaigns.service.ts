@@ -11,6 +11,7 @@ import { Prisma } from '@prisma/client';
 import {
   CampaignStatus,
   CampaignType,
+  ChannelType,
   FollowUpStageAnchor,
 } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
@@ -111,7 +112,7 @@ export interface CampaignDetail extends CampaignSummary {
   quotes: number;
   sales: number;
   revenue: number;
-  whatsappCost: number;
+  estimatedCost: number;
   roi: number | null;
 }
 
@@ -132,6 +133,7 @@ interface CampaignRow {
   templateD180: string | null;
   templateD365: string | null;
   status: CampaignStatus;
+  channel: ChannelType;
   startAt: Date | null;
   segment: Prisma.JsonValue | null;
   stages: Prisma.JsonValue | null;
@@ -256,6 +258,7 @@ export class CampaignsService {
         templateD3: dto.templateD3,
         templateD180: dto.templateD180,
         templateD365: dto.templateD365,
+        channel: dto.channel ?? 'WHATSAPP_CLIENTS',
         segment: dto.segment
           ? (dto.segment as Prisma.InputJsonValue)
           : undefined,
@@ -415,7 +418,7 @@ export class CampaignsService {
       quotes: attribution.quotes,
       sales: attribution.sales,
       revenue: attribution.revenue,
-      whatsappCost: attribution.whatsappCost,
+      estimatedCost: attribution.estimatedCost,
       roi: attribution.roi,
     };
   }
@@ -708,6 +711,7 @@ export class CampaignsService {
           // Reference = max(startAt, now): the campaign starts operating on
           // this date; stages before it are never sent historically.
           scheduledDate,
+          campaign.channel,
         );
         automationCount = sequenceResult.count;
         skippedByLimit += sequenceResult.skippedByLimit;
@@ -730,6 +734,7 @@ export class CampaignsService {
           })),
           campaign.template,
           scheduledDate,
+          campaign.channel,
         );
         automationCount = inlineResult.count;
         skippedByLimit += inlineResult.skippedByLimit;
@@ -759,6 +764,7 @@ export class CampaignsService {
             priority: number;
             purpose: 'COMMERCIAL';
             stageName: string;
+            channel: ChannelType;
           }> = [];
 
           for (const row of batch) {
@@ -812,6 +818,7 @@ export class CampaignsService {
               priority: 0,
               purpose: 'COMMERCIAL',
               stageName: 'Mensaje de campaña',
+              channel: campaign.channel,
             });
           }
 
@@ -1129,7 +1136,10 @@ export class CampaignsService {
   ): Promise<{
     count: number;
     estimatedAutomations: number;
+    estimatedMessages: number;
+    estimatedSegments: number;
     estimatedCost: number;
+    currency: string;
   }> {
     const organizationId = this.requireOrg(user);
     if (dto.segment && !hasSegmentCriterion(dto.segment)) {
@@ -1145,6 +1155,7 @@ export class CampaignsService {
       dto.segment ?? null,
       dto.followUpSequenceId,
       dto.type,
+      dto.channel,
     );
   }
 
@@ -1155,7 +1166,10 @@ export class CampaignsService {
   ): Promise<{
     count: number;
     estimatedAutomations: number;
+    estimatedMessages: number;
+    estimatedSegments: number;
     estimatedCost: number;
+    currency: string;
   }> {
     const organizationId = this.requireOrg(user);
     const campaign = await this.findScopedCampaign(organizationId, uuid);
@@ -1181,6 +1195,7 @@ export class CampaignsService {
       segment,
       campaign.followUpSequenceId,
       campaign.type,
+      campaign.channel,
     );
 
     await this.auditService.record({
@@ -1202,10 +1217,14 @@ export class CampaignsService {
     segment: CampaignSegmentDto | null,
     followUpSequenceId?: string | null,
     campaignType?: CampaignType | null,
+    channel?: ChannelType | null,
   ): Promise<{
     count: number;
     estimatedAutomations: number;
+    estimatedMessages: number;
+    estimatedSegments: number;
     estimatedCost: number;
+    currency: string;
   }> {
     const rows = await this.resolveSegmentPurchases(
       this.prisma,
@@ -1218,19 +1237,40 @@ export class CampaignsService {
         })
       : 1;
     const estimatedAutomations = rows.length * Math.max(stagesCount, 1);
-    // Fase P0.2 (D6): tarifas por propósito, preparadas para costos reales de
-    // Meta. El comercial es más caro que el transaccional; sigue siendo un
-    // ESTIMADO (no hay facturación real en v1).
-    const commercial =
-      campaignType === 'REPURCHASE' || campaignType === 'SPECIAL';
-    const messageCost = commercial
-      ? (this.configService.get<number>('campaigns.messageCostCommercial') ??
-        400)
-      : (this.configService.get<number>('campaigns.messageCost') ?? 200);
+
+    const isSms = channel === 'SMS';
+    const smsCostPerSegment = isSms
+      ? (this.configService.get<number>('sms.costPerSegment') ?? 100)
+      : 0;
+    const smsCurrency = isSms
+      ? (this.configService.get<string>('sms.currency') ?? 'COP')
+      : 'COP';
+
+    // For SMS: estimate segments per template. Use average segment count.
+    // For WhatsApp: use existing per-message flat rate.
+    let estimatedSegments = estimatedAutomations;
+    let estimatedCost: number;
+
+    if (isSms) {
+      estimatedSegments = estimatedAutomations; // 1 segment avg per message (conservative)
+      estimatedCost = estimatedSegments * smsCostPerSegment;
+    } else {
+      const commercial =
+        campaignType === 'REPURCHASE' || campaignType === 'SPECIAL';
+      const messageCost = commercial
+        ? (this.configService.get<number>('campaigns.messageCostCommercial') ??
+          400)
+        : (this.configService.get<number>('campaigns.messageCost') ?? 200);
+      estimatedCost = estimatedAutomations * messageCost;
+    }
+
     return {
       count: rows.length,
       estimatedAutomations,
-      estimatedCost: estimatedAutomations * messageCost,
+      estimatedMessages: estimatedAutomations,
+      estimatedSegments,
+      estimatedCost,
+      currency: smsCurrency,
     };
   }
 
@@ -1473,6 +1513,7 @@ export class CampaignsService {
           stages,
           campaign.template,
           reference,
+          campaign.channel,
         ),
       );
       if (result.count > 0) {
@@ -1572,6 +1613,7 @@ export class CampaignsService {
     }>,
     campaignTemplate: string,
     reference: Date,
+    channel: ChannelType = 'WHATSAPP_CLIENTS',
   ): Promise<{
     count: number;
     skippedByLimit: number;
@@ -1765,6 +1807,8 @@ export class CampaignsService {
               purpose: 'TRANSACTIONAL',
               // Fase 4 (T14): motivo legible de la automatización.
               stageName: stage.name,
+              // Fase 1: canal de envío (snapshot de campaña).
+              channel,
               // Snapshot (HG-FUS-02 option A): the automation is
               // self-sufficient — later sequence edits do not affect
               // already generated campaigns/automations.
@@ -1792,6 +1836,7 @@ export class CampaignsService {
               priority: 0,
               purpose: 'TRANSACTIONAL',
               stageName: stage.name,
+              channel,
               messageTemplate: stage.template,
             },
           });
@@ -1849,6 +1894,7 @@ export class CampaignsService {
               priority: 0,
               purpose: 'COMMERCIAL',
               stageName: 'Recompra / renovación',
+              channel,
               messageTemplate,
             },
           });
@@ -1930,7 +1976,7 @@ export class CampaignsService {
     quotes: number;
     sales: number;
     revenue: number;
-    whatsappCost: number;
+    estimatedCost: number;
     roi: number | null;
   }> {
     const [delivered, responded, quoteAgg] = await Promise.all([
@@ -1964,11 +2010,11 @@ export class CampaignsService {
       (quoteAgg._sum.value?.toNumber() ?? 0) * (sales > 0 ? 1 : 0);
     const messageCost =
       this.configService.get<number>('campaigns.messageCost') ?? 200;
-    const whatsappCost = delivered * messageCost;
+    const estimatedCost = delivered * messageCost;
     const roi =
-      whatsappCost > 0 ? (revenue - whatsappCost) / whatsappCost : null;
+      estimatedCost > 0 ? (revenue - estimatedCost) / estimatedCost : null;
 
-    return { delivered, responded, quotes, sales, revenue, whatsappCost, roi };
+    return { delivered, responded, quotes, sales, revenue, estimatedCost, roi };
   }
 
   private async loadCampaignStats(

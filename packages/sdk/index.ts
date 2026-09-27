@@ -284,6 +284,16 @@ import type {
   ReplyConversation404,
   ReplyConversation502,
   ReplyConversationBody,
+  ReportAutomations200,
+  ReportAutomationsParams,
+  ReportCampaigns200,
+  ReportCampaignsParams,
+  ReportCustomers200,
+  ReportCustomersParams,
+  ReportMessages200,
+  ReportMessagesParams,
+  ReportPurchases200,
+  ReportPurchasesParams,
   RequestPasswordReset200,
   RequestPasswordReset403,
   RequestPasswordResetBody,
@@ -303,6 +313,8 @@ import type {
   SendManualMessage502,
   SendManualMessageBody,
   SendQuote200,
+  SmsWebhook200,
+  SmsWebhookBody,
   TransferConversation200,
   TransferConversation400,
   TransferConversation404,
@@ -3833,11 +3845,14 @@ export const getUpdateCampaignUrl = (uuid: string,) => {
 }
 
 /**
- * Partially updates the campaign. Only allowed while the campaign is
- * DRAFT or APPROVED, i.e. before activation (FR-004); any other state
- * returns 400 VALIDATION_ERROR. At least one field must be provided;
- * the segment, when present, must include at least one criterion.
- * @summary Update a campaign (DRAFT or APPROVED)
+ * Partially updates the campaign. Allowed while DRAFT, APPROVED, or ACTIVE.
+ * On DRAFT/APPROVED all fields may be modified. On ACTIVE only name,
+ * description, and template fields (template, templateD3, templateD180,
+ * templateD365) are editable; modifying segment, stages, startAt, type, or
+ * followUpSequenceId on an ACTIVE campaign returns 400 VALIDATION_ERROR.
+ * At least one field must be provided; the segment, when present, must
+ * include at least one criterion.
+ * @summary Update a campaign (DRAFT, APPROVED, or ACTIVE)
  */
 export const updateCampaign = async (uuid: string,
     updateCampaignBody: UpdateCampaignBody, options?: RequestInit): Promise<updateCampaignResponse> => {
@@ -5994,6 +6009,367 @@ export const deleteTemplate = async (id: string, options?: RequestInit): Promise
 
   const data: deleteTemplateResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as deleteTemplateResponse
+}
+
+
+
+export type reportCustomersResponse200 = {
+  data: ReportCustomers200
+  status: 200
+}
+
+export type reportCustomersResponse401 = {
+  data: void
+  status: 401
+}
+
+export type reportCustomersResponseSuccess = (reportCustomersResponse200) & {
+  headers: Headers;
+};
+export type reportCustomersResponseError = (reportCustomersResponse401) & {
+  headers: Headers;
+};
+
+export type reportCustomersResponse = (reportCustomersResponseSuccess | reportCustomersResponseError)
+
+export const getReportCustomersUrl = (params?: ReportCustomersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/reports/customers?${stringifiedParams}` : `/api/v1/reports/customers`
+}
+
+/**
+ * Returns customer metrics: total, new in period, pending contact,
+ * blocked. Supports date range filtering and period grouping.
+ * @summary Customer report
+ */
+export const reportCustomers = async (params?: ReportCustomersParams, options?: RequestInit): Promise<reportCustomersResponse> => {
+
+  const res = await fetch(getReportCustomersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: reportCustomersResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as reportCustomersResponse
+}
+
+
+
+export type reportPurchasesResponse200 = {
+  data: ReportPurchases200
+  status: 200
+}
+
+export type reportPurchasesResponse401 = {
+  data: void
+  status: 401
+}
+
+export type reportPurchasesResponseSuccess = (reportPurchasesResponse200) & {
+  headers: Headers;
+};
+export type reportPurchasesResponseError = (reportPurchasesResponse401) & {
+  headers: Headers;
+};
+
+export type reportPurchasesResponse = (reportPurchasesResponseSuccess | reportPurchasesResponseError)
+
+export const getReportPurchasesUrl = (params?: ReportPurchasesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/reports/purchases?${stringifiedParams}` : `/api/v1/reports/purchases`
+}
+
+/**
+ * Returns purchase metrics: total, value, units, avg ticket.
+ * Supports date range filtering and period grouping.
+ * @summary Purchase report
+ */
+export const reportPurchases = async (params?: ReportPurchasesParams, options?: RequestInit): Promise<reportPurchasesResponse> => {
+
+  const res = await fetch(getReportPurchasesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: reportPurchasesResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as reportPurchasesResponse
+}
+
+
+
+export type reportCampaignsResponse200 = {
+  data: ReportCampaigns200
+  status: 200
+}
+
+export type reportCampaignsResponse401 = {
+  data: void
+  status: 401
+}
+
+export type reportCampaignsResponseSuccess = (reportCampaignsResponse200) & {
+  headers: Headers;
+};
+export type reportCampaignsResponseError = (reportCampaignsResponse401) & {
+  headers: Headers;
+};
+
+export type reportCampaignsResponse = (reportCampaignsResponseSuccess | reportCampaignsResponseError)
+
+export const getReportCampaignsUrl = (params?: ReportCampaignsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/reports/campaigns?${stringifiedParams}` : `/api/v1/reports/campaigns`
+}
+
+/**
+ * Returns campaign metrics: counts by status, sends, deliveries,
+ * responses, sales, revenue.
+ * @summary Campaign report
+ */
+export const reportCampaigns = async (params?: ReportCampaignsParams, options?: RequestInit): Promise<reportCampaignsResponse> => {
+
+  const res = await fetch(getReportCampaignsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: reportCampaignsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as reportCampaignsResponse
+}
+
+
+
+export type reportAutomationsResponse200 = {
+  data: ReportAutomations200
+  status: 200
+}
+
+export type reportAutomationsResponse401 = {
+  data: void
+  status: 401
+}
+
+export type reportAutomationsResponseSuccess = (reportAutomationsResponse200) & {
+  headers: Headers;
+};
+export type reportAutomationsResponseError = (reportAutomationsResponse401) & {
+  headers: Headers;
+};
+
+export type reportAutomationsResponse = (reportAutomationsResponseSuccess | reportAutomationsResponseError)
+
+export const getReportAutomationsUrl = (params?: ReportAutomationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/reports/automations?${stringifiedParams}` : `/api/v1/reports/automations`
+}
+
+/**
+ * Returns automation metrics: counts by status, success rate.
+ * @summary Automation report
+ */
+export const reportAutomations = async (params?: ReportAutomationsParams, options?: RequestInit): Promise<reportAutomationsResponse> => {
+
+  const res = await fetch(getReportAutomationsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: reportAutomationsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as reportAutomationsResponse
+}
+
+
+
+export type reportMessagesResponse200 = {
+  data: ReportMessages200
+  status: 200
+}
+
+export type reportMessagesResponse401 = {
+  data: void
+  status: 401
+}
+
+export type reportMessagesResponseSuccess = (reportMessagesResponse200) & {
+  headers: Headers;
+};
+export type reportMessagesResponseError = (reportMessagesResponse401) & {
+  headers: Headers;
+};
+
+export type reportMessagesResponse = (reportMessagesResponseSuccess | reportMessagesResponseError)
+
+export const getReportMessagesUrl = (params?: ReportMessagesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/reports/messages?${stringifiedParams}` : `/api/v1/reports/messages`
+}
+
+/**
+ * Returns message metrics: sent, delivered, read, failed, delivery rate.
+ * @summary Message report
+ */
+export const reportMessages = async (params?: ReportMessagesParams, options?: RequestInit): Promise<reportMessagesResponse> => {
+
+  const res = await fetch(getReportMessagesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: reportMessagesResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as reportMessagesResponse
+}
+
+
+
+export type smsWebhookResponse200 = {
+  data: SmsWebhook200
+  status: 200
+}
+
+export type smsWebhookResponse400 = {
+  data: void
+  status: 400
+}
+
+export type smsWebhookResponse401 = {
+  data: void
+  status: 401
+}
+
+export type smsWebhookResponse404 = {
+  data: void
+  status: 404
+}
+
+export type smsWebhookResponseSuccess = (smsWebhookResponse200) & {
+  headers: Headers;
+};
+export type smsWebhookResponseError = (smsWebhookResponse400 | smsWebhookResponse401 | smsWebhookResponse404) & {
+  headers: Headers;
+};
+
+export type smsWebhookResponse = (smsWebhookResponseSuccess | smsWebhookResponseError)
+
+export const getSmsWebhookUrl = () => {
+
+
+
+
+  return `/api/v1/webhooks/sms`
+}
+
+/**
+ * Receives delivery status callbacks from the SMS provider (Fase 1).
+ * The endpoint validates the provider signature, updates the Message
+ * status, and triggers billing cost updates.
+ *
+ * Supported statuses: QUEUED → SENT → DELIVERED → READ → FAILED.
+ *
+ * The endpoint is idempotent: repeated calls with the same messageId
+ * are silently ignored.
+ * @summary SMS delivery status webhook
+ */
+export const smsWebhook = async (smsWebhookBody: SmsWebhookBody, options?: RequestInit): Promise<smsWebhookResponse> => {
+
+  const res = await fetch(getSmsWebhookUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(smsWebhookBody)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: smsWebhookResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as smsWebhookResponse
 }
 
 

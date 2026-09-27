@@ -39,6 +39,7 @@ model Organization {
   conversationNotes          ConversationNote[]
   quickReplies               QuickReply[]
   templates                  Template[]
+  channelAccounts            ChannelAccount[]
 
   @@map("organizations")
 }
@@ -114,6 +115,7 @@ model Customer {
   organization  Organization   @relation(fields: [organizationId], references: [id])
   purchases     Purchase[]
   conversations Conversation[]
+  messages      Message[]
 
   @@unique([organizationId, codcli])
   @@index([organizationId])
@@ -165,6 +167,8 @@ model Purchase {
   sourceConversationId String?     @map("source_conversation_id")
   // Fase P0-C: cotización que originó la venta (uuid).
   quoteId             String?      @map("quote_id")
+  // Fase 8: atribución explícita CRM vs redes sociales.
+  source              PurchaseSource @default(CRM)
   quantity          Int
   value             Decimal        @db.Decimal(12, 2)
   status            PurchaseStatus @default(COMPLETED)
@@ -267,9 +271,14 @@ model Campaign {
   stages               Json?           @map("stages")
   followUpSequenceId   String?         @map("follow_up_sequence_id")
 
+  // Fase 1: canal de envío (SMS, WHATSAPP_CLIENTS, WHATSAPP_SOCIAL).
+  channel              ChannelType     @default(WHATSAPP_CLIENTS)
+  channelAccountId     String?         @map("channel_account_id")
+
   organization         Organization    @relation(fields: [organizationId], references: [id])
   automations           Automation[]
   followUpSequence     FollowUpSequence? @relation(fields: [followUpSequenceId], references: [id])
+  channelAccount       ChannelAccount?  @relation(fields: [channelAccountId], references: [id])
 
   @@index([organizationId])
   @@map("campaigns")
@@ -322,6 +331,33 @@ model FollowUpSequenceStage {
   @@map("follow_up_sequence_stages")
 }
 
+model ChannelAccount {
+  id                  String              @id @default(cuid())
+  uuid                String              @unique @default(uuid())
+  organizationId      String              @map("organization_id")
+  channel             ChannelType
+  provider            ChannelProvider
+  label               String
+  phoneNumber         String?             @map("phone_number")
+  senderId            String?             @map("sender_id")
+  status              ChannelAccountStatus @default(ACTIVE)
+  isDefaultForChannel Boolean             @default(false) @map("is_default_for_channel")
+  metadata            Json?
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+  deletedAt           DateTime?           @map("deleted_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  messages     Message[]
+  automations  Automation[]
+  campaigns    Campaign[]
+
+  @@unique([organizationId, channel, provider, senderId])
+  @@index([organizationId])
+  @@index([organizationId, channel])
+  @@map("channel_accounts")
+}
+
 model Automation {
   id                String           @id @default(cuid())
   uuid              String           @unique @default(uuid())
@@ -345,6 +381,9 @@ model Automation {
   // Fase 4 (T14): nombre legible del motivo/etapa ("Revisión mitad de garantía",
   // "Seguimiento postventa", "Recompra / renovación").
   stageName         String?          @map("stage_name")
+  // Fase 1: canal de envío (snapshot de Campaign al momento de generación).
+  channel           ChannelType      @default(WHATSAPP_CLIENTS)
+  channelAccountId  String?          @map("channel_account_id")
   createdBy         String?          @map("created_by")
   updatedBy         String?          @map("updated_by")
   deletedBy         String?          @map("deleted_by")
@@ -356,6 +395,7 @@ model Automation {
   campaign        Campaign?        @relation(fields: [campaignId], references: [id])
   purchase        Purchase         @relation(fields: [purchaseId], references: [id])
   commercialCycle CommercialCycle? @relation(fields: [commercialCycleId], references: [id])
+  channelAccount  ChannelAccount?  @relation(fields: [channelAccountId], references: [id])
   messages        Message[]
 
   @@index([organizationId])
@@ -397,8 +437,9 @@ model Message {
   id                     String           @id @default(cuid())
   uuid                   String           @unique @default(uuid())
   organizationId         String           @map("organization_id")
-  conversationId         String           @map("conversation_id")
+  conversationId         String?          @map("conversation_id")
   automationId           String?          @map("automation_id")
+  customerId             String?          @map("customer_id")
   // Atribución de respuestas (Fase 2): cuando un mensaje entrante responde a
   // una automatización/campaña reciente, se guarda aquí su origen (uuid).
   inReplyToAutomationId  String?          @map("in_reply_to_automation_id")
@@ -409,6 +450,16 @@ model Message {
   status                 MessageStatus    @default(QUEUED)
   providerMessageId      String?          @map("provider_message_id")
   providerConversationId String?          @map("provider_conversation_id")
+  // Fase 1: canal de envío (denormalized para queries).
+  channel                ChannelType?
+  channelAccountId       String?          @map("channel_account_id")
+  provider               String?          @map("provider")
+  // Fase 3: costo y segmentos.
+  estimatedCost          Decimal?         @db.Decimal(10, 4) @map("estimated_cost")
+  actualCost             Decimal?         @db.Decimal(10, 4) @map("actual_cost")
+  currency               String?          @db.VarChar(3)
+  segmentCount           Int?             @map("segment_count")
+  failureReason          String?          @map("failure_reason")
   sentAt                 DateTime?        @map("sent_at")
   deliveredAt            DateTime?        @map("delivered_at")
   readAt                 DateTime?        @map("read_at")
@@ -416,14 +467,18 @@ model Message {
   updatedAt              DateTime         @updatedAt @map("updated_at")
   deletedAt              DateTime?        @map("deleted_at")
 
-  organization Organization @relation(fields: [organizationId], references: [id])
-  conversation Conversation @relation(fields: [conversationId], references: [id])
-  automation   Automation?  @relation(fields: [automationId], references: [id])
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  conversation    Conversation?   @relation(fields: [conversationId], references: [id])
+  automation      Automation?     @relation(fields: [automationId], references: [id])
+  customer        Customer?       @relation(fields: [customerId], references: [id])
+  channelAccount  ChannelAccount? @relation(fields: [channelAccountId], references: [id])
 
   @@unique([organizationId, providerMessageId])
   @@index([organizationId])
   @@index([conversationId])
   @@index([automationId])
+  @@index([customerId])
+  @@index([channel])
   @@index([status])
   @@index([createdAt])
   @@index([organizationId, status])
@@ -734,6 +789,29 @@ enum FollowUpStageAnchor {
 enum ChannelType {
   WHATSAPP_CLIENTS
   WHATSAPP_SOCIAL
+  SMS
+}
+
+enum ChannelProvider {
+  NULL
+  TWILIO
+  VONAGE
+  BIRD
+  INFOBIP
+  HABLAME
+  META
+  PANCAKE
+}
+
+enum ChannelAccountStatus {
+  ACTIVE
+  SUSPENDED
+  DISABLED
+}
+
+enum PurchaseSource {
+  CRM
+  SOCIAL_WHATSAPP
 }
 
 enum ConversationStatus {

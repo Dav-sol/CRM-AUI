@@ -25,6 +25,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { TemplatesModule } from './modules/templates/templates.module';
 import { MessagesModule } from './modules/messages/messages.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { MessagingModule } from './modules/messaging/messaging.module';
 
 @Module({
   imports: [
@@ -76,6 +77,8 @@ import { ReportsModule } from './modules/reports/reports.module';
     MessagesModule,
 
     ReportsModule,
+
+    MessagingModule,
   ],
 })
 export class AppModule {}
