@@ -17,8 +17,9 @@
 #   --sandbox    Simula los envíos de WhatsApp (sin coste, sin mensajes reales).
 #   --live       NO pausa las automatizaciones armadas tras --seed (por defecto
 #                se pausan: el scheduler las enviaría solas en <=60 s).
-#   --lan        Expone el frontend en la red local e imprime la URL para otro
-#                equipo (reconstruye el frontend con la IP como API pública).
+#   --lan        Imprime las URLs (frontend/API) con la IP de red local para
+#                abrir el stack desde otro equipo. El frontend ya escucha en
+#                0.0.0.0 en cualquier modo, así que esto solo cambia las URLs.
 #   --dev        Arranca el API con pnpm (watch) en vez de Docker.
 #   --rebuild    Reconstruye la imagen del API y el build del frontend.
 #   --no-web     No arranca el frontend.
@@ -225,11 +226,14 @@ resolve_lan() {
     WEB_BASE="http://$LAN_IP:$WEB_PORT"
     API_BASE="http://$LAN_IP:$API_PORT"
     CORS_ORIGIN="$WEB_BASE"
-    PUBLIC_API_URL="$API_BASE"
   else
     CORS_ORIGIN="$WEB_BASE"
-    PUBLIC_API_URL="$API_BASE"
   fi
+  # NEXT_PUBLIC_API_URL vacío: buildReportUrl() (apps/web/src/lib/api.ts) queda
+  # con una ruta relativa /api/v1/reports/… y el rewrite de next.config.ts la
+  # resuelve en el servidor. Así los reportes funcionan desde cualquier host
+  # (localhost, LAN, Tailscale) sin depender de que CORS_ORIGIN sea UN origen.
+  PUBLIC_API_URL=""
 }
 
 apply_cors() {
@@ -451,7 +455,7 @@ web_up() {
     die "el puerto $WEB_PORT ya está en uso por otro proceso"
   fi
   if web_build_needed; then
-    log "   next build (NEXT_PUBLIC_API_URL=$PUBLIC_API_URL)…"
+    log "   next build (NEXT_PUBLIC_API_URL vacío → reportes vía proxy de Next)…"
     (cd "$REPO_ROOT" && NEXT_PUBLIC_API_URL="$PUBLIC_API_URL" $PNPM --filter web build) \
       >"$RUN_DIR/web-build.log" 2>&1 || {
       tail -30 "$RUN_DIR/web-build.log" >&2
@@ -462,9 +466,10 @@ web_up() {
   else
     ok "build del frontend reutilizado (usa --rebuild para forzar)"
   fi
-  local host="127.0.0.1"
-  if [[ $LAN == 1 ]]; then host="0.0.0.0"; fi
-  start_bg web "cd '$REPO_ROOT' && exec $PNPM --filter web exec next start -p $WEB_PORT -H $host"
+  # 0.0.0.0 es el propio default de `next start`: el frontend tiene que abrirse
+  # desde localhost, la LAN y Tailscale sin cambiar de build. No abre puertos en
+  # el firewall (postgres/redis siguen en loopback, el API ya publica 3002).
+  start_bg web "cd '$REPO_ROOT' && exec $PNPM --filter web exec next start -p $WEB_PORT -H 0.0.0.0"
   log "   esperando $WEB_BASE/ …"
   wait_http "$WEB_BASE/" 90 || {
     tail -30 "$RUN_DIR/web.log" >&2 || true
