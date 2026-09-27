@@ -32,9 +32,16 @@ services:
       WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:?WHATSAPP_WEBHOOK_VERIFY_TOKEN requerido}
       WHATSAPP_WEBHOOK_SECRET: ${WHATSAPP_WEBHOOK_SECRET:?WHATSAPP_WEBHOOK_SECRET requerido}
       WHATSAPP_DEFAULT_ORGANIZATION_ID: ${WHATSAPP_DEFAULT_ORGANIZATION_ID:?WHATSAPP_DEFAULT_ORGANIZATION_ID requerido}
-      # Optional integrations (Pancake/SMS) are NOT declared here on purpose: an
-      # empty value would be rejected by Joi ("not allowed to be empty"). Add the
-      # keys you actually enable to infrastructure/docker/.env instead.
+      # Optional integrations (Pancake/SMS, sandbox routing, COOKIE_SECURE) are
+      # NOT declared here on purpose: an empty value would be rejected by Joi
+      # ("not allowed to be empty"). They are delivered through env_file below,
+      # because compose's `.env` is interpolation-only and never reaches the
+      # container. Keys in `environment:` above always win over env_file.
+    env_file:
+      # Gitignored (`.env.*`). Written by scripts/human-testing-up.sh --pancake
+      # / --sandbox, or by hand for production. Optional: absent is fine.
+      - path: .env.extra
+        required: false
     depends_on:
       migrate:
         condition: service_completed_successfully
