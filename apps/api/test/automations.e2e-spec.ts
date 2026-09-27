@@ -359,7 +359,7 @@ describe('Automations (e2e) — AU-001/AU-003 + US1..US8', () => {
     expect(count).toBe(1);
   });
 
-  it('cancels the previous ACTIVE cycle on a re-purchase and starts a new one (AU-003, AS-003)', async () => {
+  it('keeps the previous ACTIVE cycle on a re-purchase and starts a new one (C-06, supersedes AU-003/AS-003)', async () => {
     const first = await seedPurchase(
       org1Id,
       '3',
@@ -394,18 +394,21 @@ describe('Automations (e2e) — AU-001/AU-003 + US1..US8', () => {
       where: { purchaseId: second.purchase.id },
     });
 
-    expect(firstCycle?.status).toBe('CANCELLED');
-    expect(firstCycle?.endDate).toBeTruthy();
-    expect(firstCycle?.automations.every((a) => a.status === 'CANCELLED')).toBe(
-      true,
-    );
+    // C-06 (human decision 2026-09-27, specs/016): una compra nueva NO cancela
+    // el ciclo anterior. El CRM no registra vehículos, así que no puede saber
+    // si la compra reemplaza la batería o corresponde a otro vehículo del
+    // cliente: cada compra conserva su lifecycle y sus automatizaciones.
+    expect(firstCycle?.status).toBe('ACTIVE');
+    expect(firstCycle?.endDate).toBeFalsy();
+    expect(
+      firstCycle?.automations.every((a) => a.status === 'SCHEDULED'),
+    ).toBe(true);
     expect(secondCycle?.status).toBe('ACTIVE');
-    for (let i = 0; i < 50 && cancelledAutomationIds.length === 0; i++) {
+    // Ninguna automatización de la compra anterior se cancela ni se emite evento.
+    for (let i = 0; i < 10 && cancelledAutomationIds.length > 0; i++) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    expect(cancelledAutomationIds.sort()).toEqual(
-      firstCycle?.automations.map((a) => a.uuid).sort(),
-    );
+    expect(cancelledAutomationIds).toEqual([]);
   });
 
   it('lists cycles with filters and returns cycle detail with automations (AS-004, AS-005)', async () => {
@@ -552,8 +555,11 @@ describe('Automations (e2e) — AU-001/AU-003 + US1..US8', () => {
     expect(rows.some((r) => r.action === 'automation.cancelled.success')).toBe(
       true,
     );
+    // C-06: la recompra NO cancela el ciclo anterior, así que el log no debe
+    // registrar ninguna cancelación de ciclo (sólo hay cancelación manual de
+    // automatizaciones, AS-006, y de campañas).
     expect(
       rows.some((r) => r.action === 'automation.cycle.cancelled.success'),
-    ).toBe(true);
+    ).toBe(false);
   });
 });
