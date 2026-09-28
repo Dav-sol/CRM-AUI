@@ -121,9 +121,10 @@ export const campaignSchema = z.object({
   template: z
     .string()
     .trim()
+    // The API requires a non-empty base template (@MinLength(1) in
+    // CreateCampaignDto); accepting "" here only deferred the failure to a 400.
+    .min(1, "Ingresa el mensaje de la campaña")
     .max(4096, "El mensaje no puede superar los 4096 caracteres")
-    .optional()
-    .or(z.literal(""))
     .refine(
       (value) => !value || findInvalidVariables(value).length === 0,
       "La plantilla contiene variables desconocidas. Usa el selector para insertarlas.",
