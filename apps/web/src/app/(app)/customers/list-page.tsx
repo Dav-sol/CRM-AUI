@@ -5,9 +5,9 @@ import { useState } from "react";
 
 import { CreateCustomerSheet } from "@/components/customers/create-customer-sheet";
 import { CustomerList, useCustomers } from "@/components/customers/customer-list";
-import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { ListToolbar } from "@/components/ui/list-toolbar";
 import { Button } from "@/components/ui/button";
+import { useFilters } from "@/lib/filter-provider";
 import { useListQuery } from "@/lib/use-list-query";
 
 const CUSTOMER_SORT_OPTIONS = [
@@ -21,13 +21,20 @@ const CUSTOMER_SORT_OPTIONS = [
 
 export function CustomersIndexPage() {
   const { state, set } = useListQuery({});
+  // Global filters (header) are the single source of truth for city, warranty
+  // window and date range on this screen; the URL keeps the screen's own
+  // filters (search, status, sort). See specs/023-filters-v1 FR-004 for the
+  // pending step of mirroring the global dimensions into the URL.
+  const { filters: globalFilters, resetFilters } = useFilters();
   const [refreshKey, setRefreshKey] = useState(0);
   const { items, meta, error } = useCustomers({
     page: state.page,
     search: state.search,
     status: state.status,
-    createdFrom: state.from,
-    createdTo: state.to,
+    createdFrom: globalFilters.dateFrom,
+    createdTo: globalFilters.dateTo,
+    city: globalFilters.city,
+    warrantyStatus: globalFilters.warrantyStatus,
     sort: state.sort,
     refreshKey,
   });
@@ -59,6 +66,7 @@ export function CustomersIndexPage() {
           sort={state.sort}
           sortOptions={CUSTOMER_SORT_OPTIONS}
           onSortChange={(sort) => set({ sort })}
+          onClearAll={resetFilters}
           filters={[
             {
               value: state.status,
@@ -73,14 +81,7 @@ export function CustomersIndexPage() {
               "aria-label": "Filtrar por estado",
             },
           ]}
-        >
-          <DateRangePicker
-            value={{ from: state.from, to: state.to, compareFrom: state.compareFrom, compareTo: state.compareTo }}
-            onChange={(range) =>
-              set({ from: range.from, to: range.to, compareFrom: range.compareFrom, compareTo: range.compareTo })
-            }
-          />
-        </ListToolbar>
+        />
       </div>
 
       <div className="mt-4">

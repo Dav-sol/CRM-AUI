@@ -232,19 +232,28 @@ screen resolves it to ids through the products endpoint (FR-006).
   "has a valid warranty" parameter: `warrantyExpiringInDays` and
   `warrantyExpiredInDays` are windows, and `hasPurchases` is about purchases,
   not warranty. Implementing it faithfully needs a new parameter (contract
-  change) or a composition that would over-fetch. **Decision required before
-  FR-003 is implemented**; until then the dimension ships disabled with a
-  tooltip, or not at all. *(Not invented here on purpose — AGENTS.md.)*
+  change) or a composition that would over-fetch. → **Decision (human,
+  2026-09-27): the option is not offered.** The global filter ships
+  `Todas` / `Por vencer` / `Vencida`, which map exactly to the two windows the
+  API declares, and no "Con garantía" is approximated. *(Not invented here on
+  purpose — AGENTS.md.)*
 - **C-02 (draft discarded vs applied on navigation)**: FR-005 says closing the
   panel discards the draft. If a user changes a filter and then clicks another
   screen without pressing `Aplicar`, the change is lost silently. Alternative:
   keep the draft per screen and mark it "sin aplicar". **Decision required.**
-- **C-03 (removing the hardcoded city/category lists)**: FR-009 removes them
-  because they silently hide data (a city not in the list cannot be filtered).
-  For cities this is safe (free-text contains, FR-008/Q8). For product
-  categories on Compras, the header filter needs a real category list, which
-  means calling the products endpoint. **Confirm the extra request is
-  acceptable** or that the header filter should not expose a category at all.
+- **C-03 (source of truth for categories)**: the header filter had a hardcoded
+  `Duncan | MAC | MAC GOLD` list, and two of those three values do not exist in
+  the catalog (the tenant data holds `MAC` and `WILLARD`). The products
+  endpoint filters `category` by exact match and there is no categories
+  resource, so the UI had no reliable source. → **Decision (human, 2026-09-27):
+  do not derive the list from products and do not invent one.** The source of
+  truth is defined as a tenant-scoped resource derived from the catalog —
+  `GET /api/v1/products/categories` → the distinct non-empty `category` values of
+  the caller organization — with no cap and the same tenant isolation as the
+  rest of the API. It requires its own change in `specs/014-products-v1` plus
+  OpenAPI and the SDK. **Until that exists, the Categoría dimension is not part
+  of the global filter in v1** (it stays editable in the product form and
+  filterable on the products screen).
 - **C-04 (the `warrantyStatus` criterion in the WIP `segment-builder`)**: The
   uncommitted `segment-builder.tsx` replaces the campaign segment criteria
   (`purchaseFrom/purchaseTo/customerStatus/warrantyExpiresFrom/warrantyMonths`)
@@ -252,6 +261,14 @@ screen resolves it to ids through the products endpoint (FR-006).
   accept** (019 Q5: `city`, `productId`, `purchaseFrom`, `purchaseTo`,
   `customerStatus`). It was kept out of the SMS commit. It must be either
   reverted or backed by a contract change; it is unrelated to this feature.
+- **C-05 (conversation lookup per customer row)**: the customers list resolves a
+  "open conversation" shortcut per row, and the conversations endpoint filters by
+  a single `customerId`, so the list issues one request per customer with a
+  phone. They are issued in parallel and resolved in a single state update, and
+  the customer list row carries no conversation field. The reliable fix is to
+  include it in the list response (`conversationUuid` or `hasConversation`),
+  which changes the 012 contract, the OpenAPI and the SDK. Until then the
+  parallel per-row lookup stands.
 
 ## 9. Acceptance Scenarios
 

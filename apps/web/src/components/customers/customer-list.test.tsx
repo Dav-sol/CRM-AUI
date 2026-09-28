@@ -41,6 +41,50 @@ describe("useCustomers: búsqueda y paginación", () => {
     expect(vi.mocked(apiListCustomers).mock.calls[0][0]).toEqual({ page: 1, limit: 20 });
   });
 
+  it("filtro global de ciudad → se envía recortada, sin espacios", async () => {
+    vi.mocked(apiListCustomers).mockResolvedValue(payload as never);
+
+    renderHook(() => useCustomers({ city: "  Barranquilla  " }));
+
+    await waitFor(() => expect(apiListCustomers).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(apiListCustomers).mock.calls[0][0]).toMatchObject({
+      city: "Barranquilla",
+    });
+  });
+
+  it("filtro global 'por vencer' → ventana de 30 días", async () => {
+    vi.mocked(apiListCustomers).mockResolvedValue(payload as never);
+
+    renderHook(() => useCustomers({ warrantyStatus: "expiring" }));
+
+    await waitFor(() => expect(apiListCustomers).toHaveBeenCalledTimes(1));
+    const params = vi.mocked(apiListCustomers).mock.calls[0][0];
+    expect(params).toMatchObject({ warrantyExpiringInDays: 30 });
+    expect(params).not.toHaveProperty("warrantyExpiredInDays");
+  });
+
+  it("filtro global 'vencida' → ventana de 2 años", async () => {
+    vi.mocked(apiListCustomers).mockResolvedValue(payload as never);
+
+    renderHook(() => useCustomers({ warrantyStatus: "expired" }));
+
+    await waitFor(() => expect(apiListCustomers).toHaveBeenCalledTimes(1));
+    const params = vi.mocked(apiListCustomers).mock.calls[0][0];
+    expect(params).toMatchObject({ warrantyExpiredInDays: 730 });
+    expect(params).not.toHaveProperty("warrantyExpiringInDays");
+  });
+
+  it("filtro global en 'todas' → no envía ninguna ventana", async () => {
+    vi.mocked(apiListCustomers).mockResolvedValue(payload as never);
+
+    renderHook(() => useCustomers({ warrantyStatus: "all" }));
+
+    await waitFor(() => expect(apiListCustomers).toHaveBeenCalledTimes(1));
+    const params = vi.mocked(apiListCustomers).mock.calls[0][0];
+    expect(params).not.toHaveProperty("warrantyExpiringInDays");
+    expect(params).not.toHaveProperty("warrantyExpiredInDays");
+  });
+
   it("con search → se envía el término recortado", async () => {
     vi.mocked(apiListCustomers).mockResolvedValue(payload as never);
 

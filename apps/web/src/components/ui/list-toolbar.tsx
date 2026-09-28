@@ -27,6 +27,12 @@ type ListToolbarProps = {
     placeholder?: string;
     "aria-label"?: string;
   }>;
+  /**
+   * Extra cleanup run when "Limpiar" is pressed, besides clearing the controls
+   * above. Screens use it to drop the global filters (header) they display, so
+   * the button clears everything the screen is showing.
+   */
+  onClearAll?: () => void;
   children?: React.ReactNode;
 };
 
@@ -42,6 +48,7 @@ export function ListToolbar({
   sortOptions = [],
   onSortChange,
   filters = [],
+  onClearAll,
   children,
 }: ListToolbarProps) {
   return (
@@ -113,6 +120,7 @@ export function ListToolbar({
             for (const filter of filters) {
               filter.onChange("");
             }
+            onClearAll?.();
           }}
           aria-label="Limpiar filtros"
         >
