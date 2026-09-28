@@ -7,12 +7,30 @@ const routerMocks = vi.hoisted(() => ({
   replace: vi.fn(),
 }));
 
+const filterMocks = vi.hoisted(() => ({
+  setFilter: vi.fn(),
+  resetFilters: vi.fn(),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: routerMocks.push, replace: routerMocks.replace }),
 }));
 
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: vi.fn(),
+}));
+
+// The Header renders the global filter, which reads the filter context owned by
+// AppShell. This is a unit test of the Header alone, so the context is stubbed
+// here exactly like the auth one above.
+vi.mock("@/lib/filter-provider", () => ({
+  FilterProvider: ({ children }: { children: React.ReactNode }) => children,
+  useFilters: () => ({
+    filters: {},
+    setFilter: filterMocks.setFilter,
+    resetFilters: filterMocks.resetFilters,
+    activeCount: 0,
+  }),
 }));
 
 vi.mock("sonner", () => ({

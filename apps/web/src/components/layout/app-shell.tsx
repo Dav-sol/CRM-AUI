@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
 import { useIsMobile } from "@/hooks/use-is-mobile";
+import { FilterProvider } from "@/lib/filter-provider";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { status } = useAuth();
@@ -44,13 +45,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return null;
   }
 
+  // AppShell owns the filter context: the header renders the global filter and
+  // the pages consume it, so both live under this provider instead of a route
+  // layout, which kept the dependency implicit for anyone rendering AppShell
+  // (or Header) outside that route.
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar collapsed={collapsed} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Header collapsed={collapsed} onToggleSidebar={() => setCollapsed((v) => !v)} />
-        <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
+    <FilterProvider>
+      <div className="flex h-screen overflow-hidden">
+        <Sidebar collapsed={collapsed} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Header collapsed={collapsed} onToggleSidebar={() => setCollapsed((v) => !v)} />
+          <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
+        </div>
       </div>
-    </div>
+    </FilterProvider>
   );
 }
