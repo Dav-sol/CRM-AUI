@@ -10,6 +10,7 @@
  *
  * OpenAPI spec version: 1.0.0
  */
+import type { CreateCampaignBodyChannel } from './createCampaignBodyChannel';
 import type { CreateCampaignBodySegment } from './createCampaignBodySegment';
 import type { CreateCampaignBodyStagesItem } from './createCampaignBodyStagesItem';
 import type { CreateCampaignBodyType } from './createCampaignBodyType';
@@ -45,4 +46,9 @@ export type CreateCampaignBody = {
   stages?: CreateCampaignBodyStagesItem[];
   /** Optional scheduled start (automations are scheduled for max(startAt, now)). */
   startAt?: string;
+  /**
+     * Canal de envío de la campaña (Fase 1). Si no se envía, defaulta a WHATSAPP_CLIENTS.
+     * Para SMS requiere al menos una ChannelAccount SMS configurada.
+     */
+  channel?: CreateCampaignBodyChannel;
 };

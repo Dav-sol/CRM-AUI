@@ -10,6 +10,7 @@
  *
  * OpenAPI spec version: 1.0.0
  */
+import type { PreviewCampaignSegmentDraftBodyChannel } from './previewCampaignSegmentDraftBodyChannel';
 import type { PreviewCampaignSegmentDraftBodySegment } from './previewCampaignSegmentDraftBodySegment';
 import type { PreviewCampaignSegmentDraftBodyType } from './previewCampaignSegmentDraftBodyType';
 
@@ -23,4 +24,6 @@ export type PreviewCampaignSegmentDraftBody = {
      * (transaccional vs comercial, Fase P0.2).
      */
   type?: PreviewCampaignSegmentDraftBodyType;
+  /** Canal de envío para estimar costo por segmentos SMS (Fase 1). */
+  channel?: PreviewCampaignSegmentDraftBodyChannel;
 };

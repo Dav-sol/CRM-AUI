@@ -152,6 +152,8 @@ paths:
     $ref: "./paths/reports.yaml#/~1reports~1automations"
   /reports/messages:
     $ref: "./paths/reports.yaml#/~1reports~1messages"
+  /webhooks/sms:
+    $ref: "./paths/webhooks.yaml#/~1webhooks~1sms"
 
 components:
 

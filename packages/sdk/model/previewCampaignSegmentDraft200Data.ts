@@ -24,4 +24,19 @@ export type PreviewCampaignSegmentDraft200Data = {
      * per-message rate. Estimate only; no billing in v1 (playbook §24).
      */
   estimatedCost: number;
+  /**
+     * Total de segmentos SMS estimados (Fase 1). Cada segmento = 160
+     * caracteres GSM-7 o 70 UCS-2. Solo aplica para channel=SMS.
+     */
+  estimatedSegments?: number;
+  /**
+     * Total de mensajes SMS estimados (Fase 1). Para SMS, messages =
+     * segments. Solo aplica para channel=SMS.
+     */
+  estimatedMessages?: number;
+  /**
+     * Moneda del costo estimado (COP para SMS). Solo incluido cuando
+     * channel=SMS.
+     */
+  currency?: string;
 };

@@ -37,6 +37,8 @@ export type ListCampaigns200DataItem = ({
      * @nullable
      */
   startAt: string | null;
+  /** Canal de envío de la campaña (Fase 1). Default WHATSAPP_CLIENTS. */
+  channel?: 'SMS' | 'WHATSAPP_CLIENTS';
   /** @nullable */
   segment: ({
   /**

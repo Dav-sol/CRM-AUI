@@ -45,9 +45,13 @@ export type CreateFollowUpSequenceBodyStagesItem = {
      */
   template: string;
   /**
-     * Optional repurchase/renovation message used when the stage date already
-     * passed at campaign activation time (HG-SEM-03). Falls back to the
-     * campaign base template when absent.
+     * Optional repurchase/renovation message used when a post-expiry stage
+     * (offsetDays >= 0) has already passed at campaign activation time and the
+     * purchase's warranty has really expired (HG-SEM-03, Q6 of 021). A
+     * pre-expiry stage (offsetDays < 0, e.g. D-30) never uses it: while the
+     * warranty is valid it generates a catch-up with its own `template`, and
+     * after expiry it is not sent at all. Falls back to the campaign base
+     * template when absent.
      * @maxLength 4096
      */
   templateOnPast?: string;

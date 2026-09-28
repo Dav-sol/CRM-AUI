@@ -39,6 +39,8 @@ export type GetCampaign200Data = (({
      * @nullable
      */
   startAt: string | null;
+  /** Canal de envío de la campaña (Fase 1). Default WHATSAPP_CLIENTS. */
+  channel?: 'SMS' | 'WHATSAPP_CLIENTS';
   /** @nullable */
   segment: ({
   /**
@@ -120,12 +122,12 @@ export type GetCampaign200Data = (({
   /** Suma de los valores de las ventas atribuidas a esta campaña. */
   revenue?: number;
   /**
-     * Costo estimado de WhatsApp = mensajes enviados × tarifa configurada
-     * (WHATSAPP_MESSAGE_COST). Estimado, no facturación.
+     * Costo estimado de envío = mensajes enviados × tarifa configurada
+     * por canal. Estimado, no facturación.
      */
-  whatsappCost?: number;
+  estimatedCost?: number;
   /**
-     * Retorno estimado = (revenue − whatsappCost) / whatsappCost. Null si no
+     * Retorno estimado = (revenue − estimatedCost) / estimatedCost. Null si no
      * hay costo.
      * @nullable
      */

@@ -10,6 +10,7 @@
  *
  * OpenAPI spec version: 1.0.0
  */
+import type { UpdateCampaignBodyChannel } from './updateCampaignBodyChannel';
 import type { UpdateCampaignBodySegment } from './updateCampaignBodySegment';
 import type { UpdateCampaignBodyStagesItem } from './updateCampaignBodyStagesItem';
 import type { UpdateCampaignBodyType } from './updateCampaignBodyType';
@@ -44,4 +45,6 @@ export type UpdateCampaignBody = {
      */
   stages?: UpdateCampaignBodyStagesItem[];
   startAt?: string;
+  /** Canal de envío (Fase 1). Solo editable en DRAFT/APPROVED. */
+  channel?: UpdateCampaignBodyChannel;
 };

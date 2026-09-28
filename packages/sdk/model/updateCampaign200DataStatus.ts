@@ -16,4 +16,6 @@ export type UpdateCampaign200DataStatus = typeof UpdateCampaign200DataStatus[key
 
 export const UpdateCampaign200DataStatus = {
   DRAFT: 'DRAFT',
+  APPROVED: 'APPROVED',
+  ACTIVE: 'ACTIVE',
 } as const;
