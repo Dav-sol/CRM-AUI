@@ -1,10 +1,9 @@
 "use client";
 
 import {
-  FileText,
   Mail,
   MapPin,
-  MessageSquareText,
+  MessageCircle,
   Phone,
   ShoppingCart,
   Target,
@@ -17,10 +16,6 @@ import { toast } from "sonner";
 
 import { AutomationDetailSheet } from "@/components/automations/automation-detail";
 import { CreatePurchaseSheet } from "@/components/purchases/create-purchase-sheet";
-import {
-  QuoteSheet,
-  QUOTE_STATUS_LABELS,
-} from "@/components/quotes/quote-sheet";
 import { CustomerStatusBadge } from "@/components/customers/customer-list";
 import { CustomerTimeline } from "@/components/customers/customer-timeline";
 import { Badge } from "@/components/ui/badge";
@@ -37,7 +32,6 @@ import {
   apiListAutomations,
   apiListConversations,
   apiListPurchases,
-  apiListQuotes,
   type CustomerTimeline as CustomerTimelineData,
 } from "@/lib/api";
 import {
@@ -56,7 +50,6 @@ type Automation = Awaited<
   ReturnType<typeof apiListAutomations>
 >["data"][number];
 type Conversation = Awaited<ReturnType<typeof apiListConversations>>[number];
-type Quote = NonNullable<Awaited<ReturnType<typeof apiListQuotes>>>[number];
 
 function WarrantyBadge({
   months,
@@ -110,10 +103,6 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
   const [selectedAutomation, setSelectedAutomation] = useState<string | null>(
     null,
   );
-  // Fase P0-C: cotizaciones del cliente.
-  const [quotes, setQuotes] = useState<Quote[] | null>(null);
-  const [quoteOpen, setQuoteOpen] = useState(false);
-  const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
   const [timeline, setTimeline] = useState<CustomerTimelineData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -126,19 +115,17 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
         const customerData = await apiGetCustomer(uuid);
         if (cancelled) return;
         setCustomer(customerData);
-        const [purchasesResult, automationsResult, conversationsResult, quotesResult, timelineResult] =
+        const [purchasesResult, automationsResult, conversationsResult, timelineResult] =
           await Promise.allSettled([
             apiListPurchases({ customerId: customerData.id, limit: 100 }),
             apiListAutomations({ customerId: customerData.uuid, limit: 50 }),
             apiListConversations({ customerId: customerData.uuid, limit: 50 }),
-            apiListQuotes({ customerId: customerData.id, limit: 20 }),
             apiGetCustomerTimeline(customerData.uuid),
           ]);
         if (cancelled) return;
         setPurchases(purchasesResult.status === "fulfilled" ? purchasesResult.value.data : []);
         setAutomations(automationsResult.status === "fulfilled" ? automationsResult.value.data : []);
         setConversations(conversationsResult.status === "fulfilled" ? conversationsResult.value : []);
-        setQuotes(quotesResult.status === "fulfilled" ? (quotesResult.value ?? []) : []);
         setTimeline(timelineResult.status === "fulfilled" ? timelineResult.value : null);
         setLoading(false);
       } catch (error) {
@@ -153,16 +140,13 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
         setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [uuid]);
 
   if (loading && customer === null) {
     return (
       <div className="mx-auto w-full max-w-5xl space-y-4 p-6 lg:p-8">
         <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-40 w-full" />
         <Skeleton className="h-40 w-full" />
       </div>
     );
@@ -190,19 +174,11 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
         const bUpcoming =
           b.status === "SCHEDULED" &&
           new Date(b.scheduledDate).getTime() >= now;
-        if (aUpcoming !== bUpcoming) {
-          return aUpcoming ? -1 : 1;
-        }
-        return (
-          new Date(b.scheduledDate).getTime() -
-          new Date(a.scheduledDate).getTime()
-        );
+        if (aUpcoming !== bUpcoming) return aUpcoming ? -1 : 1;
+        return new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime();
       })
     : null;
 
-  // Qué hacer ahora (P0-1): decisión comercial para el vendedor, calculada con
-  // los datos ya cargados (automatización próxima, garantía activa, recompra,
-  // conversación abierta).
   const nextAutomation =
     automations
       ?.filter(
@@ -236,22 +212,14 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
         new Date(purchase.warrantyExpiresAt).getTime() < now,
     ) ?? false;
 
-  const openConversation =
-    conversations?.find((conversation) => conversation.status === "OPEN") ??
-    null;
-
   const actionable = [
     ...(nextAutomation
       ? [
           {
             key: "automation",
             label: nextAutomation.campaign?.name
-              ? `Mensaje de ${nextAutomation.campaign.name} ${formatRelative(
-                  nextAutomation.scheduledDate,
-                )}`
-              : `Mensaje programado ${formatRelative(
-                  nextAutomation.scheduledDate,
-                )}`,
+              ? `Mensaje de ${nextAutomation.campaign.name} ${formatRelative(nextAutomation.scheduledDate)}`
+              : `Mensaje programado ${formatRelative(nextAutomation.scheduledDate)}`,
           },
         ]
       : []),
@@ -259,9 +227,7 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
       ? [
           {
             key: "warranty",
-            label: `Garantía de ${activeWarranty.product.name} vence ${formatRelative(
-              activeWarranty.warrantyExpiresAt!,
-            )}`,
+            label: `Garantía de ${activeWarranty.product.name} vence ${formatRelative(activeWarranty.warrantyExpiresAt!)}`,
           },
         ]
       : []),
@@ -273,32 +239,10 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
           },
         ]
       : []),
-    ...(openConversation
-      ? [
-          {
-            key: "conversation",
-            label: "Conversación abierta — requiere atención",
-          },
-        ]
-      : []),
   ];
 
-  const primaryAction = openConversation
-    ? {
-        label: "Responder conversación",
-        href: `/conversations/${openConversation.uuid}`,
-      }
-    : nextAutomation
-      ? { label: "Ver automatizaciones", href: "/automations" }
-      : activeWarranty
-        ? { label: "Ver garantías", href: "/purchases" }
-        : null;
-
-  // Fase 5 (T19): opt-out "No contactar" (playbook §15).
   async function toggleNoContact() {
-    if (!customer) {
-      return;
-    }
+    if (!customer) return;
     setNoContactBusy(true);
     try {
       const updated = customer.noContactAt
@@ -306,9 +250,7 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
         : await apiCustomerNoContact(customer.id);
       setCustomer(updated);
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401) {
-        return;
-      }
+      if (error instanceof ApiError && error.status === 401) return;
       toast.error("No se pudo actualizar la preferencia de contacto.");
     } finally {
       setNoContactBusy(false);
@@ -317,7 +259,7 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-5 p-6 lg:p-8">
-      {/* Header */}
+      {/* Hero Card — Resumen de relación */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-wrap items-center gap-4">
@@ -334,29 +276,46 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
               <p className="text-sm text-muted-foreground">
                 Código: {customer.codcli}
               </p>
+              <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                {customer.email && (
+                  <span className="flex items-center gap-2">
+                    <Mail className="size-4" /> {customer.email}
+                  </span>
+                )}
+                {customer.city && (
+                  <span className="flex items-center gap-2">
+                    <MapPin className="size-4" /> {customer.city}
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="grid shrink-0 gap-1 text-sm">
-              {customer.phone && (
-                <span className="flex items-center gap-2 text-muted-foreground">
-                  <Phone className="size-4" /> {formatPhone(customer.phone)}
-                </span>
-              )}
-              {customer.email && (
-                <span className="flex items-center gap-2 text-muted-foreground">
-                  <Mail className="size-4" /> {customer.email}
-                </span>
-              )}
-              {customer.city && (
-                <span className="flex items-center gap-2 text-muted-foreground">
-                  <MapPin className="size-4" /> {customer.city}
-                </span>
-              )}
+            <div className="flex shrink-0 flex-col items-end gap-2">
+              <div className="flex items-center gap-2">
+                {customer.phone && conversations && conversations.length > 0 && (
+                  <Link
+                    href={`/conversations/${conversations[0].uuid}`}
+                    className="inline-flex items-center gap-2 rounded-md border border-green-500/30 bg-green-50 px-3 py-2 text-sm font-medium text-green-700 transition-colors hover:bg-green-100 dark:border-green-800 dark:bg-green-950 dark:text-green-300 dark:hover:bg-green-900"
+                  >
+                    <MessageCircle className="size-4" />
+                    Conversación
+                  </Link>
+                )}
+                {customer.phone && (
+                  <a
+                    href={`tel:${customer.phone}`}
+                    className="inline-flex items-center gap-2 rounded-md border border-border/60 px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <Phone className="size-4" />
+                    {formatPhone(customer.phone)}
+                  </a>
+                )}
+              </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Qué hacer ahora (P0-1) */}
+      {/* Qué hacer ahora */}
       <Card className="border-primary/20 bg-primary/5">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -371,20 +330,24 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
               . No recibirá envíos comerciales ni automatizaciones.
             </p>
           )}
-          {primaryAction ? (
-            <Link
-              href={primaryAction.href}
-              className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-            >
-              {primaryAction.label}
-            </Link>
+          {actionable.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {actionable.map((item) => (
+                <Badge
+                  key={item.key}
+                  variant="outline"
+                  className="bg-card text-foreground"
+                >
+                  {item.label}
+                </Badge>
+              ))}
+            </div>
           ) : (
             <p className="text-xs text-muted-foreground">
               Sin acciones pendientes para este cliente.
             </p>
           )}
           <div className="flex flex-wrap gap-2">
-            {/* P1.1: registrar venta directa desde el 360 */}
             <CreatePurchaseSheet
               initialCustomerId={customer.id}
               triggerLabel="Registrar venta"
@@ -398,31 +361,19 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
                 })();
               }}
             />
+            <Button
+              variant={customer.noContactAt ? "outline" : "destructive"}
+              size="sm"
+              disabled={noContactBusy}
+              onClick={() => void toggleNoContact()}
+            >
+              {customer.noContactAt ? "Permitir contacto" : "No contactar"}
+            </Button>
           </div>
-          {actionable.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {actionable.map((item) => (
-                <Badge
-                  key={item.key}
-                  variant="outline"
-                  className="bg-card text-foreground"
-                >
-                  {item.label}
-                </Badge>
-              ))}
-            </div>
-          )}
-          <Button
-            variant={customer.noContactAt ? "outline" : "destructive"}
-            size="sm"
-            disabled={noContactBusy}
-            onClick={() => void toggleNoContact()}
-          >
-            {customer.noContactAt ? "Permitir contacto" : "No contactar"}
-          </Button>
         </CardContent>
       </Card>
 
+      {/* Stats */}
       <div className="grid grid-cols-2 gap-4">
         <Card>
           <CardContent className="pt-6">
@@ -507,8 +458,8 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
         </CardContent>
       </Card>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        {/* Automations */}
+      {/* Automations */}
+      {orderedAutomations && orderedAutomations.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -516,170 +467,36 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {orderedAutomations === null ? (
-              <Skeleton className="h-32 w-full" />
-            ) : orderedAutomations.length === 0 ? (
-              <EmptyState
-                icon={Workflow}
-                title="Sin automatizaciones"
-                description="Este cliente no tiene seguimiento programado."
-                className="py-6"
-              />
-            ) : (
-              <ul className="space-y-3">
-                {orderedAutomations.slice(0, 8).map((automation) => (
-                  <li key={automation.uuid}>
-                    {/* Fase P0-A: clic abre la vista Automatización 360 */}
-                    <button
-                      type="button"
-                      onClick={() => setSelectedAutomation(automation.uuid)}
-                      className="flex w-full items-center justify-between gap-3 rounded-md p-2 text-left transition-colors hover:bg-muted"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          {automation.stageName ??
-                            automation.campaign?.name ??
-                            "Seguimiento"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Programada {formatDateTime(automation.scheduledDate)}
-                        </p>
-                      </div>
-                      <AutomationStatusBadge status={automation.status} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <ul className="space-y-3">
+              {orderedAutomations.slice(0, 8).map((automation) => (
+                <li key={automation.uuid}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAutomation(automation.uuid)}
+                    className="flex w-full items-center justify-between gap-3 rounded-md p-2 text-left transition-colors hover:bg-muted"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {automation.stageName ??
+                          automation.campaign?.name ??
+                          "Seguimiento"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Programada {formatDateTime(automation.scheduledDate)}
+                      </p>
+                    </div>
+                    <AutomationStatusBadge status={automation.status} />
+                  </button>
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
-
-        {/* Cotizaciones (Fase P0-C) */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between gap-2 text-base">
-              <span className="flex items-center gap-2">
-                <FileText className="size-4 text-primary" /> Cotizaciones
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setEditingQuote(null);
-                  setQuoteOpen(true);
-                }}
-              >
-                Cotizar
-              </Button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {quotes === null ? (
-              <Skeleton className="h-24 w-full" />
-            ) : quotes.length === 0 ? (
-              <EmptyState
-                icon={FileText}
-                title="Sin cotizaciones"
-                description="Este cliente no tiene cotizaciones."
-                className="py-6"
-              />
-            ) : (
-              <ul className="space-y-2">
-                {quotes.slice(0, 5).map((quote) => (
-                  <li key={quote.uuid}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingQuote(quote);
-                        setQuoteOpen(true);
-                      }}
-                      className="flex w-full items-center justify-between gap-3 rounded-md p-2 text-left transition-colors hover:bg-muted"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          {quote.productName ?? "Producto"}
-                          {quote.purchaseId ? " · vendida" : ""}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          ${formatCurrency(quote.value)} ·{" "}
-                          {quote.createdAt?.slice(0, 10)}
-                        </p>
-                      </div>
-                      <Badge variant="outline">
-                        {QUOTE_STATUS_LABELS[quote.status] ?? quote.status}
-                      </Badge>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Conversations */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <MessageSquareText className="size-4 text-primary" />{" "}
-              Conversaciones
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {conversations === null ? (
-              <Skeleton className="h-32 w-full" />
-            ) : conversations.length === 0 ? (
-              <EmptyState
-                icon={MessageSquareText}
-                title="Sin conversaciones"
-                description="Este cliente no tiene conversaciones."
-                className="py-6"
-              />
-            ) : (
-              <ul className="space-y-3">
-                {conversations.slice(0, 8).map((conversation) => (
-                  <li key={conversation.uuid}>
-                    <Link
-                      href={`/conversations/${conversation.uuid}`}
-                      className="flex items-center justify-between gap-3 rounded-md p-2 hover:bg-muted"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          {formatDateTime(conversation.createdAt)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {conversation.messageCount} mensajes
-                        </p>
-                      </div>
-                      <Badge variant="outline">{conversation.status}</Badge>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      )}
 
       <AutomationDetailSheet
         uuid={selectedAutomation}
         onClose={() => setSelectedAutomation(null)}
-      />
-
-      <QuoteSheet
-        open={quoteOpen}
-        onOpenChange={setQuoteOpen}
-        customerId={customer.id}
-        customerName={customer.name}
-        quote={editingQuote ?? undefined}
-        onChanged={() => {
-          void (async () => {
-            const data = await apiListQuotes({
-              customerId: customer.id,
-              limit: 20,
-            });
-            setQuotes(data ?? []);
-          })();
-        }}
       />
     </div>
   );
