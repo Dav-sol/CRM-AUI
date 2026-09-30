@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { GlobalFilter } from "@/components/filters/global-filter";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -85,6 +86,8 @@ export function Header({ collapsed, onToggleSidebar }: HeaderProps) {
         >
           {user?.organizationId ? "Organización" : "Plataforma"}
         </span>
+
+        <GlobalFilter />
 
         <Tooltip>
           <TooltipTrigger
