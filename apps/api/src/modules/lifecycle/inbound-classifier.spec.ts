@@ -73,26 +73,26 @@ describe('classifyInbound (spec 025 §6, §10, §21)', () => {
 });
 
 describe('isExplicitMaintenanceConsent (§4.6, PD-7)', () => {
-  it('nunca infiere consentimiento del texto libre', () => {
-    // La spec prohíbe expresamente convertir estos textos en consentimiento.
-    for (const text of [
-      'Sí',
-      'sí',
-      'Si',
-      'gracias',
-      'Gracias',
-      'ok',
-      'Ok',
-      'dale',
-      'Sí, gracias',
-    ]) {
-      expect(isExplicitMaintenanceConsent(text)).toBe(false);
-    }
+  // La spec prohíbe expresamente convertir estos textos en consentimiento de
+  // mantenimiento. Además, ninguno debe pausar el lifecycle: son cortesías.
+  const COURTESY = [
+    'Sí',
+    'sí',
+    'Si',
+    'gracias',
+    'Gracias',
+    'ok',
+    'Ok',
+    'dale',
+    'Sí, gracias',
+    'quiero los recordatorios',
+  ];
+
+  it.each(COURTESY)('«%s» no es consentimiento', () => {
+    expect(isExplicitMaintenanceConsent()).toBe(false);
   });
 
-  it('tampoco con un texto que lo pida literalmente', () => {
-    expect(isExplicitMaintenanceConsent('quiero los recordatorios')).toBe(
-      false,
-    );
+  it.each(COURTESY)('«%s» no pausa el lifecycle', (text: string) => {
+    expect(classifyInbound(text)).toBe('NONE');
   });
 });
