@@ -13,6 +13,7 @@ import type { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
 import { ConfiguracionesService } from '../configuraciones/configuraciones.service';
 import { EligibilityService } from '../lifecycle/eligibility.service';
+import { LifecycleService } from '../lifecycle/lifecycle.service';
 import { WhatsappService } from './whatsapp.service';
 import { PancakeWhatsAppProvider } from './pancake/pancake-whatsapp.provider';
 import {
@@ -81,6 +82,7 @@ describe('WhatsappService', () => {
     timeZoneOrganizacion: jest.Mock;
   };
   let eligibility: { evaluate: jest.Mock };
+  let lifecycle: { pause: jest.Mock; openComplaint: jest.Mock };
 
   const emittedNames = (): string[] =>
     eventEmitter.emit.mock.calls.map((call) => (call as string[])[0]);
@@ -156,6 +158,7 @@ describe('WhatsappService', () => {
         // Gates de spec 025 §4: por defecto todo pasa; los casos que necesitan
         // un bloqueo los cubren los tests de EligibilityService.
         { provide: EligibilityService, useValue: eligibility },
+        { provide: LifecycleService, useValue: lifecycle },
       ],
     }).compile();
 

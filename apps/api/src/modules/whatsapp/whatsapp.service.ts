@@ -9,8 +9,10 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ConfigService } from '@nestjs/config';
 import {
   ChannelType,
+  ComplaintOpenedBy,
   ConversationStatus,
   CustomerStatus,
+  LifecyclePauseReason,
   MessageDirection,
   MessageStatus,
   MessageType,
@@ -21,6 +23,8 @@ import { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
 import { ConfiguracionesService } from '../configuraciones/configuraciones.service';
 import { EligibilityService } from '../lifecycle/eligibility.service';
+import { classifyInbound } from '../lifecycle/inbound-classifier';
+import { LifecycleService } from '../lifecycle/lifecycle.service';
 import {
   brandOf,
   renderTemplate,
@@ -188,6 +192,7 @@ export class WhatsappService {
     private readonly configService: ConfigService,
     private readonly configuraciones: ConfiguracionesService,
     private readonly eligibility: EligibilityService,
+    private readonly lifecycle: LifecycleService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -994,8 +999,10 @@ export class WhatsappService {
     }
 
     let created: { uuid: string };
+    let replyCycleId: string | null = null;
     try {
       const replyOrigin = await this.resolveReplyOrigin(conversation.id);
+      replyCycleId = replyOrigin?.cycleId ?? null;
       const row = await this.prisma.message.create({
         data: {
           organizationId,
@@ -1034,6 +1041,17 @@ export class WhatsappService {
       organizationId,
       description: `inbound message received from=${phone}`,
       metadata: { messageId: created.uuid, conversationId: conversation.uuid },
+    });
+
+    // Efecto de la respuesta sobre el lifecycle (spec 025 §6, §10, §21).
+    // Solo actúa sobre el lifecycle al que la respuesta se atribuye; si no se
+    // pudo atribuir (fuera de la ventana de 7 días) no se asume nada.
+    await this.applyInboundSignal({
+      text: message.text ?? '',
+      cycleId: replyCycleId,
+      customerId: customer.id,
+      conversationId: conversation.id,
+      organizationId,
     });
 
     if (!conversation.alreadyOpen) {
@@ -1338,9 +1356,94 @@ export class WhatsappService {
   // Fase 2 (P0-4): resuelve el origen de una respuesta entrante. Si en la
   // conversación hubo una automatización OUTBOUND reciente (dentro de la
   // ventana), el mensaje entrante se atribuye a esa automatización/campaña.
-  private async resolveReplyOrigin(
-    conversationId: string,
-  ): Promise<{ automationId: string; campaignId: string | null } | null> {
+  /**
+   * Aplica el efecto de una respuesta entrante sobre el lifecycle (spec 025).
+   *
+   *  - OPT_OUT          → noContactAt del cliente (§21, global)
+   *  - COMPLAINT        → abre caso auditable y pausa el ciclo (§17/§6)
+   *  - HUMAN_ATTENTION  → pausa el ciclo hasta que se cierre (§16)
+   *  - NONE             → no toca el lifecycle
+   *
+   * Sin attribution al lifecycle no se hace nada: no se adivina a qué
+   * batería pertenece la respuesta (regla §19 Caso C).
+   */
+  private async applyInboundSignal(params: {
+    text: string;
+    cycleId: string | null;
+    customerId: string;
+    conversationId: string;
+    organizationId: string;
+  }): Promise<void> {
+    const signal = classifyInbound(params.text);
+    if (signal === 'NONE') {
+      return;
+    }
+
+    if (signal === 'OPT_OUT') {
+      if (this.prisma.customer.updateMany) {
+        await this.prisma.customer.updateMany({
+          where: { id: params.customerId, noContactAt: null },
+          data: {
+            noContactAt: new Date(),
+            noContactReason: 'solicitud del cliente por WhatsApp',
+            updatedBy: null,
+          },
+        });
+      }
+      await this.auditService.record({
+        module: MODULE,
+        action: 'customer.opt_out',
+        outcome: 'success',
+        userId: null,
+        organizationId: params.organizationId,
+        description: 'customer opted out from inbound message',
+        metadata: {
+          customerId: params.customerId,
+          conversationId: params.conversationId,
+          reason: 'inbound_message',
+        },
+      });
+      return;
+    }
+
+    if (!params.cycleId) {
+      // No se sabe a qué lifecycle pertenece: no se pausa nada (§19 Caso C).
+      await this.auditService.record({
+        module: MODULE,
+        action: 'inbound.unattributed',
+        outcome: 'success',
+        userId: null,
+        organizationId: params.organizationId,
+        description: `inbound signal ${signal} without attributable lifecycle`,
+        metadata: {
+          signal,
+          conversationId: params.conversationId,
+        },
+      });
+      return;
+    }
+
+    if (signal === 'COMPLAINT') {
+      await this.lifecycle.openComplaint({
+        cycleId: params.cycleId,
+        reason: params.text.slice(0, 500),
+        openedBy: ComplaintOpenedBy.AUTO,
+        conversationId: params.conversationId,
+      });
+      return;
+    }
+
+    await this.lifecycle.pause(
+      params.cycleId,
+      LifecyclePauseReason.HUMAN_ATTENTION,
+    );
+  }
+
+  private async resolveReplyOrigin(conversationId: string): Promise<{
+    automationId: string;
+    campaignId: string | null;
+    cycleId: string | null;
+  } | null> {
     const since = new Date(Date.now() - REPLY_ORIGIN_WINDOW_MS);
     const last = await this.prisma.message.findFirst({
       where: {
@@ -1359,7 +1462,7 @@ export class WhatsappService {
     }
     const automation = await this.prisma.automation.findUnique({
       where: { id: last.automationId },
-      select: { uuid: true, campaignId: true },
+      select: { uuid: true, campaignId: true, commercialCycleId: true },
     });
     if (!automation) {
       return null;
@@ -1367,6 +1470,7 @@ export class WhatsappService {
     return {
       automationId: automation.uuid,
       campaignId: automation.campaignId,
+      cycleId: automation.commercialCycleId,
     };
   }
 
