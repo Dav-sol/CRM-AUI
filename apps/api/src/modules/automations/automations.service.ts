@@ -294,6 +294,24 @@ export class AutomationsService {
       return;
     }
 
+    // Lifecycle 025 §1: el lifecycle representa una BATERÍA INSTALADA. Una venta
+    // sin `installationDate` no entra: el ciclo queda fuera y, cuando ERP
+    // registre la instalación, se creará entonces. No se sustituye por
+    // `purchaseDate` ni se inventa una fecha.
+    const installationDate = purchase.installationDate;
+    if (!installationDate) {
+      await this.auditService.record({
+        module: MODULE,
+        action: 'automation.cycle.skipped',
+        outcome: 'success',
+        userId: null,
+        organizationId: purchase.organizationId,
+        description: `lifecycle not started: no installation purchase=${purchase.uuid}`,
+        metadata: { purchaseId, reason: 'awaiting_installation' },
+      });
+      return;
+    }
+
     try {
       const { cycle, automations } = await this.prisma.$transaction(
         async (tx) => {
@@ -301,18 +319,22 @@ export class AutomationsService {
           // cancel the customer's previous cycles/journeys — those may belong
           // to another purchase/warranty still valid. Cancelling what is truly
           // obsolete on recompra is a human decision (V2), not a blanket rule.
+          // §1: la fecha base es la INSTALACIÓN, no la venta. Si ERP corrige
+          // installationDate se usa la última, porque es el valor vigente.
           const created = await tx.commercialCycle.create({
             data: {
               purchaseId,
               status: 'ACTIVE',
-              startDate: purchase.purchaseDate,
+              startDate: installationDate,
             },
           });
 
+          // Los hitos se anclan a la instalación. Los textos de la secuencia de
+          // seguimiento se resuelven aparte; este es el calendario por defecto.
           const scheduledDates = [
-            addDays(purchase.purchaseDate, 3),
-            addMonths(purchase.purchaseDate, 6),
-            addMonths(purchase.purchaseDate, 12),
+            addDays(installationDate, 3),
+            addMonths(installationDate, 6),
+            addMonths(installationDate, 12),
           ];
           const stageNames = [
             'Seguimiento postventa (Día 3)',

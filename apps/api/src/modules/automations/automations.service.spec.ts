@@ -95,6 +95,7 @@ describe('AutomationsService', () => {
         organizationId: 'org-1',
         customerId: 'cu-1',
         purchaseDate: baseDate,
+        installationDate: baseDate,
       });
       prisma.commercialCycle.findFirst.mockResolvedValue(null);
       let txAutomationCreate: jest.Mock = jest.fn();
@@ -184,6 +185,80 @@ describe('AutomationsService', () => {
       expect(prisma.automation.create).not.toHaveBeenCalled();
     });
 
+    // Lifecycle 025 §1: el lifecycle representa una batería INSTALADA.
+    it('does NOT create a cycle when the purchase has no installation date', async () => {
+      prisma.commercialCycle.findUnique.mockResolvedValue(null);
+      prisma.purchase.findUnique.mockResolvedValue({
+        id: 'pu-1',
+        uuid: 'puu-1',
+        organizationId: 'org-1',
+        customerId: 'cu-1',
+        purchaseDate: baseDate,
+        installationDate: null,
+      });
+
+      await service.onPurchaseImported({
+        payload: { purchaseId: 'pu-1' },
+      });
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.commercialCycle.create).not.toHaveBeenCalled();
+      expect(prisma.automation.create).not.toHaveBeenCalled();
+      // Queda registrado por qué: la venta espera instalación, no es un fallo.
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'automation.cycle.skipped',
+          metadata: { purchaseId: 'pu-1', reason: 'awaiting_installation' },
+        }),
+      );
+    });
+
+    it('anchors the cycle and its milestones to the installation, not the sale', async () => {
+      prisma.commercialCycle.findUnique.mockResolvedValue(null);
+      const purchaseDate = new Date('2026-08-01T12:00:00.000Z');
+      const installationDate = new Date('2026-08-03T12:00:00.000Z');
+      prisma.purchase.findUnique.mockResolvedValue({
+        id: 'pu-1',
+        uuid: 'puu-1',
+        organizationId: 'org-1',
+        customerId: 'cu-1',
+        purchaseDate,
+        installationDate,
+      });
+      let cycleData: Record<string, unknown> = {};
+      const creates: { scheduledDate: Date }[] = [];
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = {
+            automation: {
+              updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+              create: jest.fn((args: { data: { scheduledDate: Date } }) => {
+                creates.push(args.data);
+                return Promise.resolve({ id: 'a-1', uuid: 'au-1' });
+              }),
+            },
+            commercialCycle: {
+              update: jest.fn(),
+              create: jest.fn((args: { data: Record<string, unknown> }) => {
+                cycleData = args.data;
+                return Promise.resolve({ id: 'cc-1', uuid: 'ccu-1' });
+              }),
+            },
+          };
+          return fn(tx);
+        },
+      );
+
+      await service.onPurchaseImported({ payload: { purchaseId: 'pu-1' } });
+
+      // El ciclo arranca el día de la instalación, no el de la venta.
+      expect(cycleData.startDate).toBe(installationDate);
+      // El primer hito es instalación + 3 días (05/08), no venta + 3 (04/08).
+      expect(creates[0].scheduledDate).toEqual(
+        new Date('2026-08-06T12:00:00.000Z'),
+      );
+    });
+
     it('is a no-op when the purchase does not exist', async () => {
       prisma.commercialCycle.findUnique.mockResolvedValue(null);
       prisma.purchase.findUnique.mockResolvedValue(null);
@@ -203,6 +278,7 @@ describe('AutomationsService', () => {
         organizationId: 'org-1',
         customerId: 'cu-1',
         purchaseDate: baseDate,
+        installationDate: baseDate,
       });
       prisma.commercialCycle.findFirst.mockResolvedValue({ id: 'cc-old' });
       let cycleCancelled = false;
@@ -290,6 +366,7 @@ describe('AutomationsService', () => {
         organizationId: 'org-1',
         customerId: 'cu-1',
         purchaseDate: baseDate,
+        installationDate: baseDate,
       });
       prisma.commercialCycle.findFirst.mockResolvedValue(null);
       prisma.$transaction.mockRejectedValue(
@@ -546,6 +623,7 @@ describe('AutomationsService', () => {
           uuid: 'puu-1',
           invoiceNumber: 'F-1',
           purchaseDate: baseDate,
+          installationDate: baseDate,
           product: { name: 'Batería X' },
           customer: { uuid: 'cuu-1', name: 'Ana', phone: '555' },
         },
@@ -598,6 +676,7 @@ describe('AutomationsService', () => {
           uuid: 'puu-1',
           invoiceNumber: 'F-1',
           purchaseDate: baseDate,
+          installationDate: baseDate,
           product: { name: 'Batería X' },
           customer: { uuid: 'cuu-1', name: 'Ana', phone: '555' },
         },
@@ -679,6 +758,7 @@ describe('AutomationsService', () => {
         organizationId: 'org-1',
         customerId: 'cu-1',
         purchaseDate: baseDate,
+        installationDate: baseDate,
       });
       prisma.commercialCycle.findFirst.mockResolvedValue(null);
       prisma.$transaction.mockImplementation(
