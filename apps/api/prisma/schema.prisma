@@ -40,6 +40,9 @@ model Organization {
   quickReplies               QuickReply[]
   templates                  Template[]
   channelAccounts            ChannelAccount[]
+  config                     OrganizationConfig?
+  complaints                 Complaint[]
+  consents                   LifecycleConsent[]
 
   @@map("organizations")
 }
@@ -116,6 +119,7 @@ model Customer {
   purchases     Purchase[]
   conversations Conversation[]
   messages      Message[]
+  consents      LifecycleConsent[]
 
   @@unique([organizationId, codcli])
   @@index([organizationId])
@@ -163,6 +167,10 @@ model Purchase {
   purchaseDate      DateTime       @map("purchase_date")
   warrantyMonths    Int?           @map("warranty_months")
   warrantyExpiresAt DateTime?      @map("warranty_expires_at")
+  // Lifecycle 025 §1: la fecha de instalación es la fecha base del lifecycle.
+  // Null = la venta existe pero la batería aún no consta como instalada, por
+  // lo que NO hay lifecycle (gate G8). ERP puede corregirla: se usa la última.
+  installationDate  DateTime?      @map("installation_date")
   // Atribución de ventas (Fase 2): conversación que originó la venta (uuid).
   sourceConversationId String?     @map("source_conversation_id")
   // Fase P0-C: cotización que originó la venta (uuid).
@@ -234,6 +242,21 @@ model CommercialCycle {
   status     CommercialCycleStatus @default(ACTIVE)
   startDate  DateTime              @map("start_date")
   endDate    DateTime?             @map("end_date")
+  // Lifecycle 025 §4: pausa transversal (G1). Se levanta al cerrar el caso que
+  // la originó; al reanudar, lo vencido pasa a SKIPPED (§4.5).
+  lifecyclePausedAt DateTime?        @map("lifecycle_paused_at")
+  pauseReason      LifecyclePauseReason?      @map("pause_reason")
+  // Contadores de intento de negocio (§3, §4.7). Los fallos técnicos de envío
+  // usan retryCount y NO cuentan como intento.
+  maintenanceAttempts Int @default(0) @map("maintenance_attempts")
+  // §3: máximo una solicitud de reseña efectiva por cliente/ciclo.
+  reviewRequestedAt DateTime? @map("review_requested_at")
+  // §4.7: rechazo explícito del consentimiento de mantenimiento. Distinto de
+  // "no respondió": ambos bloquean las revisiones, solo este registra la causa.
+  maintenanceOptOutAt DateTime? @map("maintenance_opt_out_at")
+  // §26: por qué terminó el lifecycle, si terminó.
+  terminationReason LifecycleTerminationReason? @map("termination_reason")
+  terminatedAt      DateTime?                    @map("terminated_at")
   createdBy  String?               @map("created_by")
   updatedBy  String?               @map("updated_by")
   deletedBy  String?               @map("deleted_by")
@@ -243,8 +266,73 @@ model CommercialCycle {
 
   purchase    Purchase     @relation(fields: [purchaseId], references: [id])
   automations Automation[]
+  complaints  Complaint[]
+  consents    LifecycleConsent[]
 
   @@map("commercial_cycles")
+}
+
+// Reclamación como caso auditable (spec 025 §6): apertura, resolución,
+// resultado y trazabilidad. No es un tag de conversación.
+model Complaint {
+  id             String                @id @default(cuid())
+  uuid           String                @unique @default(uuid())
+  organizationId String                @map("organization_id")
+  // Un lifecycle puede tener como máximo una reclamación ABIERTA a la vez.
+  cycleId        String                @map("cycle_id")
+  conversationId String?               @map("conversation_id")
+  openedAt       DateTime              @default(now()) @map("opened_at")
+  openedReason   String                @map("opened_reason")
+  openedBy       ComplaintOpenedBy     @map("opened_by")
+  detectedBy     ComplaintOpenedBy     @map("detected_by")
+  resolvedAt     DateTime?             @map("resolved_at")
+  resolution     ComplaintResolution?  @map("resolution")
+  resolutionNotes String?              @map("resolution_notes")
+  resolvedBy     String?               @map("resolved_by")
+  createdBy      String?               @map("created_by")
+  updatedBy      String?               @map("updated_by")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+  deletedAt      DateTime?             @map("deleted_at")
+
+  organization Organization     @relation(fields: [organizationId], references: [id])
+  cycle        CommercialCycle @relation(fields: [cycleId], references: [id])
+  conversation Conversation?   @relation(fields: [conversationId], references: [id])
+
+  @@index([organizationId])
+  @@index([cycleId])
+  @@index([organizationId, resolvedAt])
+  @@map("complaints")
+}
+
+// Consentimiento auditable (spec 025 §4.6). No hay consentimiento implícito:
+// la ausencia de registro equivale a "no consentido" (§3.1).
+model LifecycleConsent {
+  id             String          @id @default(cuid())
+  uuid           String          @unique @default(uuid())
+  organizationId String          @map("organization_id")
+  customerId     String          @map("customer_id")
+  // Null cuando aún no hay lifecycle al que atribuírselo.
+  cycleId        String?         @map("cycle_id")
+  scope          ConsentScope
+  decision       ConsentDecision
+  decidedAt      DateTime        @default(now()) @map("decided_at")
+  decidedBy      String?         @map("decided_by")
+  source         ConsentSource
+  sourceMessageId String?        @map("source_message_id")
+  expiresAt      DateTime?       @map("expires_at")
+  revokedAt      DateTime?       @map("revoked_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  organization Organization     @relation(fields: [organizationId], references: [id])
+  customer     Customer         @relation(fields: [customerId], references: [id])
+  cycle        CommercialCycle? @relation(fields: [cycleId], references: [id])
+
+  @@index([organizationId, customerId, scope])
+  @@index([cycleId])
+  @@index([organizationId, customerId, scope, decidedAt])
+  @@map("lifecycle_consents")
 }
 
 model Campaign {
@@ -329,6 +417,43 @@ model FollowUpSequenceStage {
 
   @@index([sequenceId])
   @@map("follow_up_sequence_stages")
+}
+
+/// Configuración efectiva por organización (specs/024-configuraciones-v1).
+/// Una fila por organización; las columnas null significan "sin definir" y
+/// caen a la variable de entorno y después al default del código.
+/// No contiene credenciales: las integraciones siguen en .env.
+model OrganizationConfig {
+  id             String @id @default(cuid())
+  uuid           String @unique @default(uuid())
+  organizationId String @unique @map("organization_id")
+
+  // Horarios (AU-009)
+  businessHoursEnabled Boolean   @default(false) @map("business_hours_enabled")
+  timezone             String    @default("America/Bogota")
+  businessDays         String[]  @default(["MON", "TUE", "WED", "THU", "FRI"]) @map("business_days")
+  // Minutos desde medianoche (0..1439); la ventana puede cruzar medianoche.
+  businessHoursStart Int? @map("business_hours_start")
+  businessHoursEnd   Int? @map("business_hours_end")
+
+  // Parámetros de negocio no sensibles.
+  maxCommercialPer60d           Int?    @map("max_commercial_per_60d")
+  minDaysBetweenCommercial      Int?    @map("min_days_between_commercial")
+  quoteExpiryDays               Int?    @map("quote_expiry_days")
+  whatsappMessageCost           Int?    @map("whatsapp_message_cost")
+  whatsappMessageCostCommercial Int?    @map("whatsapp_message_cost_commercial")
+  smsCostPerSegment             Int?    @map("sms_cost_per_segment")
+  smsCurrency                   String? @map("sms_currency")
+
+  createdBy String?   @map("created_by")
+  updatedBy String?   @map("updated_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("organization_configs")
 }
 
 model ChannelAccount {
@@ -421,6 +546,7 @@ model Conversation {
   organization   Organization                @relation(fields: [organizationId], references: [id])
   customer       Customer?                   @relation(fields: [customerId], references: [id])
   advisor        User?                       @relation("ConversationAdvisor", fields: [advisorId], references: [id])
+  complaints     Complaint[]
   messages       Message[]
   notes          ConversationNote[]
   tagAssignments ConversationTagAssignment[]
@@ -772,8 +898,64 @@ enum AutomationStatus {
   EXECUTING
   EXECUTED
   CANCELLED
+  // The milestone elapsed while the lifecycle was paused or otherwise
+  // suppressed, so it was no longer executable (spec 025 §4.5). Distinct from
+  // CANCELLED: this was not a business decision, and no replacement message is
+  // generated for it.
+  SKIPPED
   ERROR
   PAUSED
+}
+
+// Por qué está pausado el lifecycle (spec 025 §10). Eje distinto del opt-out:
+// el opt-out vive en customers.noContactAt y es global del cliente.
+enum LifecyclePauseReason {
+  HUMAN_ATTENTION
+  COMPLAINT
+  MANUAL
+}
+
+enum LifecycleTerminationReason {
+  BATTERY_REPLACED
+  DEFECTIVE_PRODUCT_RETURNED
+  DEFECTIVE_PRODUCT_REPLACED
+  COMPLAINT_CLOSED
+  OPT_OUT
+  MANUAL
+}
+
+// Resolución de una reclamación (spec 025 §6.1). Cada valor tiene una única
+// transición sobre el lifecycle; ver §6.1.
+enum ComplaintResolution {
+  FALSE_ALARM
+  TECHNICAL_ISSUE_RESOLVED
+  BATTERY_REPLACED
+  DEFECTIVE_PRODUCT_RETURNED
+  DEFECTIVE_PRODUCT_REPLACED
+  UNRESOLVED_NO_CONTACT
+}
+
+// Quién abrió una reclamación: la detectó el sistema o un asesor.
+enum ComplaintOpenedBy {
+  AUTO
+  ADVISOR
+}
+
+// Ámbito de un consentimiento. MAINTENEMENTE gobierna los recordatorios de
+// revisión; el resto se añade cuando exista decisión de negocio (spec 025 §4.6).
+enum ConsentScope {
+  MAINTENEMENT
+}
+
+enum ConsentDecision {
+  GRANTED
+  REFUSED
+}
+
+enum ConsentSource {
+  INBOUND_MESSAGE
+  ADVISOR
+  IMPORT
 }
 
 enum AutomationPurpose {
