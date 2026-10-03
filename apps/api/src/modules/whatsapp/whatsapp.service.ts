@@ -19,6 +19,8 @@ import {
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
+import { ConfiguracionesService } from '../configuraciones/configuraciones.service';
+import { EligibilityService } from '../lifecycle/eligibility.service';
 import {
   brandOf,
   renderTemplate,
@@ -184,6 +186,8 @@ export class WhatsappService {
     private readonly provider: WhatsAppProvider,
     private readonly pancakeProvider: PancakeWhatsAppProvider,
     private readonly configService: ConfigService,
+    private readonly configuraciones: ConfiguracionesService,
+    private readonly eligibility: EligibilityService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -228,9 +232,52 @@ export class WhatsappService {
       take: SCHEDULER_BATCH_SIZE,
     });
 
+    // Todos los gates transversales de envío viven en EligibilityService
+    // (specs/025-lifecycle-postventa §4). Aquí no se reimplementa ninguno: el
+    // scheduler solo consulta y salta.
+    //
+    // La fila NO se reprograma ni se muta cuando un gate bloquea: se salta y
+    // sigue SCHEDULED. El salto no cuenta reintento ni emite fallo. La
+    // excepción es el hito VENCIDO durante una pausa, que pasa a SKIPPED al
+    // reanudar (LifecycleService.resume, §4.5), no en cada tick.
+    const now = new Date();
     for (const automation of due) {
+      const purchase = automation.purchase;
+      const decision = await this.eligibility.evaluate({
+        customerId: purchase.customer.id,
+        organizationId: automation.organizationId,
+        cycleId: automation.commercialCycleId,
+        now,
+        timeZone: await this.configuraciones.timeZoneOrganizacion(
+          automation.organizationId,
+        ),
+        requiresMaintenanceConsent: this.esEtapaDeMantenimiento(
+          automation.messageTemplate,
+        ),
+      });
+
+      if (!decision.allowed) {
+        this.logger.debug(
+          `automation skipped automation=${automation.uuid} gate=${
+            decision.blockedBy ?? 'UNKNOWN'
+          } reason=${decision.reason ?? ''}`,
+        );
+        continue;
+      }
+
       await this.executeOneAutomation(automation);
     }
+  }
+
+  /**
+   * ¿Esta automatización es un recordatorio de mantenimiento y por tanto exige
+   * consentimiento (G7, §4.7)? Se decide por el texto ya snapshot en la
+   * automatización, porque el catálogo de plantillas es independiente y la
+   * campaña actual no lo referencia.
+   */
+  private esEtapaDeMantenimiento(template: string | null): boolean {
+    if (!template) return false;
+    return template.toLowerCase().includes('revisi');
   }
 
   // F7: EXECUTING automations whose send was never confirmed within

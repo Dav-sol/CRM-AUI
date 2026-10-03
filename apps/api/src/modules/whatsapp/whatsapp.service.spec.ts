@@ -11,6 +11,8 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import type { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
+import { ConfiguracionesService } from '../configuraciones/configuraciones.service';
+import { EligibilityService } from '../lifecycle/eligibility.service';
 import { WhatsappService } from './whatsapp.service';
 import { PancakeWhatsAppProvider } from './pancake/pancake-whatsapp.provider';
 import {
@@ -74,6 +76,11 @@ describe('WhatsappService', () => {
     isConfigured: jest.Mock;
   };
   let configService: { get: jest.Mock };
+  let configuraciones: {
+    dentroDeHorario: jest.Mock;
+    timeZoneOrganizacion: jest.Mock;
+  };
+  let eligibility: { evaluate: jest.Mock };
 
   const emittedNames = (): string[] =>
     eventEmitter.emit.mock.calls.map((call) => (call as string[])[0]);
@@ -125,6 +132,15 @@ describe('WhatsappService', () => {
         return null;
       }),
     };
+    configuraciones = {
+      dentroDeHorario: jest.fn().mockResolvedValue(true),
+      timeZoneOrganizacion: jest.fn().mockResolvedValue('America/Bogota'),
+    };
+    eligibility = {
+      evaluate: jest
+        .fn()
+        .mockResolvedValue({ allowed: true, deferrable: false }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -135,6 +151,11 @@ describe('WhatsappService', () => {
         { provide: WHATSAPP_PROVIDER, useValue: provider as WhatsAppProvider },
         { provide: PancakeWhatsAppProvider, useValue: pancakeProvider },
         { provide: ConfigService, useValue: configService },
+        // AU-009: sin horario configurado, todo se ejecuta (comportamiento previo).
+        { provide: ConfiguracionesService, useValue: configuraciones },
+        // Gates de spec 025 §4: por defecto todo pasa; los casos que necesitan
+        // un bloqueo los cubren los tests de EligibilityService.
+        { provide: EligibilityService, useValue: eligibility },
       ],
     }).compile();
 
@@ -186,6 +207,61 @@ describe('WhatsappService', () => {
           uuid: 'msg-uuid-1',
         }),
       },
+    });
+
+    // Un gate de elegibilidad bloqueado (specs/025-lifecycle-postventa §4) deja la
+    // fila intacta: se salta SIN mutarse ni contar reintento. El gate concreto no
+    // importa aquí; su comportamiento se prueba en EligibilityService.
+    it('skips automations blocked by an eligibility gate without mutating them', async () => {
+      prisma.automation.findMany.mockResolvedValue([dueAutomation]);
+      eligibility.evaluate.mockResolvedValue({
+        allowed: false,
+        blockedBy: 'G5',
+        reason: 'fuera de ventana',
+        deferrable: true,
+      });
+
+      await service.executeDueAutomations();
+
+      expect(provider.sendMessage).not.toHaveBeenCalled();
+      // Sin transacción ni escritura: la fila sigue SCHEDULED con su retryCount.
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.automation.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('consulta los gates con el lifecycle del cliente (no los reimplementa)', async () => {
+      prisma.automation.findMany.mockResolvedValue([dueAutomation]);
+      eligibility.evaluate.mockResolvedValue({
+        allowed: true,
+        deferrable: false,
+      });
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => fn(txMock()),
+      );
+      provider.sendMessage.mockResolvedValue({ wamid: 'w-1' });
+
+      await service.executeDueAutomations();
+
+      expect(eligibility.evaluate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customerId: 'cu-1',
+          organizationId: 'org-1',
+          timeZone: 'America/Bogota',
+        }),
+      );
+    });
+
+    it('executes automations inside the business hours', async () => {
+      prisma.automation.findMany.mockResolvedValue([dueAutomation]);
+      configuraciones.dentroDeHorario.mockResolvedValue(true);
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => fn(txMock()),
+      );
+      provider.sendMessage.mockResolvedValue({ wamid: 'w-1' });
+
+      await service.executeDueAutomations();
+
+      expect(provider.sendMessage).toHaveBeenCalledTimes(1);
     });
 
     it('uses the per-stage campaign template for +3d/+6m/+12m (AU-005)', async () => {
