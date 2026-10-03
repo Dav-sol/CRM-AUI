@@ -17,6 +17,8 @@ import { ProductsModule } from './modules/products/products.module';
 import { ImportsModule } from './modules/imports/imports.module';
 import { AutomationsModule } from './modules/automations/automations.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
+import { ConfiguracionesModule } from './modules/configuraciones/configuraciones.module';
+import { LifecycleModule } from './modules/lifecycle/lifecycle.module';
 import { ConversationsModule } from './modules/conversations/conversations.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { QuotesModule } from './modules/quotes/quotes.module';
@@ -64,6 +66,8 @@ import { MessagingModule } from './modules/messaging/messaging.module';
     WhatsappModule,
 
     ConversationsModule,
+    ConfiguracionesModule,
+    LifecycleModule,
 
     CampaignsModule,
     QuotesModule,
