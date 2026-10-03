@@ -143,6 +143,12 @@ describe('WhatsappService', () => {
         .fn()
         .mockResolvedValue({ allowed: true, deferrable: false }),
     };
+    lifecycle = {
+      pause: jest.fn().mockResolvedValue(undefined),
+      openComplaint: jest
+        .fn()
+        .mockResolvedValue({ id: 'cp-1', alreadyOpen: false }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
