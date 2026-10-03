@@ -480,20 +480,32 @@ export class WhatsappService {
       return;
     }
 
+    // Sandbox TIENE PRIORIDAD sobre cualquier proveedor (riesgo R1 corregido):
+    // antes `usePancake` ganaba a `simulated`, de modo que
+    // `human-testing-up.sh up --pancake` dejaba la organización sin barrera y
+    // las automatizaciones pendientes salían reales. Ahora una organización en
+    // WHATSAPP_SANDBOX_ORGANIZATION_IDS simula siempre, venga por Pancake o por
+    // Meta.
     const simulated = this.isSandboxOrganization(automation.organizationId);
     const usePancake = this.shouldUsePancake(automation.organizationId);
+    if (simulated && usePancake) {
+      this.logger.warn(
+        `organization ${automation.organizationId} is sandboxed but routed to Pancake: simulating instead of sending`,
+      );
+    }
+    const reallySend = !simulated;
     try {
-      const sendResult = usePancake
-        ? await this.pancakeProvider.sendTemplate(phone, {
-            customer_name: automation.purchase.customer.name,
-            product_name: automation.purchase.product?.name ?? '',
-            organization_name: automation.organization?.name ?? '',
-          })
-        : simulated
-          ? {
-              providerMessageId: `sim-${message.uuid}`,
-              providerConversationId: null,
-            }
+      const sendResult = !reallySend
+        ? {
+            providerMessageId: `sim-${message.uuid}`,
+            providerConversationId: null,
+          }
+        : usePancake
+          ? await this.pancakeProvider.sendTemplate(phone, {
+              customer_name: automation.purchase.customer.name,
+              product_name: automation.purchase.product?.name ?? '',
+              organization_name: automation.organization?.name ?? '',
+            })
           : await this.provider.sendMessage(phone, content);
       await this.markSent(message, automation.organizationId, sendResult);
       // Only EXECUTED after the send is confirmed (P1, demo D1).

@@ -264,6 +264,60 @@ describe('WhatsappService', () => {
       expect(provider.sendMessage).toHaveBeenCalledTimes(1);
     });
 
+    // Riesgo R1: `--pancake` quitaba WHATSAPP_SANDBOX_ORGANIZATION_IDS, y en el
+    // código `usePancake` ganaba a `simulated`, así que la organización quedaba
+    // sin barrera. Ahora sandbox simula siempre.
+    describe('sandbox tiene prioridad sobre el proveedor (R1)', () => {
+      const runWith = async (opts: {
+        sandbox: string[] | null;
+        pancakeOrg: string | null;
+      }) => {
+        configService.get.mockImplementation((key: string) => {
+          if (key === 'whatsapp.sandboxOrganizations') return opts.sandbox;
+          if (key === 'pancake.organizationId') return opts.pancakeOrg;
+          if (key === 'whatsapp.defaultOrganizationId') return 'org-1';
+          return null;
+        });
+        pancakeProvider.isConfigured.mockReturnValue(true);
+        prisma.automation.findMany.mockResolvedValue([dueAutomation]);
+        prisma.$transaction.mockImplementation(
+          async (fn: (tx: unknown) => Promise<unknown>) => fn(txMock()),
+        );
+        provider.sendMessage.mockResolvedValue({ wamid: 'w-meta' });
+        pancakeProvider.sendTemplate.mockResolvedValue({
+          providerMessageId: 'pancake-1',
+          providerConversationId: null,
+        });
+        await service.executeDueAutomations();
+      };
+
+      it('org sandbox + Pancake configurado: SIMULA, no llama a Pancake', async () => {
+        await runWith({ sandbox: ['org-1'], pancakeOrg: 'org-1' });
+
+        expect(pancakeProvider.sendTemplate).not.toHaveBeenCalled();
+        expect(provider.sendMessage).not.toHaveBeenCalled();
+      });
+
+      it('org sandbox sin Pancake: tampoco llama a Meta', async () => {
+        await runWith({ sandbox: ['org-1'], pancakeOrg: null });
+
+        expect(provider.sendMessage).not.toHaveBeenCalled();
+      });
+
+      it('org NO sandbox + Pancake: envía por Pancake de verdad', async () => {
+        await runWith({ sandbox: null, pancakeOrg: 'org-1' });
+
+        expect(pancakeProvider.sendTemplate).toHaveBeenCalledTimes(1);
+        expect(provider.sendMessage).not.toHaveBeenCalled();
+      });
+
+      it('org NO sandbox + sin Pancake: envía por Meta', async () => {
+        await runWith({ sandbox: null, pancakeOrg: null });
+
+        expect(provider.sendMessage).toHaveBeenCalledTimes(1);
+      });
+    });
+
     it('uses the per-stage campaign template for +3d/+6m/+12m (AU-005)', async () => {
       const withCampaign = (days: number) => ({
         ...dueAutomation,
