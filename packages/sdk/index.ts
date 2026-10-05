@@ -155,6 +155,12 @@ import type {
   GetCommercialCycle200,
   GetCommercialCycle401,
   GetCommercialCycle404,
+  GetConfiguracionesEfectivas200,
+  GetConfiguracionesEfectivas403,
+  GetConfiguracionesHorarios200,
+  GetConfiguracionesHorarios403,
+  GetConfiguracionesParametros200,
+  GetConfiguracionesParametros403,
   GetConversation200,
   GetConversation401,
   GetConversation404,
@@ -181,6 +187,8 @@ import type {
   GetMessage200,
   GetMessage401,
   GetMessage404,
+  GetMyOrganization200,
+  GetMyOrganization403,
   GetOrganization200,
   GetOrganization403,
   GetOrganization404,
@@ -324,6 +332,14 @@ import type {
   UpdateCampaign401,
   UpdateCampaign404,
   UpdateCampaignBody,
+  UpdateConfiguracionesHorarios200,
+  UpdateConfiguracionesHorarios400,
+  UpdateConfiguracionesHorarios403,
+  UpdateConfiguracionesHorariosBody,
+  UpdateConfiguracionesParametros200,
+  UpdateConfiguracionesParametros400,
+  UpdateConfiguracionesParametros403,
+  UpdateConfiguracionesParametrosBody,
   UpdateConversationTag200,
   UpdateConversationTag400,
   UpdateConversationTag403,
@@ -342,6 +358,10 @@ import type {
   UpdateFollowUpSequence403,
   UpdateFollowUpSequence404,
   UpdateFollowUpSequenceBody,
+  UpdateMyOrganization200,
+  UpdateMyOrganization400,
+  UpdateMyOrganization403,
+  UpdateMyOrganizationBody,
   UpdateProduct200,
   UpdateProduct400,
   UpdateProduct401,
@@ -808,6 +828,119 @@ export const acceptInvitation = async (acceptInvitationBody: AcceptInvitationBod
 
 
 
+export type getMyOrganizationResponse200 = {
+  data: GetMyOrganization200
+  status: 200
+}
+
+export type getMyOrganizationResponse403 = {
+  data: GetMyOrganization403
+  status: 403
+}
+
+export type getMyOrganizationResponseSuccess = (getMyOrganizationResponse200) & {
+  headers: Headers;
+};
+export type getMyOrganizationResponseError = (getMyOrganizationResponse403) & {
+  headers: Headers;
+};
+
+export type getMyOrganizationResponse = (getMyOrganizationResponseSuccess | getMyOrganizationResponseError)
+
+export const getGetMyOrganizationUrl = () => {
+
+
+
+
+  return `/api/v1/organizations/me`
+}
+
+/**
+ * Returns the organization of the caller (Empresa, Configuraciones v1).
+ * The organization always comes from the JWT: no organization id is
+ * accepted from the client. Requires ADMINISTRADOR or PLATFORM_OWNER with
+ * an organization; an account without one gets 403.
+ * @summary Get own organization
+ */
+export const getMyOrganization = async ( options?: RequestInit): Promise<getMyOrganizationResponse> => {
+
+  const res = await fetch(getGetMyOrganizationUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: getMyOrganizationResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getMyOrganizationResponse
+}
+
+
+
+export type updateMyOrganizationResponse200 = {
+  data: UpdateMyOrganization200
+  status: 200
+}
+
+export type updateMyOrganizationResponse400 = {
+  data: UpdateMyOrganization400
+  status: 400
+}
+
+export type updateMyOrganizationResponse403 = {
+  data: UpdateMyOrganization403
+  status: 403
+}
+
+export type updateMyOrganizationResponseSuccess = (updateMyOrganizationResponse200) & {
+  headers: Headers;
+};
+export type updateMyOrganizationResponseError = (updateMyOrganizationResponse400 | updateMyOrganizationResponse403) & {
+  headers: Headers;
+};
+
+export type updateMyOrganizationResponse = (updateMyOrganizationResponseSuccess | updateMyOrganizationResponseError)
+
+export const getUpdateMyOrganizationUrl = () => {
+
+
+
+
+  return `/api/v1/organizations/me`
+}
+
+/**
+ * Updates the editable fields of the caller's organization (Empresa,
+ * Configuraciones v1, AC-10). `slug` and `status` are not editable here:
+ * the slug is the public identifier and the status belongs to the platform.
+ * Every field is optional and a partial patch leaves the rest untouched.
+ * @summary Update own organization
+ */
+export const updateMyOrganization = async (updateMyOrganizationBody: UpdateMyOrganizationBody, options?: RequestInit): Promise<updateMyOrganizationResponse> => {
+
+  const res = await fetch(getUpdateMyOrganizationUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateMyOrganizationBody)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: updateMyOrganizationResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as updateMyOrganizationResponse
+}
+
+
+
 export type getOrganizationResponse200 = {
   data: GetOrganization200
   status: 200
@@ -862,6 +995,279 @@ export const getOrganization = async (id: string, options?: RequestInit): Promis
 
   const data: getOrganizationResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as getOrganizationResponse
+}
+
+
+
+export type getConfiguracionesHorariosResponse200 = {
+  data: GetConfiguracionesHorarios200
+  status: 200
+}
+
+export type getConfiguracionesHorariosResponse403 = {
+  data: GetConfiguracionesHorarios403
+  status: 403
+}
+
+export type getConfiguracionesHorariosResponseSuccess = (getConfiguracionesHorariosResponse200) & {
+  headers: Headers;
+};
+export type getConfiguracionesHorariosResponseError = (getConfiguracionesHorariosResponse403) & {
+  headers: Headers;
+};
+
+export type getConfiguracionesHorariosResponse = (getConfiguracionesHorariosResponseSuccess | getConfiguracionesHorariosResponseError)
+
+export const getGetConfiguracionesHorariosUrl = () => {
+
+
+
+
+  return `/api/v1/configuraciones/horarios`
+}
+
+/**
+ * Returns the commercial schedule of the caller's organization (Horarios).
+ * Tenant-scoped: the organization always comes from the JWT. Requires
+ * ADMINISTRADOR or PLATFORM_OWNER with an organization.
+ * @summary Get commercial schedule
+ */
+export const getConfiguracionesHorarios = async ( options?: RequestInit): Promise<getConfiguracionesHorariosResponse> => {
+
+  const res = await fetch(getGetConfiguracionesHorariosUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: getConfiguracionesHorariosResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getConfiguracionesHorariosResponse
+}
+
+
+
+export type updateConfiguracionesHorariosResponse200 = {
+  data: UpdateConfiguracionesHorarios200
+  status: 200
+}
+
+export type updateConfiguracionesHorariosResponse400 = {
+  data: UpdateConfiguracionesHorarios400
+  status: 400
+}
+
+export type updateConfiguracionesHorariosResponse403 = {
+  data: UpdateConfiguracionesHorarios403
+  status: 403
+}
+
+export type updateConfiguracionesHorariosResponseSuccess = (updateConfiguracionesHorariosResponse200) & {
+  headers: Headers;
+};
+export type updateConfiguracionesHorariosResponseError = (updateConfiguracionesHorariosResponse400 | updateConfiguracionesHorariosResponse403) & {
+  headers: Headers;
+};
+
+export type updateConfiguracionesHorariosResponse = (updateConfiguracionesHorariosResponseSuccess | updateConfiguracionesHorariosResponseError)
+
+export const getUpdateConfiguracionesHorariosUrl = () => {
+
+
+
+
+  return `/api/v1/configuraciones/horarios`
+}
+
+/**
+ * Partially updates the commercial schedule. Requires ADMINISTRADOR or
+ * PLATFORM_OWNER with an organization. Audited as
+ * `configuration.horarios.updated` and emits `OrganizationConfigUpdated`.
+ * @summary Update commercial schedule
+ */
+export const updateConfiguracionesHorarios = async (updateConfiguracionesHorariosBody: UpdateConfiguracionesHorariosBody, options?: RequestInit): Promise<updateConfiguracionesHorariosResponse> => {
+
+  const res = await fetch(getUpdateConfiguracionesHorariosUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateConfiguracionesHorariosBody)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: updateConfiguracionesHorariosResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as updateConfiguracionesHorariosResponse
+}
+
+
+
+export type getConfiguracionesParametrosResponse200 = {
+  data: GetConfiguracionesParametros200
+  status: 200
+}
+
+export type getConfiguracionesParametrosResponse403 = {
+  data: GetConfiguracionesParametros403
+  status: 403
+}
+
+export type getConfiguracionesParametrosResponseSuccess = (getConfiguracionesParametrosResponse200) & {
+  headers: Headers;
+};
+export type getConfiguracionesParametrosResponseError = (getConfiguracionesParametrosResponse403) & {
+  headers: Headers;
+};
+
+export type getConfiguracionesParametrosResponse = (getConfiguracionesParametrosResponseSuccess | getConfiguracionesParametrosResponseError)
+
+export const getGetConfiguracionesParametrosUrl = () => {
+
+
+
+
+  return `/api/v1/configuraciones/parametros`
+}
+
+/**
+ * Returns the effective business parameters of the caller's organization
+ * (Parámetros), each with its origin: `db`, `env` or `default`.
+ * @summary Get business parameters
+ */
+export const getConfiguracionesParametros = async ( options?: RequestInit): Promise<getConfiguracionesParametrosResponse> => {
+
+  const res = await fetch(getGetConfiguracionesParametrosUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: getConfiguracionesParametrosResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getConfiguracionesParametrosResponse
+}
+
+
+
+export type updateConfiguracionesParametrosResponse200 = {
+  data: UpdateConfiguracionesParametros200
+  status: 200
+}
+
+export type updateConfiguracionesParametrosResponse400 = {
+  data: UpdateConfiguracionesParametros400
+  status: 400
+}
+
+export type updateConfiguracionesParametrosResponse403 = {
+  data: UpdateConfiguracionesParametros403
+  status: 403
+}
+
+export type updateConfiguracionesParametrosResponseSuccess = (updateConfiguracionesParametrosResponse200) & {
+  headers: Headers;
+};
+export type updateConfiguracionesParametrosResponseError = (updateConfiguracionesParametrosResponse400 | updateConfiguracionesParametrosResponse403) & {
+  headers: Headers;
+};
+
+export type updateConfiguracionesParametrosResponse = (updateConfiguracionesParametrosResponseSuccess | updateConfiguracionesParametrosResponseError)
+
+export const getUpdateConfiguracionesParametrosUrl = () => {
+
+
+
+
+  return `/api/v1/configuraciones/parametros`
+}
+
+/**
+ * Partially updates the business parameters. Requires ADMINISTRADOR or
+ * PLATFORM_OWNER with an organization. Audited as
+ * `configuration.parametros.updated` and emits `OrganizationConfigUpdated`.
+ * @summary Update business parameters
+ */
+export const updateConfiguracionesParametros = async (updateConfiguracionesParametrosBody: UpdateConfiguracionesParametrosBody, options?: RequestInit): Promise<updateConfiguracionesParametrosResponse> => {
+
+  const res = await fetch(getUpdateConfiguracionesParametrosUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateConfiguracionesParametrosBody)
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: updateConfiguracionesParametrosResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as updateConfiguracionesParametrosResponse
+}
+
+
+
+export type getConfiguracionesEfectivasResponse200 = {
+  data: GetConfiguracionesEfectivas200
+  status: 200
+}
+
+export type getConfiguracionesEfectivasResponse403 = {
+  data: GetConfiguracionesEfectivas403
+  status: 403
+}
+
+export type getConfiguracionesEfectivasResponseSuccess = (getConfiguracionesEfectivasResponse200) & {
+  headers: Headers;
+};
+export type getConfiguracionesEfectivasResponseError = (getConfiguracionesEfectivasResponse403) & {
+  headers: Headers;
+};
+
+export type getConfiguracionesEfectivasResponse = (getConfiguracionesEfectivasResponseSuccess | getConfiguracionesEfectivasResponseError)
+
+export const getGetConfiguracionesEfectivasUrl = () => {
+
+
+
+
+  return `/api/v1/configuraciones/efectivas`
+}
+
+/**
+ * Returns every effective business parameter with its origin, which is what
+ * the UI shows in the badge of each field.
+ * @summary Get all effective values with their origin
+ */
+export const getConfiguracionesEfectivas = async ( options?: RequestInit): Promise<getConfiguracionesEfectivasResponse> => {
+
+  const res = await fetch(getGetConfiguracionesEfectivasUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+)
+
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+  const data: getConfiguracionesEfectivasResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getConfiguracionesEfectivasResponse
 }
 
 
@@ -2084,6 +2490,9 @@ if(createImportJobBody.type !== undefined) {
  }
 if(createImportJobBody.organizationId !== undefined) {
  formData.append(`organizationId`, createImportJobBody.organizationId);
+ }
+if(createImportJobBody.installationFromPurchaseDate !== undefined) {
+ formData.append(`installationFromPurchaseDate`, createImportJobBody.installationFromPurchaseDate.toString())
  }
 
   const res = await fetch(getCreateImportJobUrl(),

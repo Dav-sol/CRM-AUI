@@ -6,7 +6,6 @@ description: |
   as an ORGANIZATION user returns 400 (HG-12).
 
 properties:
-
   file:
     type: string
     format: binary
@@ -22,3 +21,15 @@ properties:
   organizationId:
     type: string
     description: Required for PLATFORM_OWNER only.
+
+  installationFromPurchaseDate:
+    type: boolean
+    default: false
+    description: |
+      PURCHASES only. When a row has no `installationDate` column, use
+      `purchaseDate` as the installation date.
+
+      NOT a domain rule: the equivalence is only confirmed for the historical
+      dataset of the Baterías del Caribe UAT, so it is an explicit per-job
+      opt-in. It never becomes a default, and it does not apply to CUSTOMERS
+      or PRODUCTS, where it is ignored.

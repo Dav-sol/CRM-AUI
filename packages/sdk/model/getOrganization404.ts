@@ -12,6 +12,9 @@
  */
 import type { GetOrganization404Error } from './getOrganization404Error';
 
+/**
+ * Standard error response envelope.
+ */
 export type GetOrganization404 = {
-  error?: GetOrganization404Error;
+  error: GetOrganization404Error;
 };

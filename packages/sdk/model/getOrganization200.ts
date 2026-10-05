@@ -12,6 +12,9 @@
  */
 import type { GetOrganization200Data } from './getOrganization200Data';
 
+/**
+ * Standard response containing a single organization.
+ */
 export type GetOrganization200 = {
-  data?: GetOrganization200Data;
+  data: GetOrganization200Data;
 };

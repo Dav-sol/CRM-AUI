@@ -23,4 +23,14 @@ export type CreateImportJobBody = {
   type?: CreateImportJobBodyType;
   /** Required for PLATFORM_OWNER only. */
   organizationId?: string;
+  /**
+     * PURCHASES only. When a row has no `installationDate` column, use
+     * `purchaseDate` as the installation date.
+     *
+     * NOT a domain rule: the equivalence is only confirmed for the historical
+     * dataset of the Baterías del Caribe UAT, so it is an explicit per-job
+     * opt-in. It never becomes a default, and it does not apply to CUSTOMERS
+     * or PRODUCTS, where it is ignored.
+     */
+  installationFromPurchaseDate?: boolean;
 };

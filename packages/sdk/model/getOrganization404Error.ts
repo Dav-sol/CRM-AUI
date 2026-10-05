@@ -10,8 +10,11 @@
  *
  * OpenAPI spec version: 1.0.0
  */
+import type { GetOrganization404ErrorDetails } from './getOrganization404ErrorDetails';
 
 export type GetOrganization404Error = {
   code: string;
   message: string;
+  /** Optional error details */
+  details?: GetOrganization404ErrorDetails;
 };

@@ -10,8 +10,51 @@
  *
  * OpenAPI spec version: 1.0.0
  */
-import type { GetOrganization200DataOrganization } from './getOrganization200DataOrganization';
 
-export type GetOrganization200Data = {
-  organization?: GetOrganization200DataOrganization;
-};
+export type GetOrganization200Data = ({
+  /** Internal organization identifier. */
+  readonly id: string;
+  /** Public organization identifier. */
+  readonly uuid: string;
+  /**
+     * Organization name.
+     * @minLength 1
+     */
+  name: string;
+  /**
+     * URL-safe unique organization slug.
+     * @pattern ^[a-z0-9]+(?:-[a-z0-9]+)*$
+     */
+  slug: string;
+  /**
+     * Optional unique tax identification number.
+     * @nullable
+     */
+  nit?: string | null;
+  /**
+     * Optional organization email address.
+     * @nullable
+     */
+  email?: string | null;
+  /**
+     * Optional organization phone number.
+     * @nullable
+     */
+  phone?: string | null;
+  /**
+     * Optional organization city.
+     * @nullable
+     */
+  city?: string | null;
+  /** Administrative status of the organization. */
+  readonly status: 'ACTIVE' | 'SUSPENDED' | 'INACTIVE';
+  /** Creation timestamp in UTC. */
+  readonly createdAt: string;
+  /** Last update timestamp in UTC. */
+  readonly updatedAt: string;
+  /**
+     * Soft-delete timestamp.
+     * @nullable
+     */
+  readonly deletedAt?: string | null;
+});

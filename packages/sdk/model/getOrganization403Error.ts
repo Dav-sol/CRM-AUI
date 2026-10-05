@@ -10,8 +10,11 @@
  *
  * OpenAPI spec version: 1.0.0
  */
+import type { GetOrganization403ErrorDetails } from './getOrganization403ErrorDetails';
 
 export type GetOrganization403Error = {
   code: string;
   message: string;
+  /** Optional error details */
+  details?: GetOrganization403ErrorDetails;
 };
