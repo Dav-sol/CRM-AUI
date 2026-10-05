@@ -70,6 +70,16 @@ const HEADER_ALIASES: Record<string, string> = {
   purchasedate: 'purchaseDate',
   fechacompra: 'purchaseDate',
   fechafactura: 'purchaseDate',
+  // Lifecycle 025 §1: fecha de instalación. Columna OPCIONAL: si no viene, la
+  // compra se importa sin ella y no entra al lifecycle (gate G8). Es el
+  // camino permanente; el opt-in por job que la deduce de `purchaseDate` es
+  // solo para la UAT de datos históricos.
+  installationdate: 'installationDate',
+  installdate: 'installationDate',
+  installation_date: 'installationDate',
+  fecha_instalacion: 'installationDate',
+  fechainstalacion: 'installationDate',
+  instalacion: 'installationDate',
   razonsocial: 'name',
   codigocliente: 'codcli',
   codigoproducto: 'code',
@@ -435,6 +445,19 @@ export function validateRow(type: ImportType, row: ParsedRow): RowIssue[] {
       'purchaseDate',
       'invalid date, expected YYYY-MM-DD',
       purchaseDate,
+    );
+  }
+
+  // Opcional: si viene, tiene que ser una fecha válida. Si no viene, no es un
+  // problema: la compra queda sin instalación y no entra al lifecycle.
+  const installationDate = cells['installationDate'] ?? '';
+  if (installationDate && !DATE_PATTERN.test(installationDate)) {
+    pushIssue(
+      issues,
+      row.number,
+      'installationDate',
+      'invalid date, expected YYYY-MM-DD',
+      installationDate,
     );
   }
 

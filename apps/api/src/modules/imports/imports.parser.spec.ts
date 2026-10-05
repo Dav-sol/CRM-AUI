@@ -146,6 +146,86 @@ describe('imports.parser', () => {
     });
   });
 
+  describe('installationDate como columna opcional (spec 025 §1)', () => {
+    it('reconoce la columna canónica junto a purchaseDate', async () => {
+      const result = await parseImportFile(
+        bufferFromCsv(
+          'codigo,fecha,fecha_instalacion,cod_cliente,numero,sale,venta\n' +
+            '1202,2026-06-15,2026-06-15,10000,2551,1,317322.6\n',
+        ),
+        'csv',
+        'PURCHASES',
+      );
+      expect(result.issues).toEqual([]);
+      expect(result.rows[0].cells['purchaseDate']).toBe('2026-06-15');
+      expect(result.rows[0].cells['installationDate']).toBe('2026-06-15');
+    });
+
+    it.each([
+      'installationDate',
+      'installation_date',
+      'fecha_instalacion',
+      'fechaInstalacion',
+      'instalacion',
+    ])('acepta el alias %s', async (header) => {
+      const result = await parseImportFile(
+        bufferFromCsv(
+          `codigo,fecha,${header},cod_cliente,numero,sale,venta\n` +
+            `1202,2026-06-15,2026-06-16,10000,2551,1,317322.6\n`,
+        ),
+        'csv',
+        'PURCHASES',
+      );
+      expect(result.rows[0].cells['installationDate']).toBe('2026-06-16');
+    });
+
+    it('NO es obligatoria: una compra sin ella se importa igual', async () => {
+      const result = await parseImportFile(
+        bufferFromCsv(
+          'codigo,fecha,cod_cliente,numero,sale,venta\n' +
+            '1202,2026-06-15,10000,2551,1,317322.6\n',
+        ),
+        'csv',
+        'PURCHASES',
+      );
+      expect(result.issues).toEqual([]);
+      expect(result.rows[0].cells['installationDate']).toBeUndefined();
+    });
+
+    it('rechaza una fecha de instalación inválida si viene', () => {
+      const issues = validateRow('PURCHASES', {
+        number: 2,
+        cells: {
+          codcli: '10000',
+          code: '1202',
+          invoiceNumber: '2551',
+          purchaseDate: '2026-06-15',
+          installationDate: '15/06/2026',
+          quantity: '1',
+          value: '317322.6',
+        },
+      });
+      expect(issues.map((i) => i.field)).toContain('installationDate');
+      expect(issues.find((i) => i.field === 'installationDate')?.message).toBe(
+        'invalid date, expected YYYY-MM-DD',
+      );
+    });
+
+    it('no inventa una fecha: sin columna no hay clave en la fila', async () => {
+      const result = await parseImportFile(
+        bufferFromCsv(
+          'codigo,fecha,cod_cliente,numero,sale,venta\n' +
+            '1202,2026-06-15,10000,2551,1,317322.6\n',
+        ),
+        'csv',
+        'PURCHASES',
+      );
+      expect(Object.keys(result.rows[0].cells)).not.toContain(
+        'installationDate',
+      );
+    });
+  });
+
   describe('parseImportFile XLSX', () => {
     it('parses the first worksheet', async () => {
       const workbook = new ExcelJS.Workbook();

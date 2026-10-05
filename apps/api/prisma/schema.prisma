@@ -700,6 +700,11 @@ model Import {
   filePath         String       @map("file_path")
   fileHash         String?      @map("file_hash")
   idempotencyKey   String?      @map("idempotency_key")
+  // Opt-in POR JOB: cuando la fila no trae columna de instalación, usar
+  // purchase_date como installation_date. No es una regla del dominio: solo
+  // se activa de forma explicita para una importacion concreta (UAT Baterías
+  // del Caribe 2026-10-05). Por defecto false = comportamiento actual.
+  installationFromPurchaseDate Boolean @default(false) @map("installation_from_purchase_date")
   status           ImportStatus @default(PENDING)
   totalRecords     Int          @default(0) @map("total_records")
   processedRecords Int          @default(0) @map("processed_records")

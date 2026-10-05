@@ -112,6 +112,65 @@ describe('ImportsService', () => {
     service = module.get<ImportsService>(ImportsService);
   });
 
+  describe('installationFromPurchaseDate (opt-in por job)', () => {
+    beforeEach(() => {
+      prisma.import.findFirst.mockResolvedValue(null);
+      prisma.import.count.mockResolvedValue(0);
+      prisma.import.create.mockResolvedValue(job);
+    });
+
+    // El mock no declara genéricos, así que `calls` es `any[][]`. Se castea la
+    // lista entera una vez para no dejar accesos `any` sueltos.
+    const creado = (): Record<string, unknown> => {
+      const calls = prisma.import.create.mock.calls as unknown as Array<
+        [{ data: Record<string, unknown> }]
+      >;
+      return calls.at(-1)?.[0].data ?? {};
+    };
+
+    it('PURCHASES + opt-in true: se persiste en el job', async () => {
+      await service.create(
+        orgUser,
+        { type: 'PURCHASES', installationFromPurchaseDate: true },
+        file,
+      );
+
+      expect(creado().installationFromPurchaseDate).toBe(true);
+    });
+
+    it('PURCHASES sin opt-in: false por defecto (comportamiento previo)', async () => {
+      await service.create(orgUser, { type: 'PURCHASES' }, file);
+
+      expect(creado().installationFromPurchaseDate).toBe(false);
+    });
+
+    it('el opt-in se ignora en CUSTOMERS', async () => {
+      await service.create(
+        orgUser,
+        {
+          type: 'CUSTOMERS',
+          installationFromPurchaseDate: true,
+        } as unknown as { type: 'CUSTOMERS' },
+        file,
+      );
+
+      expect(creado().installationFromPurchaseDate).toBe(false);
+    });
+
+    it('el opt-in se ignora en PRODUCTS', async () => {
+      await service.create(
+        orgUser,
+        {
+          type: 'PRODUCTS',
+          installationFromPurchaseDate: true,
+        } as unknown as { type: 'PRODUCTS' },
+        file,
+      );
+
+      expect(creado().installationFromPurchaseDate).toBe(false);
+    });
+  });
+
   describe('create (US1/US10)', () => {
     it('creates a pending job, persists the file and schedules processing', async () => {
       prisma.import.findFirst.mockResolvedValue(null);

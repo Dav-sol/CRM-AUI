@@ -212,6 +212,11 @@ export class ImportsService {
           filePath,
           fileHash,
           idempotencyKey: idempotencyKey ?? null,
+          // Solo tiene efecto en PURCHASES y solo si se pide explícitamente.
+          installationFromPurchaseDate:
+            dto.type === 'PURCHASES'
+              ? (dto.installationFromPurchaseDate ?? false)
+              : false,
           status: 'PENDING',
           createdBy: user.id,
         },

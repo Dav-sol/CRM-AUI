@@ -40,6 +40,20 @@ function csvJob(type: string, filePath: string): Import {
   return { ...job, type, filePath } as unknown as Import;
 }
 
+/** Job con el opt-in de instalación explícito (ver resolveInstallationDate). */
+function csvJobWithInstallFlag(
+  type: string,
+  filePath: string,
+  flag: boolean,
+): Import {
+  return {
+    ...job,
+    type,
+    filePath,
+    installationFromPurchaseDate: flag,
+  } as unknown as Import;
+}
+
 describe('ImportsProcessor', () => {
   let processor: ImportsProcessor;
   let prisma: {
@@ -434,6 +448,112 @@ describe('ImportsProcessor', () => {
           data: expect.objectContaining({ errorRecords: 1 }) as object,
         }),
       );
+    });
+  });
+
+  describe('installationDate (spec 025 §1, opt-in por job)', () => {
+    const CSV_SIN_INSTALACION =
+      'invoiceNumber,codcli,code,purchaseDate,quantity,value\n' +
+      'F-1,C1,P1,2026-06-15,1,450000\n';
+    const CSV_CON_INSTALACION =
+      'invoiceNumber,codcli,code,purchaseDate,installationDate,quantity,value\n' +
+      'F-1,C1,P1,2026-06-15,2026-06-20,1,450000\n';
+
+    beforeEach(() => {
+      prisma.customer.findMany.mockResolvedValue([
+        { id: 'c-1', codcli: 'C1', deletedAt: null },
+      ]);
+      prisma.product.findMany.mockResolvedValue([
+        { id: 'p-1', code: 'P1', deletedAt: null },
+      ]);
+      prisma.purchase.create.mockResolvedValue({ id: 'pu-1' });
+    });
+
+    // El mock no declara genéricos, así que `calls` es `any[][]`. Se castea la
+    // lista entera una vez para no dejar accesos `any` sueltos.
+    const dataDeCompra = (): Record<string, unknown> => {
+      const calls = prisma.purchase.create.mock.calls as unknown as Array<
+        [{ data: Record<string, unknown> }]
+      >;
+      return calls.at(-1)?.[0].data ?? {};
+    };
+
+    it('SIN opt-in y sin columna: installationDate = null (comportamiento previo)', async () => {
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from(CSV_SIN_INSTALACION),
+      );
+
+      await processor.process(csvJob('PURCHASES', 'uploads/x.csv'));
+
+      expect(dataDeCompra().installationDate).toBeNull();
+    });
+
+    it('CON opt-in: installationDate = purchaseDate, copia exacta', async () => {
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from(CSV_SIN_INSTALACION),
+      );
+
+      await processor.process(
+        csvJobWithInstallFlag('PURCHASES', 'uploads/x.csv', true),
+      );
+
+      const data = dataDeCompra();
+      expect(data.installationDate).toEqual(new Date('2026-06-15'));
+      // purchaseDate se conserva intacto: no se sustituye ni se mueve.
+      expect(data.purchaseDate).toEqual(new Date('2026-06-15'));
+    });
+
+    it('CON columna explícita: manda la columna, no el opt-in', async () => {
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from(CSV_CON_INSTALACION),
+      );
+
+      await processor.process(
+        csvJobWithInstallFlag('PURCHASES', 'uploads/x.csv', true),
+      );
+
+      const data = dataDeCompra();
+      expect(data.installationDate).toEqual(new Date('2026-06-20'));
+      expect(data.purchaseDate).toEqual(new Date('2026-06-15'));
+    });
+
+    it('CON columna explícita y SIN opt-in: la columna se respeta igual', async () => {
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from(CSV_CON_INSTALACION),
+      );
+
+      await processor.process(csvJob('PURCHASES', 'uploads/x.csv'));
+
+      expect(dataDeCompra().installationDate).toEqual(new Date('2026-06-20'));
+    });
+
+    it('no calcula ni desplaza la fecha: copia exacta, sin +N días', async () => {
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from(CSV_SIN_INSTALACION),
+      );
+
+      await processor.process(
+        csvJobWithInstallFlag('PURCHASES', 'uploads/x.csv', true),
+      );
+
+      const { installationDate, purchaseDate } = dataDeCompra();
+      expect((installationDate as Date).getTime()).toBe(
+        (purchaseDate as Date).getTime(),
+      );
+      // Tampoco es "hoy": 15/06/2026 está en el pasado.
+      expect((installationDate as Date).getTime()).toBeLessThan(Date.now());
+    });
+
+    it('opt-in explícito false equivale a no tenerlo', async () => {
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from(CSV_SIN_INSTALACION),
+      );
+
+      await processor.process(
+        csvJobWithInstallFlag('PURCHASES', 'uploads/x.csv', false),
+      );
+
+      expect(dataDeCompra().installationDate).toBeNull();
     });
   });
 

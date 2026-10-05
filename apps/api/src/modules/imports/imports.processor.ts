@@ -469,6 +469,7 @@ export class ImportsProcessor {
         productId: product.id,
         invoiceNumber: cells['invoiceNumber'] ?? '',
         purchaseDate: new Date(cells['purchaseDate'] ?? ''),
+        installationDate: this.resolveInstallationDate(job, cells),
         warrantyMonths: toWarrantyMonths(cells) ?? product.warrantyMonths,
         warrantyExpiresAt: (() => {
           const months = toWarrantyMonths(cells) ?? product.warrantyMonths;
@@ -490,6 +491,36 @@ export class ImportsProcessor {
       purchaseId: purchase.id,
       invoiceNumber: purchase.invoiceNumber,
     });
+  }
+
+  /**
+   * Resuelve `installationDate` de una fila de compra.
+   *
+   * Precedencia, y ninguna más:
+   *   1. La columna `installationDate` del fichero, si viene y es válida.
+   *      Es el camino normal y permanente.
+   *   2. Si el job se creó con `installationFromPurchaseDate`, se copia
+   *      `purchaseDate` tal cual. Solo para datos donde esa equivalencia está
+   *      confirmada (UAT Baterías del Caribe, 2026-10-05).
+   *   3. Sin columna y sin opt-in: `null`. La compra existe y no entra al
+   *      lifecycle (gate G8 de spec 025 §1).
+   *
+   * Nunca se calcula una fecha: no se usa "purchaseDate + N días", ni la fecha
+   * actual, ni la de creación del registro. Es una copia exacta o nada.
+   */
+  private resolveInstallationDate(
+    job: Import,
+    cells: Record<string, string>,
+  ): Date | null {
+    const explicit = (cells['installationDate'] ?? '').trim();
+    if (explicit) {
+      return new Date(explicit);
+    }
+    if (job.installationFromPurchaseDate) {
+      const purchaseDate = (cells['purchaseDate'] ?? '').trim();
+      return purchaseDate ? new Date(purchaseDate) : null;
+    }
+    return null;
   }
 
   private emit<T>(
