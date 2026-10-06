@@ -161,7 +161,10 @@ export class ImportsProcessor {
     const transitioned = await this.prisma.import.updateMany({
       where: { id: job.id, status: 'VALIDATING' },
       data: {
-        totalRecords: parsed.rows.length,
+        // Conjunto intentado en ESTA ejecución, no el total del fichero: en un
+        // retry solo se reprocesan las filas fallidas, y Total debe cuadrar
+        // con Procesadas + Errores de esa misma ejecución.
+        totalRecords: rows.length,
         status: 'PROCESSING',
         updatedBy: job.userId,
       },
@@ -176,17 +179,21 @@ export class ImportsProcessor {
       outcome: 'success',
       userId: job.userId,
       organizationId: job.organizationId,
-      description: `import validated type=${job.type} rows=${parsed.rows.length}`,
+      description: `import validated type=${job.type} rows=${rows.length}`,
     });
 
     this.emit('ImportValidated', 'PROCESSING', job, {
       importId: job.uuid,
       type: job.type,
-      totalRecords: parsed.rows.length,
+      totalRecords: rows.length,
     });
 
     const state = await this.createRowState(job);
     const errors: RowIssue[] = [];
+    // Conjunto COMPLETO de filas fallidas de esta ejecución (validación y
+    // persistencia). Sin límite: es la fuente de verdad del alcance del retry.
+    // `errors` sigue capado a ERROR_SAMPLE_LIMIT solo para la UI.
+    const failedRows = new Set<number>();
     let processed = 0;
 
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
@@ -195,6 +202,7 @@ export class ImportsProcessor {
         const rowErrors = validateRow(job.type, row);
         if (rowErrors.length > 0) {
           errors.push(...rowErrors);
+          failedRows.add(row.number);
           continue;
         }
         try {
@@ -215,6 +223,7 @@ export class ImportsProcessor {
             message: 'row could not be stored',
             raw: error instanceof Error ? error.message : 'unknown',
           });
+          failedRows.add(row.number);
         }
       }
 
@@ -224,6 +233,7 @@ export class ImportsProcessor {
           processedRecords: processed,
           errorRecords: errors.length,
           errors: toErrorsJson(errors),
+          failedRowNumbers: Array.from(failedRows),
           updatedBy: job.userId,
         },
       });
@@ -248,6 +258,7 @@ export class ImportsProcessor {
         status: finalStatus,
         completedAt: new Date(),
         errors: toErrorsJson(errors),
+        failedRowNumbers: Array.from(failedRows),
         updatedBy: job.userId,
       },
     });

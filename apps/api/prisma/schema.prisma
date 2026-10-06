@@ -700,6 +700,10 @@ model Import {
   filePath         String       @map("file_path")
   fileHash         String?      @map("file_hash")
   idempotencyKey   String?      @map("idempotency_key")
+  // Conjunto COMPLETO de números de fila fallidos, para el retry. No confundir
+  // con `errors.rows`, que está capado a 100 para la UI: este campo no tiene
+  // límite y es la única fuente de verdad del alcance del retry.
+  failedRowNumbers Int[]   @default([]) @map("failed_row_numbers")
   // Opt-in POR JOB: cuando la fila no trae columna de instalación, usar
   // purchase_date como installation_date. No es una regla del dominio: solo
   // se activa de forma explicita para una importacion concreta (UAT Baterías

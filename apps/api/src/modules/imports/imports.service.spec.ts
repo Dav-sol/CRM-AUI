@@ -433,11 +433,15 @@ describe('ImportsService', () => {
   });
 
   describe('retry (US9)', () => {
-    it('retries a PARTIAL job reprocessing only error rows', async () => {
+    it('retries a PARTIAL job reprocessing only failed rows', async () => {
       const partial = {
         ...job,
         status: 'PARTIAL',
+        errorRecords: 1,
+        // La muestra de UI puede estar capada: el alcance sale del conjunto
+        // completo, no de errors.rows.
         errors: { rows: [{ row: 3, field: 'codcli', message: 'x' }] },
+        failedRowNumbers: [3],
       };
       prisma.import.findFirst.mockResolvedValue(partial);
       prisma.import.count.mockResolvedValue(0);
@@ -455,6 +459,91 @@ describe('ImportsService', () => {
       expect(auditService.record).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'import.retry', outcome: 'success' }),
       );
+    });
+
+    it('retries ALL failed rows even when the UI sample is capped at 100', async () => {
+      // Caso real UAT: 5740 filas, muestra capada, 150 fallidas registradas.
+      const failed = Array.from({ length: 150 }, (_, i) => i + 2);
+      const partial = {
+        ...job,
+        status: 'PARTIAL',
+        errorRecords: 150,
+        errors: {
+          rows: failed
+            .slice(0, 100)
+            .map((row) => ({ row, field: '_db', message: 'x' })),
+        },
+        failedRowNumbers: failed,
+      };
+      prisma.import.findFirst.mockResolvedValue(partial);
+      prisma.import.count.mockResolvedValue(0);
+      prisma.import.update.mockResolvedValue({
+        ...partial,
+        status: 'PROCESSING',
+      });
+
+      await service.retry(orgUser, 'job-1');
+
+      const calls = processor.process.mock.calls as unknown as Array<
+        [unknown, Set<number>]
+      >;
+      const scope = calls.at(-1)?.[1] ?? new Set<number>();
+      expect(scope).toBeInstanceOf(Set);
+      expect(scope.size).toBe(150);
+      expect([...scope].sort((a, b) => a - b)).toEqual(failed);
+    });
+
+    it('refuses to retry a legacy PARTIAL job without failed-row tracking', async () => {
+      // Jobs anteriores al campo: errors.rows guarda como mucho 100 filas y
+      // reprocesarlas sería un alcance parcial silencioso. Se rechaza de forma
+      // explícita en vez de inventar el alcance.
+      const legacy = {
+        ...job,
+        status: 'PARTIAL',
+        errorRecords: 4,
+        errors: { rows: [{ row: 13, field: 'quantity', message: 'x' }] },
+        failedRowNumbers: [],
+      };
+      prisma.import.findFirst.mockResolvedValue(legacy);
+      prisma.import.count.mockResolvedValue(0);
+
+      const thrown: unknown = await service.retry(orgUser, 'job-1').then(
+        () => null,
+        (error: unknown) => error,
+      );
+      const code = (thrown as { response: { error: { code: string } } })
+        .response.error.code;
+      expect(code).toBe('RETRY_SCOPE_UNAVAILABLE');
+      expect(processor.process).not.toHaveBeenCalled();
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'import.retry',
+          outcome: 'failure',
+        }),
+      );
+    });
+
+    it('resets the failed-row set when a retry starts', async () => {
+      const partial = {
+        ...job,
+        status: 'PARTIAL',
+        errorRecords: 2,
+        errors: { rows: [] },
+        failedRowNumbers: [4, 7],
+      };
+      prisma.import.findFirst.mockResolvedValue(partial);
+      prisma.import.count.mockResolvedValue(0);
+      prisma.import.update.mockResolvedValue({
+        ...partial,
+        status: 'PROCESSING',
+      });
+
+      await service.retry(orgUser, 'job-1');
+
+      const calls = prisma.import.update.mock.calls as unknown as Array<
+        [{ data: Record<string, unknown> }]
+      >;
+      expect(calls.at(-1)?.[0].data.failedRowNumbers).toEqual([]);
     });
 
     it('retries a FAILED job reprocessing the whole file', async () => {

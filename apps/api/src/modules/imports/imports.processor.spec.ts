@@ -557,6 +557,142 @@ describe('ImportsProcessor', () => {
     });
   });
 
+  describe('failedRowNumbers: la muestra de UI no limita el retry', () => {
+    // Los mocks no declaran genéricos (`calls` es `any[][]`): se castea cada
+    // lista una vez a su forma real en vez de dejar accesos `any` sueltos.
+    type UpdateArgs = { data: Record<string, unknown> };
+    type UpdateCalls = Array<[UpdateArgs]>;
+    const lastUpdateManyWithStatus = (
+      status: string,
+    ): Record<string, unknown> | undefined => {
+      const calls = prisma.import.updateMany.mock
+        .calls as unknown as UpdateCalls;
+      const found = calls
+        .map((call) => call[0].data)
+        .filter((data) => data.status === status)
+        .at(-1);
+      return found;
+    };
+    const finalUpdate = (): Record<string, unknown> =>
+      lastUpdateManyWithStatus('PARTIAL') ??
+      lastUpdateManyWithStatus('COMPLETED') ??
+      {};
+
+    it('con >100 fallos: errors.rows se capa pero failedRowNumbers no', async () => {
+      // 250 clientes con email inválido: todos fallan en validación.
+      const filas = Array.from(
+        { length: 250 },
+        (_, i) => `C-${i},Cliente ${i},300000000${i % 10},mal${i}`,
+      ).join('\n');
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from(`codcli,name,phone,email\n${filas}\n`),
+      );
+
+      await processor.process(csvJob('CUSTOMERS', 'uploads/x.csv'));
+
+      const final = finalUpdate();
+      expect(final.status).toBe('PARTIAL');
+      const muestra = ((final.errors as { rows: unknown[] }).rows ?? []).length;
+      expect(muestra).toBeLessThanOrEqual(100);
+      const alcance = final.failedRowNumbers as number[];
+      expect(alcance).toHaveLength(250);
+      expect(new Set(alcance).size).toBe(250);
+    });
+
+    it('el retry solo reprocesa las filas fallidas, no los éxitos', async () => {
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from('codcli,name\nC-1,Uno\nC-2,Dos\nC-3,Tres\nC-4,Cuatro\n'),
+      );
+      prisma.customer.create.mockResolvedValue({ id: 'c-x' });
+
+      // Fallan las filas 3 y 5 (Excel): solo esas se reintentan.
+      await processor.process(
+        csvJob('CUSTOMERS', 'uploads/x.csv'),
+        new Set([3, 5]),
+      );
+
+      const creados = (
+        prisma.customer.create.mock.calls as unknown as Array<
+          [{ data: Record<string, unknown> }]
+        >
+      ).map((call) => call[0].data.codcli);
+      expect(creados.sort()).toEqual(['C-2', 'C-4']);
+    });
+
+    it('un import limpio deja el conjunto de retry vacío', async () => {
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from('codcli,name\nC-1,Uno\n'),
+      );
+      prisma.customer.create.mockResolvedValue({ id: 'c-1' });
+
+      await processor.process(csvJob('CUSTOMERS', 'uploads/x.csv'));
+
+      const final = finalUpdate();
+      expect(final.status).toBe('COMPLETED');
+      expect(final.failedRowNumbers).toEqual([]);
+    });
+
+    it('caso UAT a escala real: 5740 filas, retry completo tras cargar catálogo', async () => {
+      // 5549 válidas + 190 devoluciones (quantity negativa) + 1 con quantity 0.
+      const lineas: string[] = [];
+      for (let i = 0; i < 5740; i++) {
+        const quantity = i < 190 ? '-1' : i === 190 ? '0' : '1';
+        lineas.push(
+          `F-${i},C-${i % 50},P-${i % 20},2026-06-15,${quantity},450000`,
+        );
+      }
+      const csv =
+        'invoiceNumber,codcli,code,purchaseDate,quantity,value\n' +
+        lineas.join('\n') +
+        '\n';
+      (readFile as jest.Mock).mockResolvedValue(Buffer.from(csv));
+
+      // Primera ejecución sin catálogo: todo lo válido falla en persistencia.
+      prisma.customer.findMany.mockResolvedValue([]);
+      prisma.product.findMany.mockResolvedValue([]);
+      prisma.purchase.create.mockResolvedValue({ id: 'pu-1' });
+
+      await processor.process(csvJob('PURCHASES', 'uploads/x.csv'));
+
+      const run1 = finalUpdate();
+      expect(run1.status).toBe('PARTIAL');
+      expect(
+        ((run1.errors as { rows: unknown[] }).rows ?? []).length,
+      ).toBeLessThanOrEqual(100);
+      const alcance1 = run1.failedRowNumbers as number[];
+      expect(alcance1).toHaveLength(5740);
+
+      // Se carga el catálogo y se reintenta SOLO el conjunto registrado.
+      const clientes = Array.from({ length: 50 }, (_, i) => ({
+        id: `c-${i}`,
+        codcli: `C-${i}`,
+        deletedAt: null,
+      }));
+      const productos = Array.from({ length: 20 }, (_, i) => ({
+        id: `p-${i}`,
+        code: `P-${i}`,
+        deletedAt: null,
+        warrantyMonths: null,
+      }));
+      prisma.customer.findMany.mockResolvedValue(clientes);
+      prisma.product.findMany.mockResolvedValue(productos);
+      prisma.purchase.create.mockClear();
+      prisma.import.update.mockClear();
+      prisma.import.updateMany.mockClear();
+
+      await processor.process(
+        csvJob('PURCHASES', 'uploads/x.csv'),
+        new Set(alcance1),
+      );
+
+      // Las 5549 válidas entran; las 191 inválidas vuelven a fallar.
+      expect(prisma.purchase.create).toHaveBeenCalledTimes(5549);
+      const run2 = lastUpdateManyWithStatus('PARTIAL');
+      expect(run2).toBeDefined();
+      expect(run2?.failedRowNumbers).toHaveLength(191);
+    }, 120000);
+  });
+
   describe('retry (US9)', () => {
     it('reprocesses only the rows previously in error', async () => {
       (readFile as jest.Mock).mockResolvedValue(

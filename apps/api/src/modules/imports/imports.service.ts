@@ -398,13 +398,37 @@ export class ImportsService {
     }
 
     const isStructuralRetry = job.status === 'FAILED';
+    // Los jobs PARTIAL anteriores a failedRowNumbers no guardaron el conjunto
+    // completo de filas fallidas (solo la muestra de 100). Reintentarlo
+    // reprocesaría una muestra parcial en silencio: se rechaza de forma
+    // explícita en vez de inventar un alcance. Para recuperarlos hay que
+    // resubir el fichero.
+    if (
+      !isStructuralRetry &&
+      job.errorRecords > 0 &&
+      job.failedRowNumbers.length === 0
+    ) {
+      await this.auditService.record({
+        module: MODULE,
+        action: 'import.retry',
+        outcome: 'failure',
+        userId: user.id,
+        organizationId: job.organizationId,
+        metadata: { reason: 'retry_scope_unavailable' },
+      });
+      throw new ConflictException({
+        error: {
+          code: 'RETRY_SCOPE_UNAVAILABLE',
+          message:
+            'This import predates failed-row tracking and cannot be retried automatically. Re-upload the file to process the remaining rows.',
+        },
+      });
+    }
+    // El alcance del retry es el conjunto COMPLETO de filas fallidas, no la
+    // muestra de `errors.rows` (capada a 100 para la UI).
     const retryRows = isStructuralRetry
       ? undefined
-      : new Set(
-          ((job.errors as { rows?: { row: number }[] } | null)?.rows ?? [])
-            .map((entry) => entry.row)
-            .filter((row): row is number => typeof row === 'number'),
-        );
+      : new Set(job.failedRowNumbers);
 
     const updated = await this.prisma.import.update({
       where: { id: job.id },
@@ -414,6 +438,7 @@ export class ImportsService {
         completedAt: null,
         processedRecords: 0,
         errorRecords: 0,
+        failedRowNumbers: [],
         updatedBy: user.id,
       },
     });
