@@ -27,4 +27,10 @@ echo "==> orígenes: $NEXT_ALLOWED_DEV_ORIGINS"
 echo "==> log:      $LOG"
 
 cd "$ROOT"
+# WEB_DEV_LOG=stdout envía la salida a stdout en lugar de al archivo, para que
+# systemd la capture en el journal. El valor por defecto (file) no cambia: el
+# uso manual sigue escribiendo en $LOG.
+if [ "${WEB_DEV_LOG:-file}" = "stdout" ]; then
+  exec corepack pnpm --filter web exec next dev -p "$PORT" -H 0.0.0.0
+fi
 exec corepack pnpm --filter web exec next dev -p "$PORT" -H 0.0.0.0 >"$LOG" 2>&1
