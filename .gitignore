@@ -44,3 +44,6 @@ Thumbs.db
 !.impeccable/design.json
 !.impeccable/critique/
 # impeccable-ignore-end
+
+# ERP exports: never track spreadsheets
+specs/Data-Excel/*.xlsx
