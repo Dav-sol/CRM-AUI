@@ -1,9 +1,47 @@
 /**
- * Fórmulas puras del lifecycle de postventa (spec 025). Sin I/O: cualquier
- * decisión que dependa solo de fechas vive aquí y se testea aislada.
+ * Fórmulas puras del lifecycle de postventa. Sin I/O: cualquier decisión que
+ * dependa solo de fechas vive aquí y se testea aislada.
  *
- * Regla estructural: la fecha base es SIEMPRE `installationDate`. Si no existe,
- * la función devuelve null y el gate G8 bloquea el envío (§1).
+ * ══ CONTRATO CANÓNICO DE LA FUENTE DE VERDAD TEMPORAL ══
+ *
+ * El PIT (`specs/026-pit-final/pit.md`) es la autoridad funcional. Las fechas
+ * comerciales son DÍAS CIVILES de `America/Bogota`, persistidos como `DATE`.
+ *
+ * Hay DOS bases distintas y confundirlas es el error que este módulo previene:
+ *
+ * 1. **Fecha de COMPRA (`purchaseDate`)** — base de la GARANTÍA. Es la base de
+ *    todo lo derivado del vencimiento: el propio vencimiento, el preaviso de
+ *    caducidad (RF-07) y la secuencia de retención (RF-06). No puede
+ *    sustituirse por la instalación (decisión D-1).
+ *
+ * 2. **Fecha de INSTALACIÓN (`installationDate`)** — dato del proceso de
+ *    montaje. Ya NO es base de nada ni requisito de elegibilidad: solo se
+ *    conserva como información de la compra.
+ *
+ * Reglas que se aplican sin excepción:
+ * - **Vencimiento** = `addMonthsClamped(purchaseDate, warrantyMonths)`
+ *   (P1.8: meses de calendario, conservando el día y ajustando al último día
+ *   válido del mes destino cuando el día no existe).
+ * - `warrantyMonths` nulo o ≤ 0 ⇒ **no hay vencimiento**; se devuelve `null`
+ *   y las etapas derivadas no se planifican. Nunca se inventa una fecha.
+ * - Las etapas derivadas del vencimiento heredan la base de COMPRA, no la del
+ *   ciclo.
+ * - Toda aritmética se hace sobre los campos **UTC** del instante. Una fecha
+ *   civil no tiene zona: aplicarle la de una organización la desplazaría un
+ *   día (RNF-07).
+ *
+ * DECISIONES HUMANAS APLICADAS (ya resueltas, no reabiertas):
+ * - `commercial_cycles.start_date` representa la FECHA DE COMPRA del ERP.
+ * - Una compra entra al lifecycle con fecha de compra válida, aunque no tenga
+ *   fecha de instalación: la instalación es un dato del montaje, no un requisito
+ *   de elegibilidad, y el gate G8 evalúa la base canónica del ciclo.
+ * - Los plazos de etapas sin respaldo en el PIT (+3d, +60d/+67d de
+ *   mantenimiento, +6m/+12m de seguimiento) quedan FUERA de la lógica activa:
+ *   procedían de un `spec-025` vacío. No se sustituyen por otros inventados.
+ *
+ * ETAPAS VIGENTES (las únicas que programa el ciclo comercial):
+ *   RF-03 revisiones bimensuales · RF-07 preaviso −30d · RF-06 retención +60d,
+ *   +90d, +6m, +12m, +18m. Ver `lifecycle-milestones.planMilestones`.
  */
 
 export const MS_PER_DAY = 86_400_000;
@@ -48,25 +86,98 @@ export function diffInDays(later: Date, earlier: Date): number {
 }
 
 /**
- * Fecha base del lifecycle (§1). Devuelve null cuando no hay instalación:
- * el lifecycle no existe todavía y nada puede calcularse.
+ * Suma de meses calendario con ajuste al último día válido (PIT §2.1, P1.8).
+ *
+ * Contrato:
+ * - Se conserva el día del mes cuando existe en el mes de destino.
+ * - Si el día no existe en el mes de destino, se ajusta al último día de ese
+ *   mes (31-ene + 1 mes → 28-feb en año común, → 29-feb en bisiesto).
+ * - Opera sobre los campos de fecha en **UTC** y conserva la hora del
+ *   instante base, de modo que el resultado no depende de la zona horaria del
+ *   proceso. RNF-07 exige conversiones explícitas.
+ * - Es un cálculo **hacia adelante** únicamente: `months` negativos no forman
+ *   parte de la regla aprobada y no se cubren aquí.
+ * - No interpreta fechas civiles del ERP: la zona horaria de negocio
+ *   (`America/Bogota`) se aplica antes de llamar a esta función. Resolver esa
+ *   conversión es una decisión pendiente (T-D2).
+ *
+ * @param base Instante base. `Invalid Date` o `NaN` en `months` produce
+ *   `Invalid Date`, de forma explícita y sin lanzar.
+ * @param months Meses a sumar. Se trunca a entero.
+ * @returns Instante resultante, o `Invalid Date` si la entrada no es válida.
+ */
+export function addMonthsClamped(base: Date, months: number): Date {
+  if (!(base instanceof Date) || Number.isNaN(base.getTime())) {
+    return new Date(NaN);
+  }
+  if (typeof months !== 'number' || !Number.isFinite(months)) {
+    return new Date(NaN);
+  }
+
+  const wholeMonths = Math.trunc(months);
+  const day = base.getUTCDate();
+
+  // Se trabaja sobre el mes destino en UTC y se resta 1 día al overflow antes
+  // de fijar el mes: `setUTCMonth` normaliza 31-feb a 3-mar, no a 28-feb.
+  const shifted = new Date(base.getTime());
+  shifted.setUTCDate(1);
+  shifted.setUTCMonth(shifted.getUTCMonth() + wholeMonths);
+
+  const lastDayOfTargetMonth = new Date(
+    Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+
+  shifted.setUTCDate(Math.min(day, lastDayOfTargetMonth));
+  return shifted;
+}
+
+/**
+ * Base del CICLO: la fecha de instalación. No es la base de la garantía.
+ *
+ * Se mantiene separada de `warrantyEnd` a propósito: D-1 cambió la base del
+ * VENCIMIENTO a la fecha de compra, pero no redefinió cuándo empieza el ciclo.
+ * Devuelve `null` cuando no hay instalación, que es lo que consulta el gate G8.
+ *
+ * @deprecated La base del ciclo es la fecha de compra (decisión aprobada). Esta
+ * función se mantiene solo para callers externos; no debe usarse para anclar
+ * etapas.
  */
 export function baseDate(installationDate: Date | null): Date | null {
   return installationDate ?? null;
 }
 
 /**
- * Fin de garantía contado desde la INSTALACIÓN, no desde la venta (§1).
+ * Base canónica del ciclo comercial: la fecha de compra del ERP.
+ *
+ * Función de referencia para cualquier consumidor que necesite el ancla
+ * temporal sin repetir la decisión. No acepta la fecha de instalación como
+ * sustituto.
+ */
+export function cycleBaseDate(purchaseDate: Date | null): Date | null {
+  return purchaseDate ?? null;
+}
+
+/**
+ * Fin de garantía contado desde la FECHA DE COMPRA del ERP (D-1, PIT §4 RF-02).
+ *
+ * Antes se calculaba desde la instalación y con un multiplicador de días
+ * (`30.4375`), lo que incumplía tres criterios del PIT a la vez: la base, el
+ * método (días en lugar de meses de calendario) y el ajuste de fin de mes.
+ *
+ * Ahora usa `addMonthsClamped`, que suma meses calendario y ajusta al último
+ * día válido del mes destino cuando el día no existe (P1.8). La fecha de
+ * instalación no puede sustituir a la de compra.
+ *
  * Si la garantía no está definida no hay ventana que comunicarle al cliente.
  */
 export function warrantyEnd(
-  installationDate: Date,
+  purchaseDate: Date,
   warrantyMonths: number | null,
 ): Date | null {
   if (!warrantyMonths || warrantyMonths <= 0) {
     return null;
   }
-  return addDays(installationDate, Math.round(warrantyMonths * 30.4375));
+  return addMonthsClamped(purchaseDate, warrantyMonths);
 }
 
 /**
@@ -107,27 +218,31 @@ export function nextMaintenanceAttempt(
   return 'STOP';
 }
 
+/**
+ * Los hitos derivados del vencimiento heredan la base de D-1: se calculan
+ * desde la fecha de compra a través de `warrantyEnd`.
+ */
 export function preExpiryAt(
-  installationDate: Date,
+  purchaseDate: Date,
   warrantyMonths: number | null,
 ): Date | null {
-  const end = warrantyEnd(installationDate, warrantyMonths);
+  const end = warrantyEnd(purchaseDate, warrantyMonths);
   return end ? addDays(end, -PRE_EXPIRY_OFFSET_DAYS) : null;
 }
 
 export function postExpiry60At(
-  installationDate: Date,
+  purchaseDate: Date,
   warrantyMonths: number | null,
 ): Date | null {
-  const end = warrantyEnd(installationDate, warrantyMonths);
+  const end = warrantyEnd(purchaseDate, warrantyMonths);
   return end ? addDays(end, POST_EXPIRY_60_OFFSET_DAYS) : null;
 }
 
 export function postExpiry90At(
-  installationDate: Date,
+  purchaseDate: Date,
   warrantyMonths: number | null,
 ): Date | null {
-  const end = warrantyEnd(installationDate, warrantyMonths);
+  const end = warrantyEnd(purchaseDate, warrantyMonths);
   return end ? addDays(end, POST_EXPIRY_90_OFFSET_DAYS) : null;
 }
 

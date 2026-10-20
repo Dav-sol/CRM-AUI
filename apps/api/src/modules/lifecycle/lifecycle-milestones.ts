@@ -1,159 +1,180 @@
 /**
- * Planificador de hitos del lifecycle (spec 025 §3).
+ * Planificador de hitos del ciclo comercial.
  *
- * Devuelve QUÉ hito, CUÁNDO y con qué prioridad. No devuelve texto: el origen
- * del contenido de cada hito es una decisión pendiente (ver
- * `MilestoneTemplateSource`), porque la spec define la acción pero no el texto,
- * y el catálogo de plantillas está a la espera de revisión con Meta.
+ * ══ AUTORIDAD ══
+ * Las etapas de este módulo son EXCLUSIVAMENTE las que el PIT
+ * (`specs/026-pit-final/pit.md`) define con texto y plazo:
  *
- * Reglas implementadas, todas cerradas en la spec:
- *   §3  Reseña entre 2 y 5 días, una sola vez por cliente/ciclo
- *   §3  Mantenimiento solo con consentimiento; +60 y +7; parada tras el 2º
- *   §3  Garantía sin mensajes periódicos no consentidos
- *   §9  Primer contacto pre-vencimiento a -30
- *   §13 +60 recuperación
- *   §14 +90 se envía aunque ignoró +60
- *   §5  Prioridad: vencimiento > mantenimiento consentido > resto
+ *   RF-03  Revisiones durante la garantía, cada dos meses desde la fecha base
+ *          (la fecha de compra del ERP): meses 2, 4, 6, 8, 10, 12, 14…
+ *          hasta el vencimiento, sin programar revisiones fuera de la garantía.
+ *   RF-07  Etapa previa al vencimiento, 30 días antes de la fecha de
+ *          vencimiento.
+ *   RF-06  Secuencia de retención, medida desde el VENCIMIENTO ORIGINAL:
+ *          +60d, +90d, +6m, +12m, +18m.
  *
- * NO implementado por decisión pendiente:
- *   §10  Segundo contacto pre-vencimiento → PD-1 (sin condición definida)
- *   §15  Cadencia de la campaña post-vencimiento → PD-8
+ * ══ DESCARTADO POR FALTA DE AUTORIDAD ══
+ * Los plazos `+3d`, `+60d/+67d` (mantenimiento) y la ventana de reseña `2..5`
+ * procedían de `spec-025`, que está vacío y por tanto ya no aporta ninguna
+ * autoridad funcional. No se reimplementan aquí ni se sustituyen por otros
+ * plazos inventados: RF-04 y RF-05 describen el contacto inicial de captura
+ * de placa y la solicitud de reseña, pero el PIT no fija ningún desplazamiento
+ * para ellas.
+ *
+ * ══ BASE TEMPORAL ══
+ * Todo se ancla en la fecha de compra del ERP (decisión D-1) y se calcula con
+ * meses de calendario y ajuste de fin de mes (P1.8). La fecha de instalación no
+ * sustituye a la de compra.
  */
 import {
-  MAINTENANCE_1ST_OFFSET_DAYS,
-  MAINTENANCE_2ND_OFFSET_DAYS,
   POST_EXPIRY_60_OFFSET_DAYS,
   POST_EXPIRY_90_OFFSET_DAYS,
   PRE_EXPIRY_OFFSET_DAYS,
-  REVIEW_MAX_DAYS,
-  REVIEW_MIN_DAYS,
+  addDays,
+  addMonthsClamped,
   warrantyEnd,
   type CommunicationCategory,
 } from './lifecycle.rules';
 
 export type MilestoneKind =
-  | 'REVIEW'
-  | 'MAINTENANCE_1ST'
-  | 'MAINTENANCE_2ND'
+  | 'REVIEW_BIMONTHLY'
   | 'PRE_EXPIRY'
-  | 'POST_EXPIRY_60'
-  | 'POST_EXPIRY_90';
+  | 'RETENTION_60D'
+  | 'RETENTION_90D'
+  | 'RETENTION_6M'
+  | 'RETENTION_12M'
+  | 'RETENTION_18M';
 
 export type PlannedMilestone = {
   kind: MilestoneKind;
-  /** Fecha objetivo, en la misma base que la instalación. */
+  /** Fecha objetivo civil. */
   scheduledDate: Date;
-  /** Etiqueta legible para logs y para la UI del asesor. */
+  /** Etiqueta legible para logs y para la interfaz del asesor. */
   stageName: string;
   category: CommunicationCategory;
-  /** Los hitos de mantenimiento dependen del gate G7. */
-  requiresMaintenanceConsent: boolean;
-  /** Los de garantía/vencimiento nunca se saltan por consentimiento. */
-  requiresValidInstallation: true;
+  /**
+   * Desplazamiento respecto a su ancla, para trazabilidad. En las revisiones
+   * bimensuales el ancla es la compra; en el resto, el vencimiento.
+   */
+  offsetLabel: string;
 };
 
 export type MilestonePlanInput = {
-  /** §1: fecha base. Sin ella no hay lifecycle y no se planifica nada. */
-  installationDate: Date | null;
+  /**
+   * Base de todo el ciclo comercial (decisión aprobada): la fecha de compra
+   * registrada por el ERP. Sin ella no hay ciclo y no se planifica nada.
+   */
+  purchaseDate: Date | null;
   warrantyMonths: number | null;
-  /** Días desde la instalación dentro de la ventana 2..5 (PD-10 lo define). */
-  reviewOffsetDays: number;
-  /** Intentos de mantenimiento ya realizados. A partir del 2º no hay más. */
-  maintenanceAttemptsMade?: number;
 };
+
+/** Cadencia de revisiones durante la garantía (RF-03): meses 2, 4, 6, 8… */
+export const REVIEW_INTERVAL_MONTHS = 2;
 
 const STAGE_NAMES: Record<MilestoneKind, string> = {
-  REVIEW: 'Solicitud de reseña',
-  MAINTENANCE_1ST: 'Revisión preventiva (1er intento)',
-  MAINTENANCE_2ND: 'Revisión preventiva (2º intento)',
-  PRE_EXPIRY: 'Pre-vencimiento de garantía',
-  POST_EXPIRY_60: 'Recuperación post-garantía (+60)',
-  POST_EXPIRY_90: 'Recuperación post-garantía (+90)',
+  REVIEW_BIMONTHLY: 'Revisión de garantía',
+  PRE_EXPIRY: 'Vencimiento próximo',
+  RETENTION_60D: 'Retención (+60 días)',
+  RETENTION_90D: 'Retención (+90 días)',
+  RETENTION_6M: 'Retención (+6 meses)',
+  RETENTION_12M: 'Retención (+12 meses)',
+  RETENTION_18M: 'Retención (+18 meses)',
 };
 
-const DAY = 86_400_000;
-const addDays = (date: Date, days: number): Date =>
-  new Date(date.getTime() + days * DAY);
+/** Secuencia de retención del PIT (RF-06), anclada al vencimiento original. */
+const RETENTION_PLAN: Array<{
+  kind: MilestoneKind;
+  label: string;
+  apply: (expiry: Date) => Date;
+}> = [
+  {
+    kind: 'RETENTION_60D',
+    label: '+60d',
+    apply: (expiry) => addDays(expiry, POST_EXPIRY_60_OFFSET_DAYS),
+  },
+  {
+    kind: 'RETENTION_90D',
+    label: '+90d',
+    apply: (expiry) => addDays(expiry, POST_EXPIRY_90_OFFSET_DAYS),
+  },
+  {
+    kind: 'RETENTION_6M',
+    label: '+6m',
+    apply: (expiry) => addMonthsClamped(expiry, 6),
+  },
+  {
+    kind: 'RETENTION_12M',
+    label: '+12m',
+    apply: (expiry) => addMonthsClamped(expiry, 12),
+  },
+  {
+    kind: 'RETENTION_18M',
+    label: '+18m',
+    apply: (expiry) => addMonthsClamped(expiry, 18),
+  },
+];
 
 /**
- * Devuelve los hitos planificados, ordenados por fecha.
+ * Hitos del ciclo comercial, ordenados por fecha.
  *
- * Sin `installationDate` devuelve lista vacía: es el gate G8 y no se sustituye
- * por la fecha de venta (§1). Sin garantía no hay hitos de vencimiento, pero
- * la reseña y el mantenimiento sí dependen solo de la instalación.
+ * Devuelve una lista vacía si falta la fecha de compra (no hay ciclo) o si no
+ * hay garantía definida (no hay ventana de garantía sobre la que programar).
+ * Nunca inventa ni desplaza una fecha para rellenar un hueco.
+ *
+ * Es una función pura: llamarla dos veces con la misma entrada devuelve el
+ * mismo resultado, lo que permite comprobar la idempotencia del ciclo.
  */
 export function planMilestones(input: MilestonePlanInput): PlannedMilestone[] {
-  const base = input.installationDate;
+  const base = input.purchaseDate;
   if (!base) {
     return [];
   }
 
+  const expiry = warrantyEnd(base, input.warrantyMonths);
+  if (!expiry) {
+    return [];
+  }
+
+  const months = input.warrantyMonths as number;
   const milestones: PlannedMilestone[] = [];
   const push = (
     kind: MilestoneKind,
     scheduledDate: Date,
     category: CommunicationCategory,
-    requiresMaintenanceConsent: boolean,
-  ) => {
+    offsetLabel: string,
+  ): void => {
     milestones.push({
       kind,
       scheduledDate,
       stageName: STAGE_NAMES[kind],
       category,
-      requiresMaintenanceConsent,
-      requiresValidInstallation: true,
+      offsetLabel,
     });
   };
 
-  // §3: la reseña cae dentro de la ventana 2..5. El día exacto lo decide PD-10
-  // y llega en `reviewOffsetDays`; aquí solo se acota.
-  if (
-    input.reviewOffsetDays >= REVIEW_MIN_DAYS &&
-    input.reviewOffsetDays <= REVIEW_MAX_DAYS
+  // RF-03: revisiones cada dos meses desde la compra, sin sobrepasar la
+  // garantía. El mes final se incluye solo si cae dentro de la vigencia.
+  for (
+    let month = REVIEW_INTERVAL_MONTHS;
+    month <= months;
+    month += REVIEW_INTERVAL_MONTHS
   ) {
-    push('REVIEW', addDays(base, input.reviewOffsetDays), 'OTHER', false);
+    const date = addMonthsClamped(base, month);
+    if (date.getTime() <= expiry.getTime()) {
+      push('REVIEW_BIMONTHLY', date, 'OTHER', `+${month}m`);
+    }
   }
 
-  // §3: mantenimiento solo con consentimiento, dos intentos y parada.
-  const attempts = input.maintenanceAttemptsMade ?? 0;
-  if (attempts < 1) {
-    push(
-      'MAINTENANCE_1ST',
-      addDays(base, MAINTENANCE_1ST_OFFSET_DAYS),
-      'MAINTENANCE_CONSENTED',
-      true,
-    );
-  } else if (attempts < 2) {
-    push(
-      'MAINTENANCE_2ND',
-      addDays(base, MAINTENANCE_1ST_OFFSET_DAYS + MAINTENANCE_2ND_OFFSET_DAYS),
-      'MAINTENANCE_CONSENTED',
-      true,
-    );
+  // RF-07: 30 días antes del vencimiento. No se programa si ya está en el
+  // pasado respecto a la compra, porque no sería una etapa de este ciclo.
+  const preExpiry = addDays(expiry, -PRE_EXPIRY_OFFSET_DAYS);
+  if (preExpiry.getTime() > base.getTime()) {
+    push('PRE_EXPIRY', preExpiry, 'WARRANTY_EXPIRY', '-30d');
   }
-  // attempts >= 2: no hay más recordatorios de mantenimiento (§3).
 
-  // §9/§13/§14: hitos anclados al fin de garantía.
-  const end = warrantyEnd(base, input.warrantyMonths);
-  if (end) {
-    push(
-      'PRE_EXPIRY',
-      addDays(end, -PRE_EXPIRY_OFFSET_DAYS),
-      'WARRANTY_EXPIRY',
-      false,
-    );
-    push(
-      'POST_EXPIRY_60',
-      addDays(end, POST_EXPIRY_60_OFFSET_DAYS),
-      'WARRANTY_EXPIRY',
-      false,
-    );
-    push(
-      'POST_EXPIRY_90',
-      addDays(end, POST_EXPIRY_90_OFFSET_DAYS),
-      'WARRANTY_EXPIRY',
-      false,
-    );
+  // RF-06: los cinco impactos, todos desde el vencimiento ORIGINAL.
+  for (const step of RETENTION_PLAN) {
+    push(step.kind, step.apply(expiry), 'WARRANTY_EXPIRY', step.label);
   }
 
   return milestones.sort(
@@ -162,8 +183,8 @@ export function planMilestones(input: MilestonePlanInput): PlannedMilestone[] {
 }
 
 /**
- * Hitos que ya vencieron en el instante dado. Se usa al entrar la instalación
- * tarde: no se generan mensajes retroactivos, se marcan SKIPPED (§4.5).
+ * Hitos que ya vencieron en el instante dado. Se usa al registrar una compra
+ * con retraso: no se generan mensajes retroactivos.
  */
 export function elapsedMilestones(
   milestones: PlannedMilestone[],
@@ -173,9 +194,8 @@ export function elapsedMilestones(
 }
 
 /**
- * Origen del texto de cada hito. QUEDA AISLADO A PROPÓSITO: la spec define la
- * acción de cada hito pero no su contenido, y el catálogo de plantillas está
- * pendiente de revisión con Meta. No se inventa contenido ni se copian textos
- * sin aprobación.
+ * Origen del texto de cada hito. QUEDA AISLADO A PROPÓSITO: el PIT describe la
+ * acción de cada etapa pero no su contenido, y las plantillas están pendientes
+ * de aprobación con el proveedor (P0.6). No se inventa contenido.
  */
 export type MilestoneTemplateSource = 'PENDING_DECISION';

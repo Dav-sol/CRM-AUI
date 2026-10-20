@@ -1,4 +1,5 @@
 import {
+  addMonthsClamped,
   automaticFrequencyBlocks,
   diffInDays,
   isWithinReviewWindow,
@@ -22,10 +23,171 @@ const DAY = 86_400_000;
 const base = new Date('2026-01-15T12:00:00.000Z');
 const at = (days: number) => new Date(base.getTime() + days * DAY);
 
-describe('warrantyEnd (§1)', () => {
-  it('cuenta desde la instalación, no desde la venta', () => {
-    const end = warrantyEnd(base, 12);
-    expect(diffInDays(end!, base)).toBe(365);
+describe('addMonthsClamped (P1.8 · meses calendario)', () => {
+  const at = (iso: string) => new Date(iso);
+  const ymd = (d: Date) => d.toISOString().slice(0, 10);
+
+  it('31 de enero + 1 mes cae en 28 de febrero de un año común', () => {
+    expect(ymd(addMonthsClamped(at('2027-01-31T00:00:00Z'), 1))).toBe(
+      '2027-02-28',
+    );
+  });
+
+  it('31 de enero + 1 mes cae en 29 de febrero de un año bisiesto', () => {
+    expect(ymd(addMonthsClamped(at('2028-01-31T00:00:00Z'), 1))).toBe(
+      '2028-02-29',
+    );
+  });
+
+  it('30 de enero + 1 mes cae en 28 o 29 de febrero según el año', () => {
+    expect(ymd(addMonthsClamped(at('2027-01-30T00:00:00Z'), 1))).toBe(
+      '2027-02-28',
+    );
+    expect(ymd(addMonthsClamped(at('2028-01-30T00:00:00Z'), 1))).toBe(
+      '2028-02-29',
+    );
+  });
+
+  it('conserva el día cuando existe en el mes de destino', () => {
+    expect(ymd(addMonthsClamped(at('2027-01-15T00:00:00Z'), 1))).toBe(
+      '2027-02-15',
+    );
+    expect(ymd(addMonthsClamped(at('2027-01-31T00:00:00Z'), 12))).toBe(
+      '2028-01-31',
+    );
+  });
+
+  it('ajusta al último día cuando el día no existe (31 de marzo)', () => {
+    expect(ymd(addMonthsClamped(at('2027-03-31T00:00:00Z'), 1))).toBe(
+      '2027-04-30',
+    );
+  });
+
+  it('cambia de año correctamente', () => {
+    expect(ymd(addMonthsClamped(at('2026-12-31T00:00:00Z'), 1))).toBe(
+      '2027-01-31',
+    );
+    expect(ymd(addMonthsClamped(at('2027-12-31T00:00:00Z'), 2))).toBe(
+      '2028-02-29',
+    );
+  });
+
+  it('suma varios meses con duraciones de garantía soportadas', () => {
+    expect(ymd(addMonthsClamped(at('2027-01-31T00:00:00Z'), 15))).toBe(
+      '2028-04-30',
+    );
+    expect(ymd(addMonthsClamped(at('2027-01-31T00:00:00Z'), 18))).toBe(
+      '2028-07-31',
+    );
+    expect(ymd(addMonthsClamped(at('2027-01-31T00:00:00Z'), 24))).toBe(
+      '2029-01-31',
+    );
+  });
+
+  it('un 29 de febrero bisiesto + 12 meses cae en 28 de febrero', () => {
+    expect(ymd(addMonthsClamped(at('2028-02-29T00:00:00Z'), 12))).toBe(
+      '2029-02-28',
+    );
+  });
+
+  it('es determinista: misma entrada produce el mismo resultado', () => {
+    const b = at('2027-01-31T00:00:00Z');
+    expect(addMonthsClamped(b, 1).getTime()).toBe(
+      addMonthsClamped(b, 1).getTime(),
+    );
+  });
+
+  it('conserva la hora del instante base', () => {
+    expect(addMonthsClamped(at('2027-01-31T14:35:00Z'), 1).toISOString()).toBe(
+      '2027-02-28T14:35:00.000Z',
+    );
+  });
+
+  it('no depende de la zona horaria del proceso (RNF-07)', () => {
+    const original = process.env.TZ;
+    const expected = addMonthsClamped(
+      at('2027-01-31T00:00:00Z'),
+      1,
+    ).toISOString();
+    try {
+      for (const tz of ['UTC', 'America/Bogota', 'Asia/Tokyo']) {
+        process.env.TZ = tz;
+        expect(
+          addMonthsClamped(at('2027-01-31T00:00:00Z'), 1).toISOString(),
+        ).toBe(expected);
+      }
+    } finally {
+      process.env.TZ = original;
+    }
+  });
+
+  it('0 meses no altera la fecha', () => {
+    expect(ymd(addMonthsClamped(at('2027-01-31T00:00:00Z'), 0))).toBe(
+      '2027-01-31',
+    );
+  });
+
+  it('entradas inválidas producen Invalid Date de forma explícita', () => {
+    expect(Number.isNaN(addMonthsClamped(new Date(NaN), 1).getTime())).toBe(
+      true,
+    );
+    expect(
+      Number.isNaN(addMonthsClamped(at('2027-01-31T00:00:00Z'), NaN).getTime()),
+    ).toBe(true);
+    expect(
+      Number.isNaN(
+        addMonthsClamped(at('2027-01-31T00:00:00Z'), Infinity).getTime(),
+      ),
+    ).toBe(true);
+  });
+
+  it('trunca meses decimales a entero', () => {
+    expect(ymd(addMonthsClamped(at('2027-01-31T00:00:00Z'), 1.9))).toBe(
+      '2027-02-28',
+    );
+  });
+});
+
+describe('warrantyEnd (D-1 · fecha de compra; P1.8 · meses calendario)', () => {
+  const civil = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+  const ymd = (d: Date) => d.toISOString().slice(0, 10);
+
+  it('se ancla en la fecha de compra del ERP, no en la instalación', () => {
+    // D-1: la fecha de instalación NO puede sustituir a la de compra.
+    const purchase = civil('2026-01-31');
+    const installation = civil('2026-02-15');
+    expect(ymd(warrantyEnd(purchase, 12)!)).toBe('2027-01-31');
+    // Si se usara la instalación, el resultado sería 2027-02-15.
+    expect(ymd(warrantyEnd(installation, 12)!)).toBe('2027-02-15');
+  });
+
+  it('suma meses calendario, no un multiplicador de días', () => {
+    // 12 meses desde el 31 de enero conserva el día porque existe en enero.
+    expect(ymd(warrantyEnd(civil('2026-01-31'), 12)!)).toBe('2027-01-31');
+    // Antes la fórmula de días producía 2027-01-30 por el redondeo de 30.4375.
+  });
+
+  it('ajusta al último día del mes cuando el día no existe (P1.8)', () => {
+    // 31 + 1 mes → 28/29 de febrero.
+    expect(ymd(warrantyEnd(civil('2026-01-31'), 1)!)).toBe('2026-02-28');
+    expect(ymd(warrantyEnd(civil('2028-01-31'), 1)!)).toBe('2028-02-29');
+    // 30 + 1 mes → 28/29 de febrero.
+    expect(ymd(warrantyEnd(civil('2026-01-30'), 1)!)).toBe('2026-02-28');
+    expect(ymd(warrantyEnd(civil('2028-01-30'), 1)!)).toBe('2028-02-29');
+    // 31 de marzo + 1 mes → 30 de abril.
+    expect(ymd(warrantyEnd(civil('2026-03-31'), 1)!)).toBe('2026-04-30');
+  });
+
+  it('admite los plazos de garantía soportados y otros positivos', () => {
+    for (const months of [1, 6, 12, 15, 18, 24] as const) {
+      const end = warrantyEnd(civil('2026-01-15'), months);
+      expect(end).not.toBeNull();
+      expect(ymd(end!)).not.toBe('');
+    }
+    expect(ymd(warrantyEnd(civil('2026-01-15'), 6)!)).toBe('2026-07-15');
+    expect(ymd(warrantyEnd(civil('2026-01-15'), 15)!)).toBe('2027-04-15');
+    expect(ymd(warrantyEnd(civil('2026-01-15'), 18)!)).toBe('2027-07-15');
+    expect(ymd(warrantyEnd(civil('2026-01-15'), 24)!)).toBe('2028-01-15');
   });
 
   it('sin garantía no hay ventana que comunicar', () => {
@@ -35,10 +197,22 @@ describe('warrantyEnd (§1)', () => {
 
   it('las 4 duraciones soportadas producen ventanas distintas', () => {
     const ends = ([12, 15, 18, 24] as const).map((m) =>
-      diffInDays(warrantyEnd(base, m)!, base),
+      ymd(warrantyEnd(civil('2026-01-15'), m)!),
     );
     expect(new Set(ends).size).toBe(4);
-    expect(ends.every((d) => d > 300 && d < 800)).toBe(true);
+    expect(ends).toEqual([
+      '2027-01-15',
+      '2027-04-15',
+      '2027-07-15',
+      '2028-01-15',
+    ]);
+  });
+
+  it('es determinista: misma entrada, mismo vencimiento', () => {
+    const purchase = civil('2026-01-31');
+    expect(ymd(warrantyEnd(purchase, 18)!)).toBe(
+      ymd(warrantyEnd(purchase, 18)!),
+    );
   });
 });
 
@@ -195,5 +369,90 @@ describe('resoluciones de reclamación (§6.1)', () => {
     expect(resolutionStartsNewCycle('DEFECTIVE_PRODUCT_RETURNED')).toBe(false);
     expect(resolutionStartsNewCycle('FALSE_ALARM')).toBe(false);
     expect(resolutionStartsNewCycle('UNRESOLVED_NO_CONTACT')).toBe(false);
+  });
+});
+// ── T-C1: contrato canónico de la fuente de verdad temporal ────────────────
+describe('T-C1 · contrato canónico del ciclo de vida', () => {
+  const civil = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+  const ymd = (d: Date) => d.toISOString().slice(0, 10);
+
+  it('la GARANTÍA se ancla en la compra aunque la instalación sea distinta', () => {
+    const compra = civil('2026-01-31');
+    const instalacion = civil('2026-06-15');
+    // Las dos fechas coexisten: la garantía ignora la instalación.
+    expect(ymd(warrantyEnd(compra, 12)!)).toBe('2027-01-31');
+    expect(ymd(warrantyEnd(instalacion, 12)!)).toBe('2027-06-15');
+  });
+
+  it('las etapas derivadas del vencimiento heredan la base de COMPRA', () => {
+    const compra = civil('2026-01-31');
+    const instalacion = civil('2026-06-15');
+    // RF-07: preaviso 30 días antes del VENCIMIENTO, no de la instalación.
+    expect(ymd(preExpiryAt(compra, 12)!)).toBe('2027-01-01');
+    expect(ymd(preExpiryAt(instalacion, 12)!)).not.toBe(
+      ymd(preExpiryAt(compra, 12)!),
+    );
+    // RF-06: +60d y +90d desde el vencimiento original.
+    expect(ymd(postExpiry60At(compra, 12)!)).toBe('2027-04-01');
+    expect(ymd(postExpiry90At(compra, 12)!)).toBe('2027-05-01');
+    // Y ese vencimiento es el de la compra, no el de la instalación: como la
+    // compra es anterior, su impacto también lo es.
+    expect(postExpiry60At(compra, 12)!.getTime()).toBeLessThan(
+      postExpiry60At(instalacion, 12)!.getTime(),
+    );
+    expect(ymd(postExpiry60At(instalacion, 12)!)).toBe('2027-08-14');
+  });
+
+  it('RF-06: los impactos de retención se miden desde el vencimiento ORIGINAL', () => {
+    // +6m, +12m y +18m desde el vencimiento, no desde el impacto anterior.
+    const end = warrantyEnd(civil('2026-01-31'), 12)!;
+    expect(ymd(end)).toBe('2027-01-31');
+    expect(ymd(addMonthsClamped(end, 6))).toBe('2027-07-31');
+    expect(ymd(addMonthsClamped(end, 12))).toBe('2028-01-31');
+    expect(ymd(addMonthsClamped(end, 18))).toBe('2028-07-31');
+  });
+
+  it('tratamiento de nulos: sin garantía no hay vencimiento ni etapas', () => {
+    const compra = civil('2026-01-31');
+    for (const months of [null, 0]) {
+      expect(warrantyEnd(compra, months)).toBeNull();
+      expect(preExpiryAt(compra, months)).toBeNull();
+      expect(postExpiry60At(compra, months)).toBeNull();
+      expect(postExpiry90At(compra, months)).toBeNull();
+    }
+  });
+
+  it('idempotencia: recalcular no altera el resultado', () => {
+    const compra = civil('2026-01-31');
+    const primera = warrantyEnd(compra, 18)!;
+    const segunda = warrantyEnd(compra, 18)!;
+    expect(segunda.getTime()).toBe(primera.getTime());
+    expect(ymd(segunda)).toBe('2027-07-31');
+  });
+
+  it('determinismo en los límites de mes y año', () => {
+    const casos: Array<[string, number, string]> = [
+      ['2026-01-31', 1, '2026-02-28'],
+      ['2028-01-31', 1, '2028-02-29'],
+      ['2026-01-30', 1, '2026-02-28'],
+      ['2026-03-31', 1, '2026-04-30'],
+      ['2026-12-31', 1, '2027-01-31'],
+      ['2026-12-31', 2, '2027-02-28'],
+      ['2028-12-31', 2, '2029-02-28'],
+    ];
+    for (const [base, months, esperado] of casos) {
+      expect(ymd(warrantyEnd(civil(base), months)!)).toBe(esperado);
+    }
+  });
+
+  it('coherencia entre consumidores: imports, compras y lifecycle coinciden', () => {
+    // Las tres rutas calculan el vencimiento con la MISMA función compartida.
+    const compra = civil('2026-01-31');
+    const porLifecycle = warrantyEnd(compra, 12)!;
+    const porCompras = addMonthsClamped(compra, 12);
+    const porImports = addMonthsClamped(compra, 12);
+    expect(ymd(porLifecycle)).toBe(ymd(porCompras));
+    expect(ymd(porLifecycle)).toBe(ymd(porImports));
+    expect(ymd(porLifecycle)).toBe('2027-01-31');
   });
 });
