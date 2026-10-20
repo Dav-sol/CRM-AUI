@@ -5,7 +5,12 @@ import { PrismaService } from '../../core/database/prisma.service';
 export interface IdentityAuditInput {
   module?: string;
   action: string;
-  outcome: 'success' | 'failure';
+  /**
+   * `blocked` is a security outcome, not an error: the request was refused on
+   * purpose by the outbound send policy, so it must be distinguishable from a
+   * provider failure in the audit trail.
+   */
+  outcome: 'success' | 'failure' | 'blocked';
   userId?: string | null;
   organizationId?: string | null;
   description?: string;

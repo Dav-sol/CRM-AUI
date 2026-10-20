@@ -17,6 +17,7 @@ import {
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
+import { ConfiguracionesService } from '../configuraciones/configuraciones.service';
 import { findInvalidVariables } from '../../common/message-variables';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
@@ -38,6 +39,20 @@ import {
 } from './campaigns.events';
 
 const MODULE = 'campaigns';
+
+/**
+ * Suma de días sobre los campos UTC de una fecha civil.
+ *
+ * Sustituye a `setDate(getDate() + n)`, que mezcla getters y setters de la
+ * zona local del proceso. Con `America/Bogota` (offset fijo) y valores a
+ * medianoche UTC ambos coinciden, pero la aritmética local depende del entorno
+ * y no debe decide la fecha de una etapa comercial (RNF-07).
+ */
+function addDaysUtc(date: Date, days: number): Date {
+  const result = new Date(date.getTime());
+  result.setUTCDate(result.getUTCDate() + days);
+  return result;
+}
 
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -214,6 +229,7 @@ export class CampaignsService {
     private readonly auditService: AuditIdentityService,
     private readonly eventEmitter: EventEmitter2,
     private readonly configService: ConfigService,
+    private readonly configuraciones: ConfiguracionesService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -391,6 +407,7 @@ export class CampaignsService {
     const attribution = await this.loadCampaignAttribution(
       campaign.id,
       campaign.uuid,
+      campaign.organizationId,
     );
     return {
       ...detail,
@@ -1240,10 +1257,17 @@ export class CampaignsService {
 
     const isSms = channel === 'SMS';
     const smsCostPerSegment = isSms
-      ? (this.configService.get<number>('sms.costPerSegment') ?? 100)
+      ? Number(
+          await this.configuraciones.valueOf(
+            organizationId,
+            'smsCostPerSegment',
+          ),
+        )
       : 0;
     const smsCurrency = isSms
-      ? (this.configService.get<string>('sms.currency') ?? 'COP')
+      ? String(
+          await this.configuraciones.valueOf(organizationId, 'smsCurrency'),
+        )
       : 'COP';
 
     // For SMS: estimate segments per template. Use average segment count.
@@ -1258,9 +1282,18 @@ export class CampaignsService {
       const commercial =
         campaignType === 'REPURCHASE' || campaignType === 'SPECIAL';
       const messageCost = commercial
-        ? (this.configService.get<number>('campaigns.messageCostCommercial') ??
-          400)
-        : (this.configService.get<number>('campaigns.messageCost') ?? 200);
+        ? Number(
+            await this.configuraciones.valueOf(
+              organizationId,
+              'whatsappMessageCostCommercial',
+            ),
+          )
+        : Number(
+            await this.configuraciones.valueOf(
+              organizationId,
+              'whatsappMessageCost',
+            ),
+          );
       estimatedCost = estimatedAutomations * messageCost;
     }
 
@@ -1695,8 +1728,12 @@ export class CampaignsService {
               !!warrantyExpiresAt,
           )
           .map((stage) => {
-            const computed = new Date(warrantyExpiresAt as Date);
-            computed.setDate(computed.getDate() + stage.offsetDays);
+            // Aritmética sobre los campos UTC: las fechas comerciales son
+            // días civiles (columna DATE) y no tienen zona (RNF-07).
+            const computed = addDaysUtc(
+              warrantyExpiresAt as Date,
+              stage.offsetDays,
+            );
             return { stage, computed };
           });
 
@@ -1752,8 +1789,7 @@ export class CampaignsService {
             stage.anchor === FollowUpStageAnchor.PURCHASE_DATE
               ? row.purchaseDate
               : (warrantyExpiresAt as Date);
-          const computed = new Date(base);
-          computed.setDate(computed.getDate() + stage.offsetDays);
+          const computed = addDaysUtc(base, stage.offsetDays);
 
           // Lifecycle batería: una etapa anclada a la COMPRA no se genera si
           // cae DESPUÉS del vencimiento de garantía de ESA compra. El tope es
@@ -1913,10 +1949,15 @@ export class CampaignsService {
     organizationId: string,
     customerId: string,
   ): Promise<'ok' | 'limit' | 'frequency'> {
-    const max =
-      this.configService.get<number>('journeys.maxCommercialPer60d') ?? 3;
-    const minDays =
-      this.configService.get<number>('journeys.minDaysBetweenCommercial') ?? 3;
+    const max = Number(
+      await this.configuraciones.valueOf(organizationId, 'maxCommercialPer60d'),
+    );
+    const minDays = Number(
+      await this.configuraciones.valueOf(
+        organizationId,
+        'minDaysBetweenCommercial',
+      ),
+    );
     if (max <= 0) {
       return 'limit';
     }
@@ -1970,6 +2011,7 @@ export class CampaignsService {
   private async loadCampaignAttribution(
     campaignId: string,
     campaignUuid: string,
+    organizationId: string,
   ): Promise<{
     delivered: number;
     responded: number;
@@ -2008,8 +2050,9 @@ export class CampaignsService {
     const sales = quoteAgg._count.purchaseId;
     const revenue =
       (quoteAgg._sum.value?.toNumber() ?? 0) * (sales > 0 ? 1 : 0);
-    const messageCost =
-      this.configService.get<number>('campaigns.messageCost') ?? 200;
+    const messageCost = Number(
+      await this.configuraciones.valueOf(organizationId, 'whatsappMessageCost'),
+    );
     const estimatedCost = delivered * messageCost;
     const roi =
       estimatedCost > 0 ? (revenue - estimatedCost) / estimatedCost : null;

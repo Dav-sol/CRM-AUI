@@ -6,6 +6,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
+import { ConfiguracionesService } from '../configuraciones/configuraciones.service';
 import { CampaignsService } from './campaigns.service';
 
 const orgUser: AuthUser = {
@@ -112,10 +113,13 @@ describe('CampaignsService', () => {
     message: { count: jest.Mock };
     quote: { aggregate: jest.Mock };
     followUpSequence: { findFirst: jest.Mock };
+    organizationConfig: { findUnique: jest.Mock };
     $transaction: jest.Mock;
   };
   let auditService: { record: jest.Mock };
   let eventEmitter: { emit: jest.Mock };
+  /** Variables de entorno que ve la ConfiguracionesService. */
+  let configValues: Record<string, number | string>;
 
   beforeEach(async () => {
     prisma = {
@@ -154,6 +158,10 @@ describe('CampaignsService', () => {
         }),
       },
       followUpSequence: { findFirst: jest.fn() },
+      // Configuraciones v1: sin fila, los valores efectivos salen del env.
+      organizationConfig: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
       $transaction: jest.fn(async (fns: unknown) => {
         if (typeof fns === 'function') return fns(prisma);
         if (Array.isArray(fns)) {
@@ -163,6 +171,7 @@ describe('CampaignsService', () => {
     };
     auditService = { record: jest.fn().mockResolvedValue(undefined) };
     eventEmitter = { emit: jest.fn() };
+    configValues = { 'journeys.maxCommercialPer60d': 3 };
     prisma.automation.count.mockResolvedValue(0);
 
     const module: TestingModule = await Test.createTestingModule({
@@ -178,6 +187,16 @@ describe('CampaignsService', () => {
               key === 'journeys.maxCommercialPer60d' ? 3 : null,
             ),
           },
+        },
+        // Precedencia real (BD > env > default) compartida con el módulo.
+        {
+          provide: ConfiguracionesService,
+          useValue: new ConfiguracionesService(
+            prisma as never,
+            { get: (key: string) => configValues[key] } as never,
+            auditService as never,
+            eventEmitter as never,
+          ),
         },
       ],
     }).compile();
@@ -1410,7 +1429,10 @@ describe('CampaignsService', () => {
     });
 
     it('uses startAt as the reference: past WARRANTY_EXPIRY stages become repurchase at startAt', async () => {
-      const startAt = new Date('2026-10-01T12:00:00.000Z');
+      // startAt must stay in the future: the reference is max(startAt, now), so
+      // a past startAt would legitimately schedule the repurchase at `now`.
+      // The warranty expires 2026-01-01, so the stage remains in the past.
+      const startAt = new Date('2027-06-01T12:00:00.000Z');
       prisma.campaign.findFirst.mockResolvedValue(
         approvedCampaign({
           startAt,
@@ -2304,7 +2326,7 @@ describe('CampaignsService', () => {
           ],
         }),
       );
-      let createCalls: Array<Record<string, unknown>> = [];
+      const createCalls: Array<Record<string, unknown>> = [];
       prisma.$transaction.mockImplementation(
         async (fn: (tx: unknown) => Promise<unknown>) => {
           const tx = {
@@ -2582,6 +2604,98 @@ describe('CampaignsService', () => {
       await service.handleCommercialCycleStarted({});
 
       expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  // Configuraciones v1: los límites anti-spam salen de la configuración
+  // efectiva de la organización (BD > env > default), no del env directo.
+  describe('anti-spam con parámetros de la organización', () => {
+    const sequenceTx = (commercialCount: number) => {
+      const createMany = jest.fn().mockResolvedValue({ count: 0 });
+      return {
+        tx: {
+          campaign: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+          purchase: {
+            findMany: jest.fn().mockResolvedValue([
+              {
+                id: 'pu-1',
+                customerId: 'cu-a',
+                purchaseDate: new Date('2026-08-01T12:00:00.000Z'),
+              },
+            ]),
+          },
+          commercialCycle: {
+            findMany: jest.fn().mockResolvedValue([]),
+            create: jest.fn().mockResolvedValue({ id: 'cy-1' }),
+            update: jest.fn(),
+          },
+          automation: {
+            count: jest.fn().mockResolvedValue(commercialCount),
+            createMany,
+            create: jest.fn(),
+          },
+        },
+        createMany,
+      };
+    };
+
+    it('un límite de 0 en la organización bloquea todo envío comercial', async () => {
+      prisma.organizationConfig.findUnique.mockResolvedValue({
+        maxCommercialPer60d: 0,
+        minDaysBetweenCommercial: 3,
+      });
+      prisma.campaign.findFirst.mockResolvedValue(approvedCampaign());
+      const { tx, createMany } = sequenceTx(0);
+      prisma.$transaction.mockImplementation(
+        async (fn: (t: unknown) => Promise<unknown>) => fn(tx),
+      );
+
+      const result = await service.activate(orgUser, 'cu-1');
+
+      expect(result.automationCount).toBe(0);
+      expect(result.skippedByLimit).toBe(1);
+      // El lote se crea vacío: ninguna automatización sobrevive al filtro.
+      expect(createMany).toHaveBeenCalledWith({ data: [] });
+    });
+
+    it('el límite por frecuencia usa los días configurados', async () => {
+      prisma.organizationConfig.findUnique.mockResolvedValue({
+        maxCommercialPer60d: 3,
+        minDaysBetweenCommercial: 30,
+      });
+      prisma.campaign.findFirst.mockResolvedValue(approvedCampaign());
+      const { tx, createMany } = sequenceTx(1);
+      prisma.$transaction.mockImplementation(
+        async (fn: (t: unknown) => Promise<unknown>) => fn(tx),
+      );
+
+      const result = await service.activate(orgUser, 'cu-1');
+
+      expect(result.automationCount).toBe(0);
+      expect(result.skippedByFrequency).toBe(1);
+      expect(createMany).toHaveBeenCalledWith({ data: [] });
+      // 30 días hacia atrás, no los 3 del env.
+      const where = tx.automation.count.mock.calls[0][0].where as {
+        OR: { executedDate: { gte: Date } }[];
+      };
+      const dias =
+        (Date.now() - where.OR[1].executedDate.gte.getTime()) / 86_400_000;
+      expect(dias).toBeGreaterThan(29);
+    });
+
+    it('sin overrides en BD conserva el comportamiento previo (env)', async () => {
+      prisma.organizationConfig.findUnique.mockResolvedValue(null);
+      prisma.campaign.findFirst.mockResolvedValue(approvedCampaign());
+      const { tx, createMany } = sequenceTx(0);
+      prisma.$transaction.mockImplementation(
+        async (fn: (t: unknown) => Promise<unknown>) => fn(tx),
+      );
+
+      const result = await service.activate(orgUser, 'cu-1');
+
+      expect(result.automationCount).toBe(1);
+      expect(result.skippedByLimit).toBe(0);
+      expect(createMany).toHaveBeenCalled();
     });
   });
 });

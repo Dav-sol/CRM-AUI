@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma, QuoteStatus } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuditIdentityService } from '../auth/audit.identity.service';
+import { ConfiguracionesService } from '../configuraciones/configuraciones.service';
 import type { AuthUser } from '../../core/decorators/current-user.decorator';
 import { CreateQuoteDto } from './dto/create-quote.dto';
 import { UpdateQuoteDto } from './dto/update-quote.dto';
@@ -57,6 +58,7 @@ export class QuotesService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditIdentityService,
     private readonly configService: ConfigService,
+    private readonly configuraciones: ConfiguracionesService,
   ) {}
 
   async create(user: AuthUser, dto: CreateQuoteDto): Promise<QuoteSummary> {
@@ -278,7 +280,9 @@ export class QuotesService {
 
   // VENCIDA automática por tiempo (configurable) para ENVIADA sin respuesta.
   private async expireStale(organizationId: string): Promise<void> {
-    const days = this.configService.get<number>('quotes.expiryDays') ?? 7;
+    const days = Number(
+      await this.configuraciones.valueOf(organizationId, 'quoteExpiryDays'),
+    );
     if (days <= 0) {
       return;
     }

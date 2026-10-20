@@ -15,6 +15,8 @@ import { PrismaService } from '../../core/database/prisma.service';
 import { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
 import { brandOf, renderTemplate } from '../../common/message-variables';
+import { planMilestones } from '../lifecycle/lifecycle-milestones';
+import { ConfiguracionesService } from '../configuraciones/configuraciones.service';
 import { AutomationPathParamsDto } from './dto/automation-path-params.dto';
 import { QueryAutomationsDto } from './dto/query-automations.dto';
 import { QueryCommercialCyclesDto } from './dto/query-commercial-cycles.dto';
@@ -196,8 +198,17 @@ function toAutomationSummary(
   };
 }
 
-function toAutomationDetail(
+/**
+ * Presentación del detalle de una automatización.
+ *
+ * `timeZone` es la zona de presentación de la organización. Es opcional para
+ * conservar el comportamiento previo en pruebas; el servicio la resuelve y la
+ * pasa para que la fecha que ve el asesor use la zona de su organización y no
+ * la del servidor.
+ */
+function buildAutomationDetail(
   automation: AutomationWithRelations,
+  timeZone?: string,
 ): AutomationDetail {
   const template = automation.messageTemplate ?? null;
   return {
@@ -231,27 +242,9 @@ function toAutomationDetail(
         warrantyExpiresAt: automation.purchase?.warrantyExpiresAt ?? null,
         purchaseDate: automation.purchase?.purchaseDate ?? null,
       },
+      timeZone,
     ),
   };
-}
-
-function addDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setUTCDate(result.getUTCDate() + days);
-  return result;
-}
-
-function addMonths(date: Date, months: number): Date {
-  const result = new Date(date);
-  const day = result.getUTCDate();
-  result.setUTCMonth(result.getUTCMonth() + months);
-  const lastDay = new Date(
-    Date.UTC(result.getUTCFullYear(), result.getUTCMonth() + 1, 0),
-  ).getUTCDate();
-  if (day > lastDay) {
-    result.setUTCDate(lastDay);
-  }
-  return result;
 }
 
 @Injectable()
@@ -262,7 +255,24 @@ export class AutomationsService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditIdentityService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly configuraciones: ConfiguracionesService,
   ) {}
+
+  /**
+   * Vista de detalle de una automatización con la fecha renderizada en la zona
+   * de su organización. La zona se resuelve aquí, a partir del
+   * `organizationId` de la propia automatización, de modo que ningún llamador
+   * pueda omitirla por accidente. Si la organización no tuviera configuración,
+   * `timeZoneOrganizacion` cae en el valor por defecto documentado.
+   */
+  private async toAutomationDetail(
+    automation: AutomationWithRelations,
+  ): Promise<AutomationDetail> {
+    const timeZone = await this.configuraciones.timeZoneOrganizacion(
+      automation.organizationId,
+    );
+    return buildAutomationDetail(automation, timeZone);
+  }
 
   @OnEvent('PurchaseImported')
   async onPurchaseImported(event: PurchaseImportedEnvelope): Promise<void> {
@@ -294,20 +304,20 @@ export class AutomationsService {
       return;
     }
 
-    // Lifecycle 025 §1: el lifecycle representa una BATERÍA INSTALADA. Una venta
-    // sin `installationDate` no entra: el ciclo queda fuera y, cuando ERP
-    // registre la instalación, se creará entonces. No se sustituye por
-    // `purchaseDate` ni se inventa una fecha.
-    const installationDate = purchase.installationDate;
-    if (!installationDate) {
+    // Base temporal canónica (decisión aprobada): la compra entra al ciclo
+    // comercial cuando tiene fecha de compra válida del ERP. La fecha de
+    // instalación es un dato del proceso de montaje y NO es requisito de
+    // elegibilidad ni sustituye a la de compra.
+    const purchaseDate = purchase.purchaseDate;
+    if (!purchaseDate) {
       await this.auditService.record({
         module: MODULE,
         action: 'automation.cycle.skipped',
         outcome: 'success',
         userId: null,
         organizationId: purchase.organizationId,
-        description: `lifecycle not started: no installation purchase=${purchase.uuid}`,
-        metadata: { purchaseId, reason: 'awaiting_installation' },
+        description: `lifecycle not started: no purchase date purchase=${purchase.uuid}`,
+        metadata: { purchaseId, reason: 'awaiting_purchase_date' },
       });
       return;
     }
@@ -317,45 +327,42 @@ export class AutomationsService {
         async (tx) => {
           // Playbook §15: a new purchase creates its OWN cycle. It does NOT
           // cancel the customer's previous cycles/journeys — those may belong
-          // to another purchase/warranty still valid. Cancelling what is truly
-          // obsolete on recompra is a human decision (V2), not a blanket rule.
-          // §1: la fecha base es la INSTALACIÓN, no la venta. Si ERP corrige
-          // installationDate se usa la última, porque es el valor vigente.
+          // to another purchase/warranty still valid.
+          // `start_date` representa la fecha de compra registrada por el ERP,
+          // igual que hace `campaigns.service`: una sola semántica temporal.
           const created = await tx.commercialCycle.create({
             data: {
               purchaseId,
               status: 'ACTIVE',
-              startDate: installationDate,
+              startDate: purchaseDate,
             },
           });
 
-          // Los hitos se anclan a la instalación. Los textos de la secuencia de
-          // seguimiento se resuelven aparte; este es el calendario por defecto.
-          const scheduledDates = [
-            addDays(installationDate, 3),
-            addMonths(installationDate, 6),
-            addMonths(installationDate, 12),
-          ];
-          const stageNames = [
-            'Seguimiento postventa (Día 3)',
-            'Seguimiento postventa (Mes 6)',
-            'Seguimiento postventa (Mes 12)',
-          ];
+          // Hitos del PIT: revisiones bimensuales (RF-03), preaviso de
+          // vencimiento (RF-07) y secuencia de retención (RF-06). Los plazos
+          // heredados de `spec-025` (+3d, +60d/+67d, +6m/+12m) quedan fuera.
+          const planned = planMilestones({
+            purchaseDate,
+            warrantyMonths: purchase.warrantyMonths ?? null,
+          });
 
           const automationRows = await Promise.all(
-            scheduledDates.map((scheduledDate, index) =>
+            planned.map((milestone) =>
               tx.automation.create({
                 data: {
                   organizationId: purchase.organizationId,
                   purchaseId,
                   commercialCycleId: created.id,
-                  scheduledDate,
+                  scheduledDate: milestone.scheduledDate,
                   status: 'SCHEDULED',
                   priority: 0,
-                  // AU-001 is transactional follow-up (not counted vs 3/60d).
-                  purpose: 'TRANSACTIONAL',
-                  // Fase 4 (T14): motivo legible.
-                  stageName: stageNames[index],
+                  // Las revisiones son transaccionales (dentro de la garantía);
+                  // la retención es comercial y posterior al vencimiento.
+                  purpose:
+                    milestone.kind === 'REVIEW_BIMONTHLY'
+                      ? 'TRANSACTIONAL'
+                      : 'COMMERCIAL',
+                  stageName: `${milestone.stageName} (${milestone.offsetLabel})`,
                 },
               }),
             ),
@@ -490,7 +497,7 @@ export class AutomationsService {
     uuid: string,
   ): Promise<AutomationDetail | null> {
     const automation = await this.findScopedAutomation(user, uuid);
-    return automation ? toAutomationDetail(automation) : null;
+    return automation ? this.toAutomationDetail(automation) : null;
   }
 
   async cancelAutomation(
@@ -561,7 +568,7 @@ export class AutomationsService {
       cancelledAt: new Date().toISOString(),
     } satisfies AutomationCancelledPayload);
 
-    return toAutomationDetail(updated);
+    return this.toAutomationDetail(updated);
   }
 
   private emit<T>(

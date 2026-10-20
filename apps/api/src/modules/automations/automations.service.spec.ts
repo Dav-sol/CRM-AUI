@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
+import { ConfiguracionesService } from '../configuraciones/configuraciones.service';
 import { AutomationsService } from './automations.service';
 
 const orgUser: AuthUser = {
@@ -49,6 +50,7 @@ describe('AutomationsService', () => {
   };
   let auditService: { record: jest.Mock };
   let eventEmitter: { emit: jest.Mock };
+  let configuraciones: { timeZoneOrganizacion: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -73,6 +75,9 @@ describe('AutomationsService', () => {
     };
     auditService = { record: jest.fn().mockResolvedValue(undefined) };
     eventEmitter = { emit: jest.fn() };
+    configuraciones = {
+      timeZoneOrganizacion: jest.fn().mockResolvedValue('America/Bogota'),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -80,6 +85,7 @@ describe('AutomationsService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: AuditIdentityService, useValue: auditService },
         { provide: EventEmitter2, useValue: eventEmitter },
+        { provide: ConfiguracionesService, useValue: configuraciones },
       ],
     }).compile();
 
@@ -87,7 +93,7 @@ describe('AutomationsService', () => {
   });
 
   describe('onPurchaseImported (AU-001)', () => {
-    it('creates one ACTIVE cycle and three SCHEDULED automations', async () => {
+    it('creates one ACTIVE cycle and the PIT milestone automations', async () => {
       prisma.commercialCycle.findUnique.mockResolvedValue(null);
       prisma.purchase.findUnique.mockResolvedValue({
         id: 'pu-1',
@@ -96,6 +102,7 @@ describe('AutomationsService', () => {
         customerId: 'cu-1',
         purchaseDate: baseDate,
         installationDate: baseDate,
+        warrantyMonths: 12,
       });
       prisma.commercialCycle.findFirst.mockResolvedValue(null);
       let txAutomationCreate: jest.Mock = jest.fn();
@@ -143,7 +150,8 @@ describe('AutomationsService', () => {
         where: { id: 'pu-1' },
         include: { customer: { select: { id: true } } },
       });
-      expect(txAutomationCreate).toHaveBeenCalledTimes(3);
+      // 6 revisiones bimensuales + preaviso + 5 impactos de retención.
+      expect(txAutomationCreate).toHaveBeenCalledTimes(12);
       expect(auditService.record).toHaveBeenCalledWith(
         expect.objectContaining({
           module: 'automations',
@@ -174,6 +182,151 @@ describe('AutomationsService', () => {
       );
     });
 
+    // T-C-FINAL: contrato canónico del ciclo comercial.
+    describe('T-C-FINAL · contrato canónico', () => {
+      async function runWith(purchase: Record<string, unknown>) {
+        prisma.commercialCycle.findUnique.mockResolvedValue(null);
+        prisma.purchase.findUnique.mockResolvedValue({
+          id: 'pu-1',
+          uuid: 'puu-1',
+          organizationId: 'org-1',
+          customerId: 'cu-1',
+          ...purchase,
+        });
+        const cycleData: Record<string, unknown>[] = [];
+        const creates: Record<string, unknown>[] = [];
+        prisma.$transaction.mockImplementation(
+          async (fn: (tx: unknown) => Promise<unknown>) =>
+            fn({
+              automation: {
+                updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+                create: jest.fn((a: { data: Record<string, unknown> }) => {
+                  creates.push(a.data);
+                  return Promise.resolve({ id: 'a-1', uuid: 'au-1' });
+                }),
+              },
+              commercialCycle: {
+                update: jest.fn(),
+                create: jest.fn((a: { data: Record<string, unknown> }) => {
+                  cycleData.push(a.data);
+                  return Promise.resolve({ id: 'cc-1', uuid: 'ccu-1' });
+                }),
+              },
+            }),
+        );
+        await service.onPurchaseImported({ payload: { purchaseId: 'pu-1' } });
+        return { cycles: cycleData, automations: creates };
+      }
+
+      const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+      it('start_date es la fecha de COMPRA aunque la instalación difiera', async () => {
+        const { cycles } = await runWith({
+          purchaseDate: new Date('2026-01-15T00:00:00.000Z'),
+          installationDate: new Date('2026-06-20T00:00:00.000Z'),
+          warrantyMonths: 12,
+        });
+        expect(iso(cycles[0].startDate as Date)).toBe('2026-01-15');
+      });
+
+      it('el ciclo arranca sin fecha de instalación', async () => {
+        const { cycles } = await runWith({
+          purchaseDate: new Date('2026-01-15T00:00:00.000Z'),
+          installationDate: null,
+          warrantyMonths: 12,
+        });
+        expect(cycles).toHaveLength(1);
+      });
+
+      it('no crea ciclo con fecha inventada si falta la de compra', async () => {
+        await runWith({
+          purchaseDate: null,
+          installationDate: new Date('2026-06-20T00:00:00.000Z'),
+          warrantyMonths: 12,
+        });
+        expect(prisma.commercialCycle.create).not.toHaveBeenCalled();
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
+
+      it('RF-03 · genera revisiones en los meses 2, 4, 6, 8, 10 y 12', async () => {
+        const { automations } = await runWith({
+          purchaseDate: new Date('2026-01-15T00:00:00.000Z'),
+          installationDate: new Date('2026-01-15T00:00:00.000Z'),
+          warrantyMonths: 12,
+        });
+        const reviews = automations
+          .filter((a) => String(a.stageName).startsWith('Revisión de garantía'))
+          .map((a) => iso(a.scheduledDate as Date));
+        expect(reviews).toEqual([
+          '2026-03-15',
+          '2026-05-15',
+          '2026-07-15',
+          '2026-09-15',
+          '2026-11-15',
+          '2027-01-15',
+        ]);
+      });
+
+      it('RF-06 · genera los cinco impactos de retención desde el vencimiento', async () => {
+        const { automations } = await runWith({
+          purchaseDate: new Date('2026-01-15T00:00:00.000Z'),
+          installationDate: new Date('2026-01-15T00:00:00.000Z'),
+          warrantyMonths: 12,
+        });
+        const retention = automations
+          .filter((a) => String(a.stageName).startsWith('Retención'))
+          .map((a) => iso(a.scheduledDate as Date));
+        expect(retention).toEqual([
+          '2027-03-16',
+          '2027-04-15',
+          '2027-07-15',
+          '2028-01-15',
+          '2028-07-15',
+        ]);
+      });
+
+      it('no genera los plazos heredados de spec-025 (+3d, +60d, +67d)', async () => {
+        const { automations } = await runWith({
+          purchaseDate: new Date('2026-01-15T00:00:00.000Z'),
+          installationDate: new Date('2026-01-15T00:00:00.000Z'),
+          warrantyMonths: 12,
+        });
+        const fechas = automations.map((a) => iso(a.scheduledDate as Date));
+        expect(fechas).not.toContain('2026-01-18'); // compra +3d
+        expect(fechas).not.toContain('2026-03-16'); // compra +60d
+        expect(fechas).not.toContain('2026-03-23'); // compra +67d
+      });
+
+      it('no duplica hitos: fechas únicas y estable entre ejecuciones', async () => {
+        const input = {
+          purchaseDate: new Date('2026-01-15T00:00:00.000Z'),
+          installationDate: new Date('2026-01-15T00:00:00.000Z'),
+          warrantyMonths: 18,
+        };
+        const primera = await runWith(input);
+        const segunda = await runWith(input);
+
+        const fechas1 = primera.automations.map((a) =>
+          iso(a.scheduledDate as Date),
+        );
+        const fechas2 = segunda.automations.map((a) =>
+          iso(a.scheduledDate as Date),
+        );
+        expect(fechas2).toEqual(fechas1);
+        expect(new Set(fechas1).size).toBe(fechas1.length);
+      });
+
+      it('sin garantía no genera hitos, pero el ciclo sí existe', async () => {
+        const { cycles, automations } = await runWith({
+          purchaseDate: new Date('2026-01-15T00:00:00.000Z'),
+          installationDate: null,
+          warrantyMonths: null,
+        });
+        expect(cycles).toHaveLength(1);
+        expect(automations).toHaveLength(0);
+      });
+    });
+
     it('is a no-op when a cycle already exists (idempotent, 07:375-379)', async () => {
       prisma.commercialCycle.findUnique.mockResolvedValue({ id: 'cc-1' });
 
@@ -185,16 +338,63 @@ describe('AutomationsService', () => {
       expect(prisma.automation.create).not.toHaveBeenCalled();
     });
 
-    // Lifecycle 025 §1: el lifecycle representa una batería INSTALADA.
-    it('does NOT create a cycle when the purchase has no installation date', async () => {
+    // Decisión aprobada: la instalación NO es requisito de elegibilidad.
+    it('creates the cycle from a purchase with NO installation date', async () => {
       prisma.commercialCycle.findUnique.mockResolvedValue(null);
       prisma.purchase.findUnique.mockResolvedValue({
         id: 'pu-1',
         uuid: 'puu-1',
         organizationId: 'org-1',
         customerId: 'cu-1',
-        purchaseDate: baseDate,
+        purchaseDate: new Date('2026-01-15T00:00:00.000Z'),
         installationDate: null,
+        warrantyMonths: 12,
+      });
+      let cycleData: Record<string, unknown> = {};
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) =>
+          fn({
+            automation: {
+              updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+              create: jest.fn((a: { data: Record<string, unknown> }) => ({
+                id: `a-${Math.random()}`,
+                uuid: 'au-1',
+                ...a.data,
+              })),
+            },
+            commercialCycle: {
+              update: jest.fn(),
+              create: jest.fn((args: { data: Record<string, unknown> }) => {
+                cycleData = args.data;
+                return Promise.resolve({
+                  id: 'cc-1',
+                  uuid: 'ccu-1',
+                  ...args.data,
+                });
+              }),
+            },
+          }),
+      );
+
+      await service.onPurchaseImported({ payload: { purchaseId: 'pu-1' } });
+
+      expect(cycleData.startDate).toEqual(new Date('2026-01-15T00:00:00.000Z'));
+      expect(auditService.record).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'automation.cycle.skipped' }),
+      );
+    });
+
+    // Sin fecha de compra NO se inventa una fecha de ciclo.
+    it('does NOT create a cycle when the purchase has no purchase date', async () => {
+      prisma.commercialCycle.findUnique.mockResolvedValue(null);
+      prisma.purchase.findUnique.mockResolvedValue({
+        id: 'pu-1',
+        uuid: 'puu-1',
+        organizationId: 'org-1',
+        customerId: 'cu-1',
+        purchaseDate: null,
+        installationDate: baseDate,
+        warrantyMonths: 12,
       });
 
       await service.onPurchaseImported({
@@ -204,16 +404,15 @@ describe('AutomationsService', () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(prisma.commercialCycle.create).not.toHaveBeenCalled();
       expect(prisma.automation.create).not.toHaveBeenCalled();
-      // Queda registrado por qué: la venta espera instalación, no es un fallo.
       expect(auditService.record).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'automation.cycle.skipped',
-          metadata: { purchaseId: 'pu-1', reason: 'awaiting_installation' },
+          metadata: { purchaseId: 'pu-1', reason: 'awaiting_purchase_date' },
         }),
       );
     });
 
-    it('anchors the cycle and its milestones to the installation, not the sale', async () => {
+    it('anchors start_date to the PURCHASE date, not the installation', async () => {
       prisma.commercialCycle.findUnique.mockResolvedValue(null);
       const purchaseDate = new Date('2026-08-01T12:00:00.000Z');
       const installationDate = new Date('2026-08-03T12:00:00.000Z');
@@ -224,6 +423,7 @@ describe('AutomationsService', () => {
         customerId: 'cu-1',
         purchaseDate,
         installationDate,
+        warrantyMonths: 12,
       });
       let cycleData: Record<string, unknown> = {};
       const creates: { scheduledDate: Date }[] = [];
@@ -251,11 +451,16 @@ describe('AutomationsService', () => {
 
       await service.onPurchaseImported({ payload: { purchaseId: 'pu-1' } });
 
-      // El ciclo arranca el día de la instalación, no el de la venta.
-      expect(cycleData.startDate).toBe(installationDate);
-      // El primer hito es instalación + 3 días (05/08), no venta + 3 (04/08).
+      // Decisión aprobada: start_date es la fecha de COMPRA del ERP.
+      expect(cycleData.startDate).toEqual(purchaseDate);
+      expect(cycleData.startDate).not.toEqual(installationDate);
+      // Los hitos son los del PIT y arrancan en la compra: primera revisión
+      // en el mes 2 (RF-03), no un contacto a +3 días heredado de spec-025.
       expect(creates[0].scheduledDate).toEqual(
-        new Date('2026-08-06T12:00:00.000Z'),
+        new Date('2026-10-01T12:00:00.000Z'),
+      );
+      expect(creates.map((c) => c.scheduledDate)).not.toContainEqual(
+        new Date('2026-08-04T12:00:00.000Z'), // compra +3d
       );
     });
 
@@ -279,6 +484,7 @@ describe('AutomationsService', () => {
         customerId: 'cu-1',
         purchaseDate: baseDate,
         installationDate: baseDate,
+        warrantyMonths: 12,
       });
       prisma.commercialCycle.findFirst.mockResolvedValue({ id: 'cc-old' });
       let cycleCancelled = false;
@@ -643,6 +849,73 @@ describe('AutomationsService', () => {
       expect(result?.purchase.productName).toBe('Batería X');
       expect(result?.customer.name).toBe('Ana');
     });
+
+    it('propaga la zona de la organización al renderizar el mensaje', async () => {
+      configuraciones.timeZoneOrganizacion.mockResolvedValue('Asia/Tokyo');
+      prisma.automation.findFirst.mockResolvedValue({
+        uuid: 'au-1',
+        organizationId: 'org-1',
+        campaignId: null,
+        purchaseId: 'pu-1',
+        commercialCycleId: 'cc-1',
+        scheduledDate: baseDate,
+        executedDate: null,
+        status: 'SCHEDULED',
+        priority: 0,
+        createdAt: baseDate,
+        messageTemplate: 'Compra: {purchaseDate}',
+        purchase: {
+          uuid: 'puu-1',
+          invoiceNumber: 'F-1',
+          purchaseDate: new Date('2026-01-31T00:00:00.000Z'),
+          installationDate: baseDate,
+          product: { name: 'Batería X' },
+          customer: { uuid: 'cuu-1', name: 'Ana', phone: '555' },
+        },
+        organization: { name: 'Org Uno' },
+        commercialCycle: { uuid: 'ccu-1' },
+      });
+
+      const result = await service.getAutomation(orgUser, 'au-1');
+
+      expect(configuraciones.timeZoneOrganizacion).toHaveBeenCalledWith(
+        'org-1',
+      );
+      // `purchaseDate` es una fecha civil (columna DATE): muestra el día
+      // registrado, sin desplazarlo por la zona de la organización.
+      expect(result?.renderedMessage).toBe('Compra: 31 de enero de 2026');
+    });
+
+    it('usa la zona por defecto cuando no puede resolver la organización', async () => {
+      configuraciones.timeZoneOrganizacion.mockResolvedValue('America/Bogota');
+      prisma.automation.findFirst.mockResolvedValue({
+        uuid: 'au-1',
+        organizationId: 'org-1',
+        campaignId: null,
+        purchaseId: 'pu-1',
+        commercialCycleId: 'cc-1',
+        scheduledDate: baseDate,
+        executedDate: null,
+        status: 'SCHEDULED',
+        priority: 0,
+        createdAt: baseDate,
+        messageTemplate: 'Compra: {purchaseDate}',
+        purchase: {
+          uuid: 'puu-1',
+          invoiceNumber: 'F-1',
+          purchaseDate: new Date('2026-01-31T00:00:00.000Z'),
+          installationDate: baseDate,
+          product: { name: 'Batería X' },
+          customer: { uuid: 'cuu-1', name: 'Ana', phone: '555' },
+        },
+        organization: { name: 'Org Uno' },
+        commercialCycle: { uuid: 'ccu-1' },
+      });
+
+      const result = await service.getAutomation(orgUser, 'au-1');
+
+      expect(result?.renderedMessage).toBe('Compra: 31 de enero de 2026');
+    });
   });
 
   describe('cancelAutomation (US5)', () => {
@@ -747,6 +1020,7 @@ describe('AutomationsService', () => {
           { provide: PrismaService, useValue: prisma },
           { provide: AuditIdentityService, useValue: failingAudit },
           { provide: EventEmitter2, useValue: eventEmitter },
+          { provide: ConfiguracionesService, useValue: configuraciones },
         ],
       }).compile();
       const svc = module.get<AutomationsService>(AutomationsService);

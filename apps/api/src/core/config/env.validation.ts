@@ -37,6 +37,20 @@ export const envValidationSchema = Joi.object({
   WHATSAPP_DEFAULT_ORGANIZATION_ID: Joi.string().min(1).required(),
   WHATSAPP_SANDBOX_ORGANIZATION_IDS: Joi.string().optional(),
 
+  // Outbound send policy (AUTO-SAFETY-002). DENY by default.
+  // OUTBOUND_SEND_ENABLED is a strict token, NOT a boolean: 'true'/'1'/'yes'
+  // are REJECTED at boot, so a typo can never enable real sends.
+  OUTBOUND_SEND_ENABLED: Joi.string()
+    .valid('ENABLED', 'DENIED')
+    .default('DENIED'),
+  // Empty string is allowed (means "nobody/nothing authorized") but must be
+  // written explicitly; a missing key falls back to the default above.
+  OUTBOUND_SEND_ALLOWED_ORGANIZATION_IDS: Joi.string().allow('').optional(),
+  OUTBOUND_SEND_ALLOWED_CHANNELS: Joi.string()
+    .valid('WHATSAPP', 'SMS', 'WHATSAPP,SMS', 'SMS,WHATSAPP', '')
+    .optional(),
+  OUTBOUND_SEND_UNTIL: Joi.string().isoDate().allow('').optional(),
+
   // Pancake (WhatsApp via Pancake Public API). Optional: when configured, only
   // the PANCAKE_ORGANIZATION_ID organization routes sends through Pancake.
   PANCAKE_API_TOKEN: Joi.string().optional(),

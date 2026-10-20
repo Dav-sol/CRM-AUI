@@ -84,6 +84,21 @@ export default () => ({
     expiryDays: parseInt(process.env.QUOTE_EXPIRY_DAYS ?? '7', 10),
   },
 
+  // outbound send policy (AUTO-SAFETY-002). DENY by default and fail-closed:
+  // a real send requires ALL of switch === 'ENABLED' (exact token, never
+  // truthy), an explicit organization allowlist, an explicit channel
+  // allowlist, and a non-expired authorization window. Anything absent,
+  // empty, malformed or unreadable denies. Values are kept raw on purpose:
+  // the policy module owns validation, config only transports them.
+  safety: {
+    // Raw string. 'ENABLED' is the ONLY enabling value.
+    sendEnabled: process.env.OUTBOUND_SEND_ENABLED,
+    allowedOrganizationsCsv: process.env.OUTBOUND_SEND_ALLOWED_ORGANIZATION_IDS,
+    allowedChannelsCsv: process.env.OUTBOUND_SEND_ALLOWED_CHANNELS,
+    // ISO-8601 instant. Missing means "no window", which denies.
+    sendUntil: process.env.OUTBOUND_SEND_UNTIL,
+  },
+
   // Pancake (WhatsApp via Pancake Public API). Org-scoped: only the
   // organization in PANCAKE_ORGANIZATION_ID routes its sends through Pancake.
   // Two tokens: PANCAKE_API_TOKEN = page_access_token for pages.fm; the
