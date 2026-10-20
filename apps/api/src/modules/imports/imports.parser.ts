@@ -1,8 +1,8 @@
 import ExcelJS from 'exceljs';
 import { parse } from 'csv-parse/sync';
 import { ImportType } from '@prisma/client';
+import { isCivilDate } from '../../common/civil-date';
 import {
-  DATE_PATTERN,
   EMAIL_PATTERN,
   MAX_INT,
   MAX_ROWS,
@@ -70,7 +70,9 @@ const HEADER_ALIASES: Record<string, string> = {
   purchasedate: 'purchaseDate',
   fechacompra: 'purchaseDate',
   fechafactura: 'purchaseDate',
-  // Lifecycle 025 §1: fecha de instalación. Columna OPCIONAL: si no viene, la
+  // Columna OPCIONAL de fecha de instalación: es un dato del proceso de montaje,
+  // NO la base del ciclo comercial (que es la fecha de compra) ni un requisito
+  // de elegibilidad. Si no viene, la
   // compra se importa sin ella y no entra al lifecycle (gate G8). Es el
   // camino permanente; el opt-in por job que la deduce de `purchaseDate` es
   // solo para la UAT de datos históricos.
@@ -438,12 +440,12 @@ export function validateRow(type: ImportType, row: ParsedRow): RowIssue[] {
   }
 
   const purchaseDate = cells['purchaseDate'] ?? '';
-  if (!purchaseDate || !DATE_PATTERN.test(purchaseDate)) {
+  if (!isCivilDate(purchaseDate)) {
     pushIssue(
       issues,
       row.number,
       'purchaseDate',
-      'invalid date, expected YYYY-MM-DD',
+      'invalid date, expected YYYY-MM-DD (civil)',
       purchaseDate,
     );
   }
@@ -451,12 +453,12 @@ export function validateRow(type: ImportType, row: ParsedRow): RowIssue[] {
   // Opcional: si viene, tiene que ser una fecha válida. Si no viene, no es un
   // problema: la compra queda sin instalación y no entra al lifecycle.
   const installationDate = cells['installationDate'] ?? '';
-  if (installationDate && !DATE_PATTERN.test(installationDate)) {
+  if (installationDate && !isCivilDate(installationDate)) {
     pushIssue(
       issues,
       row.number,
       'installationDate',
-      'invalid date, expected YYYY-MM-DD',
+      'invalid date, expected YYYY-MM-DD (civil)',
       installationDate,
     );
   }
@@ -503,18 +505,34 @@ export function validateRow(type: ImportType, row: ParsedRow): RowIssue[] {
   return issues;
 }
 
+/**
+ * Contrato de garantía de Baterías del Caribe (PIT RF-02,
+ * `specs/026-pit-final/pit.md`): las únicas duraciones admitidas son
+ * 12, 15, 18 y 24 meses.
+ *
+ * Se valida el TEXTO de la celda y no el resultado de `Number(...)`. Esa
+ * conversión acepta representaciones que el contrato no permite —`"15.0"` → 15,
+ * `"0x10"` → 16, `"1e2"` → 100, `"+15"` → 15— y como el resultado sí es un
+ * entero, `Number.isInteger` no las detecta.
+ *
+ * El lector entrega siempre cadenas: `toCellText` devuelve `string` en todas
+ * sus ramas y `ParsedRow.cells` es `Record<string, string>`. Las celdas se
+ * recortan con `.trim()` al construirse, de modo que `" 15 "` se normaliza a
+ * `"15"` antes de validar, sin cambiar ese comportamiento.
+ */
+export const WARRANTY_MONTHS_PATTERN = /^(?:12|15|18|24)$/;
+
 function validateWarrantyCells(issues: RowIssue[], row: ParsedRow): void {
   const raw = row.cells['warrantyMonths'] ?? '';
   if (!raw) {
     return;
   }
-  const months = Number(raw);
-  if (!Number.isInteger(months) || months < 1 || months > 24) {
+  if (!WARRANTY_MONTHS_PATTERN.test(raw)) {
     pushIssue(
       issues,
       row.number,
       'warrantyMonths',
-      'warrantyMonths must be an integer between 1 and 24',
+      'warrantyMonths must be one of: 12, 15, 18, 24',
       raw,
     );
   }

@@ -4,7 +4,9 @@ import { Customer, Import, Prisma, Product, Purchase } from '@prisma/client';
 import { readFile, unlink } from 'fs/promises';
 import { resolve } from 'path';
 import { PrismaService } from '../../core/database/prisma.service';
+import { parseCivilDate } from '../../common/civil-date';
 import { AuditIdentityService } from '../auth/audit.identity.service';
+import { addMonthsClamped } from '../lifecycle/lifecycle.rules';
 import { BATCH_SIZE, ERROR_SAMPLE_LIMIT } from './imports.constants';
 import { buildImportEvent } from './imports.events';
 import {
@@ -12,25 +14,22 @@ import {
   ParsedRow,
   RowIssue,
   validateRow,
+  WARRANTY_MONTHS_PATTERN,
 } from './imports.parser';
 
 const MODULE = 'imports';
-
-function addMonths(date: Date, months: number): Date {
-  const result = new Date(date);
-  result.setMonth(result.getMonth() + months);
-  return result;
-}
 
 function toWarrantyMonths(cells: Record<string, string>): number | null {
   const raw = cells['warrantyMonths'] ?? '';
   if (!raw) {
     return null;
   }
-  const months = Number(raw);
-  return Number.isInteger(months) && months >= 1 && months <= 24
-    ? months
-    : null;
+  // Mismo patrón cerrado que aplica `validateWarrantyCells` en el parser: el
+  // texto se valida antes de convertirlo, para que una representación no
+  // canónica no acabe siendo un entero válido. Una fila con un valor inválido
+  // no llega aquí —el parser la rechaza—, pero esta comprobación evita que una
+  // conversión permisiva posterior reintroduzca el fallo.
+  return WARRANTY_MONTHS_PATTERN.test(raw) ? Number(raw) : null;
 }
 
 function toErrorsJson(
@@ -479,15 +478,20 @@ export class ImportsProcessor {
         customerId: customer.id,
         productId: product.id,
         invoiceNumber: cells['invoiceNumber'] ?? '',
-        purchaseDate: new Date(cells['purchaseDate'] ?? ''),
+        purchaseDate: parseCivilDate(cells['purchaseDate'] ?? ''),
         installationDate: this.resolveInstallationDate(job, cells),
         warrantyMonths: toWarrantyMonths(cells) ?? product.warrantyMonths,
+        // D-1 + P1.8: el vencimiento se ancla en la fecha de compra y suma
+        // meses calendario con ajuste de fin de mes.
         warrantyExpiresAt: (() => {
           const months = toWarrantyMonths(cells) ?? product.warrantyMonths;
           if (!months || months < 1) {
             return null;
           }
-          return addMonths(new Date(cells['purchaseDate'] ?? ''), months);
+          return addMonthsClamped(
+            parseCivilDate(cells['purchaseDate'] ?? ''),
+            months,
+          );
         })(),
         quantity: Number(cells['quantity'] ?? '0'),
         value: new Prisma.Decimal(cells['value'] ?? '0'),
@@ -525,11 +529,11 @@ export class ImportsProcessor {
   ): Date | null {
     const explicit = (cells['installationDate'] ?? '').trim();
     if (explicit) {
-      return new Date(explicit);
+      return parseCivilDate(explicit);
     }
     if (job.installationFromPurchaseDate) {
       const purchaseDate = (cells['purchaseDate'] ?? '').trim();
-      return purchaseDate ? new Date(purchaseDate) : null;
+      return purchaseDate ? parseCivilDate(purchaseDate) : null;
     }
     return null;
   }

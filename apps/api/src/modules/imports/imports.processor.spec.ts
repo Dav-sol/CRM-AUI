@@ -2,6 +2,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Import, Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuditIdentityService } from '../auth/audit.identity.service';
+import { addMonthsClamped } from '../lifecycle/lifecycle.rules';
 import { ImportsProcessor } from './imports.processor';
 
 jest.mock('fs/promises', () => ({
@@ -330,13 +331,235 @@ describe('ImportsProcessor', () => {
 
       await processor.process(csvJob('PURCHASES', 'uploads/x.csv'));
 
-      const expected = new Date('2026-08-01T00:00:00.000Z');
-      expected.setMonth(expected.getMonth() + 15);
+      // Se compara contra la función compartida (P1.8), no contra una
+      // reimplementación con setMonth, que era lo que fijaba la conducta
+      // incorrecta (desbordamiento al mes siguiente).
+      const expected = addMonthsClamped(
+        new Date('2026-08-01T00:00:00.000Z'),
+        15,
+      );
       expect(prisma.purchase.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             warrantyMonths: 15,
             warrantyExpiresAt: expected,
+          }) as object,
+        }),
+      );
+    });
+
+    // T-B1: el vencimiento se ancla en la fecha de compra (D-1), aunque la
+    // instalación sea distinta y posterior.
+    it('ancla el vencimiento en la fecha de compra, no en la de instalación', async () => {
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from(
+          'invoiceNumber,codcli,code,purchaseDate,installationDate,quantity,value,warrantyMonths\n' +
+            'F-9,C1,P1,2026-01-31,2026-03-15,1,300.00,12\n',
+        ),
+      );
+      prisma.customer.findMany.mockResolvedValue([
+        { id: 'c-1', codcli: 'C1', deletedAt: null },
+      ]);
+      prisma.product.findMany.mockResolvedValue([
+        { id: 'p-1', code: 'P1', warrantyMonths: null, deletedAt: null },
+      ]);
+      prisma.purchase.create.mockResolvedValue({ id: 'pu-9' });
+
+      await processor.process(csvJob('PURCHASES', 'uploads/x.csv'));
+
+      // 12 meses desde la COMPRA (31-ene) → 31-ene del año siguiente.
+      expect(prisma.purchase.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            purchaseDate: new Date('2026-01-31T00:00:00.000Z'),
+            installationDate: new Date('2026-03-15T00:00:00.000Z'),
+            warrantyExpiresAt: new Date('2027-01-31T00:00:00.000Z'),
+          }) as object,
+        }),
+      );
+    });
+
+    it('ajusta el vencimiento al último día del mes en fin de mes (P1.8)', async () => {
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from(
+          'invoiceNumber,codcli,code,purchaseDate,quantity,value,warrantyMonths\n' +
+            'F-8,C1,P1,2026-01-31,1,300.00,15\n',
+        ),
+      );
+      prisma.customer.findMany.mockResolvedValue([
+        { id: 'c-1', codcli: 'C1', deletedAt: null },
+      ]);
+      prisma.product.findMany.mockResolvedValue([
+        { id: 'p-1', code: 'P1', warrantyMonths: null, deletedAt: null },
+      ]);
+      prisma.purchase.create.mockResolvedValue({ id: 'pu-8' });
+
+      await processor.process(csvJob('PURCHASES', 'uploads/x.csv'));
+
+      // 31-ene + 15 meses = 31-abr, que no existe: se ajusta a 30-abr (y no a
+      // 3-may, que es lo que producia setMonth). Se usan 15 meses porque es una
+      // duracion del contrato BDC (RF-02) que sigue forzando el clamp; 12, 18 y
+      // 24 meses desde el dia 31 caerian en meses de 31 dias.
+      expect(prisma.purchase.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            warrantyExpiresAt: new Date('2027-04-30T00:00:00.000Z'),
+          }) as object,
+        }),
+      );
+    });
+
+    // T4.8: una garantia invalida no puede alcanzar la persistencia.
+    it.each(['1', '7', '25', '36', '15.0', '0x10', '1e2', '+15', '15 meses'])(
+      'no persiste la compra cuando la garantia %s es invalida',
+      async (raw) => {
+        (readFile as jest.Mock).mockResolvedValue(
+          Buffer.from(
+            'invoiceNumber,codcli,code,purchaseDate,quantity,value,warrantyMonths\n' +
+              `F-7,C1,P1,2026-08-01,1,300.00,${raw}\n`,
+          ),
+        );
+        prisma.customer.findMany.mockResolvedValue([
+          { id: 'c-1', codcli: 'C1', deletedAt: null },
+        ]);
+        prisma.product.findMany.mockResolvedValue([
+          { id: 'p-1', code: 'P1', warrantyMonths: null, deletedAt: null },
+        ]);
+        prisma.purchase.create.mockResolvedValue({ id: 'pu-7' });
+
+        await processor.process(csvJob('PURCHASES', 'uploads/x.csv'));
+
+        expect(prisma.purchase.create).not.toHaveBeenCalled();
+      },
+    );
+
+    it('persiste la garantia canonica que viene en la fila', async () => {
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from(
+          'invoiceNumber,codcli,code,purchaseDate,quantity,value,warrantyMonths\n' +
+            'F-6,C1,P1,2026-08-01,1,300.00,18\n',
+        ),
+      );
+      prisma.customer.findMany.mockResolvedValue([
+        { id: 'c-1', codcli: 'C1', deletedAt: null },
+      ]);
+      prisma.product.findMany.mockResolvedValue([
+        { id: 'p-1', code: 'P1', warrantyMonths: null, deletedAt: null },
+      ]);
+      prisma.purchase.create.mockResolvedValue({ id: 'pu-6' });
+
+      await processor.process(csvJob('PURCHASES', 'uploads/x.csv'));
+
+      expect(prisma.purchase.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            warrantyMonths: 18,
+            warrantyExpiresAt: addMonthsClamped(
+              new Date('2026-08-01T00:00:00.000Z'),
+              18,
+            ),
+          }) as object,
+        }),
+      );
+    });
+
+    it('una fila sin garantia se persiste con null, sin valor por defecto', async () => {
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from(
+          'invoiceNumber,codcli,code,purchaseDate,quantity,value\n' +
+            'F-5,C1,P1,2026-08-01,1,300.00\n',
+        ),
+      );
+      prisma.customer.findMany.mockResolvedValue([
+        { id: 'c-1', codcli: 'C1', deletedAt: null },
+      ]);
+      prisma.product.findMany.mockResolvedValue([
+        { id: 'p-1', code: 'P1', warrantyMonths: null, deletedAt: null },
+      ]);
+      prisma.purchase.create.mockResolvedValue({ id: 'pu-5' });
+
+      await processor.process(csvJob('PURCHASES', 'uploads/x.csv'));
+
+      expect(prisma.purchase.create).toHaveBeenCalledTimes(1);
+      // Sin garantía en la fila y sin garantía en el producto: el resultado
+      // es `null`. Nunca 12.
+      expect(prisma.purchase.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            warrantyMonths: null,
+            warrantyExpiresAt: null,
+          }) as object,
+        }),
+      );
+      expect(prisma.purchase.create).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ warrantyMonths: 12 }) as object,
+        }),
+      );
+    });
+
+    it('sigue heredando la garantia del producto cuando la fila no la trae', async () => {
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from(
+          'invoiceNumber,codcli,code,purchaseDate,quantity,value\n' +
+            'F-4,C1,P1,2026-08-01,1,300.00\n',
+        ),
+      );
+      prisma.customer.findMany.mockResolvedValue([
+        { id: 'c-1', codcli: 'C1', deletedAt: null },
+      ]);
+      prisma.product.findMany.mockResolvedValue([
+        { id: 'p-1', code: 'P1', warrantyMonths: 24, deletedAt: null },
+      ]);
+      prisma.purchase.create.mockResolvedValue({ id: 'pu-4' });
+
+      await processor.process(csvJob('PURCHASES', 'uploads/x.csv'));
+
+      expect(prisma.purchase.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            warrantyMonths: 24,
+            warrantyExpiresAt: addMonthsClamped(
+              new Date('2026-08-01T00:00:00.000Z'),
+              24,
+            ),
+          }) as object,
+        }),
+      );
+    });
+
+    it('rechaza una fecha de compra con marca de tiempo y deja constancia', async () => {
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from(
+          'invoiceNumber,codcli,code,purchaseDate,quantity,value\n' +
+            'F-7,C1,P1,2026-01-31T18:00:00Z,1,300.00\n',
+        ),
+      );
+      prisma.customer.findMany.mockResolvedValue([
+        { id: 'c-1', codcli: 'C1', deletedAt: null },
+      ]);
+      prisma.product.findMany.mockResolvedValue([
+        { id: 'p-1', code: 'P1', warrantyMonths: 12, deletedAt: null },
+      ]);
+      prisma.purchase.create.mockResolvedValue({ id: 'pu-7' });
+
+      await processor.process(csvJob('PURCHASES', 'uploads/x.csv'));
+
+      expect(prisma.purchase.create).not.toHaveBeenCalled();
+      expect(prisma.import.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            processedRecords: 0,
+            errorRecords: 1,
+            failedRowNumbers: [2],
+            errors: {
+              rows: [
+                expect.objectContaining({
+                  field: 'purchaseDate',
+                  raw: '2026-01-31T18:00:00Z',
+                }),
+              ],
+            },
           }) as object,
         }),
       );
