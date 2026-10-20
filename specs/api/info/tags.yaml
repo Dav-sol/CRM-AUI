@@ -7,6 +7,9 @@
 - name: Organizations
   description: Organization management
 
+- name: Configuraciones
+  description: "Tenant configuration: empresa, horarios y parametros (kit 024)"
+
 - name: Customers
   description: Customer management
 
