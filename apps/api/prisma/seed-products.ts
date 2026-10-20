@@ -68,9 +68,56 @@ const willardBatteries = [
   { id: 114, brand: 'WILLARD', name: 'WILLARD ESBIC 680 /Caja 42D', model: '680', caja: '42', voltage: '12V', cca: '370', warranty: '12 meses', price: '$200.000', polarity: 'Derecha', reserveCapacity: '60' },
 ];
 
-function parseWarrantyMonths(warranty: string): number {
-  const match = warranty.match(/(\d+)\s*meses?/i);
-  return match ? parseInt(match[1], 10) : 12;
+/**
+ * Contrato de garantía de Baterías del Caribe (PIT RF-02,
+ * `specs/026-pit-final/pit.md`): las únicas duraciones admitidas son
+ * 12, 15, 18 y 24 meses.
+ *
+ * Devuelve el número de meses cuando el valor es válido y lanza `Error` en
+ * cualquier otro caso. Nunca inventa una duración: una garantía ausente no se
+ * convierte ni en 12 meses ni en `null` de forma silenciosa, porque crear un
+ * producto sin garantía podría dejarlo sin cobertura sin que el operador lo
+ * advierta. El registro se rechaza y el motivo queda en el log.
+ *
+ * Se valida la forma canónica del texto, no el resultado de `Number(...)`: esa
+ * conversión acepta representaciones que el contrato no permite y cuyo
+ * resultado sigue siendo un entero —`"15.0 meses"` → 15, `"0x10 meses"` → 16,
+ * `"1e2 meses"` → 100, `"+15 meses"` → 15— de modo que `Number.isInteger` no
+ * las detecta.
+ */
+const BDC_WARRANTY_MONTHS = [12, 15, 18, 24] as const;
+
+function parseWarrantyMonths(warranty: string | undefined): number {
+  const allowed = BDC_WARRANTY_MONTHS.join(', ');
+
+  if (!warranty || warranty.trim() === '') {
+    throw new Error(
+      'warranty ausente: el producto requiere una duración declarada ' +
+        `(${allowed} meses); no se asume ningún valor por defecto`,
+    );
+  }
+
+  // El catálogo expresa la duración como texto ("15 meses"); se admite esa
+  // forma siempre que la parte numérica sea un entero decimal canónico.
+  const text = warranty.trim().replace(/\s*meses?$/i, '');
+
+  if (!/^\d+$/.test(text)) {
+    throw new Error(
+      `warranty "${warranty}" no es una duración canónica; ` +
+        `solo se admiten ${allowed} meses`,
+    );
+  }
+
+  const months = Number(text);
+
+  if (!(BDC_WARRANTY_MONTHS as readonly number[]).includes(months)) {
+    throw new Error(
+      `warranty "${warranty}" está fuera del contrato; ` +
+        `solo se admiten ${allowed} meses`,
+    );
+  }
+
+  return months;
 }
 
 // "$300.000" → 300000 (formato de miles con punto, COP).
@@ -111,10 +158,13 @@ async function main() {
   const allBatteries = [...macBatteries, ...willardBatteries];
 
   for (const battery of allBatteries) {
-    const warrantyMonths = parseWarrantyMonths(battery.warranty);
     const code = generateCode(battery.brand, battery.name, battery.id);
 
     try {
+      // La validación va dentro del try a propósito: una garantía ausente,
+      // no canónica o fuera del contrato se trata igual que cualquier otro
+      // fallo por registro —se registra y el seed continúa con el siguiente.
+      const warrantyMonths = parseWarrantyMonths(battery.warranty);
       await prisma.product.upsert({
         where: {
           organizationId_code: {
@@ -144,7 +194,14 @@ async function main() {
       });
       console.log(`  ✓ ${code} - ${battery.name} (${warrantyMonths} meses)`);
     } catch (error) {
-      console.error(`  ✗ Failed to seed ${code}:`, error);
+      // Contexto suficiente para identificar la batería y el motivo: id,
+      // código, nombre y el valor crudo de garantía. No se expone ningún
+      // secreto; el seed continúa con el siguiente registro.
+      const reason = error instanceof Error ? error.message : String(error);
+      console.error(
+        `  ✗ Failed to seed ${code} (id ${battery.id}, "${battery.name}", ` +
+          `warranty="${battery.warranty ?? ''}"): ${reason}`,
+      );
     }
   }
 
