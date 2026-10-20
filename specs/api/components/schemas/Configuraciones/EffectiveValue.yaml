@@ -1,0 +1,24 @@
+type: object
+
+description: |
+  Effective value of a parameter plus where it comes from: `db` (set for this
+  organization), `env` (installation fallback) or `default` (code default).
+  Resolution order is `db > env > default` (Configuraciones v1 §6).
+
+required:
+  - valor
+  - source
+
+properties:
+
+  valor:
+    description: Effective value, numeric or textual depending on the parameter.
+    oneOf:
+      - type: number
+      - type: string
+
+  source:
+    type: string
+    enum: [db, env, default]
+    description: Where the effective value comes from.
+    example: db

@@ -1,0 +1,39 @@
+type: object
+
+description: |
+  Partial update of the commercial schedule. Every field is optional and a
+  partial patch leaves the rest untouched. Start and end cannot be equal.
+
+properties:
+
+  businessHoursEnabled:
+    type: boolean
+
+  timezone:
+    type: string
+    pattern: "^[A-Za-z_]+(/[A-Za-z_+-]+)+$"
+    example: America/Bogota
+
+  businessDays:
+    type: array
+    maxItems: 7
+    uniqueItems: true
+    items:
+      type: string
+      enum: [MON, TUE, WED, THU, FRI, SAT, SUN]
+
+  businessHoursStart:
+    type: integer
+    nullable: true
+    minimum: 0
+    maximum: 1439
+    description: Minutos desde medianoche. `null` limpia la ventana.
+    example: 480
+
+  businessHoursEnd:
+    type: integer
+    nullable: true
+    minimum: 0
+    maximum: 1439
+    description: Minutos desde medianoche, exclusivo. `null` limpia la ventana.
+    example: 1080

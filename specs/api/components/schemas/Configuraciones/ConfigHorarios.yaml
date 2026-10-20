@@ -1,0 +1,49 @@
+type: object
+
+description: |
+  Horario comercial de la organización (AU-009). `businessHoursEnabled` defaults
+  to false, so an organization that never configured anything keeps the previous
+  behavior. Times are minutes from midnight (0..1439) and the window may cross
+  midnight.
+
+required:
+  - businessHoursEnabled
+  - timezone
+  - businessDays
+
+properties:
+
+  businessHoursEnabled:
+    type: boolean
+    default: false
+    description: When false, no automation is restricted by time.
+
+  timezone:
+    type: string
+    default: America/Bogota
+    description: IANA timezone used to resolve the local time.
+    example: America/Bogota
+
+  businessDays:
+    type: array
+    description: Weekdays inside the window.
+    default: [MON, TUE, WED, THU, FRI]
+    items:
+      type: string
+      enum: [MON, TUE, WED, THU, FRI, SAT, SUN]
+
+  businessHoursStart:
+    type: integer
+    nullable: true
+    minimum: 0
+    maximum: 1439
+    description: Minutes from midnight. Null means no window configured.
+    example: 480
+
+  businessHoursEnd:
+    type: integer
+    nullable: true
+    minimum: 0
+    maximum: 1439
+    description: Minutes from midnight, exclusive. Null means no window.
+    example: 1080

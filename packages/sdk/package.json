@@ -6,7 +6,8 @@
   "types": "./index.ts",
   "scripts": {
     "generate": "orval --config ../../orval.config.ts",
-    "lint": "eslint index.ts model --fix",
+    "lint": "eslint index.ts model",
+    "lint:fix": "eslint index.ts model --fix",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

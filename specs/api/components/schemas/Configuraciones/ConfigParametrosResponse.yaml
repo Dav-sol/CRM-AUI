@@ -1,0 +1,11 @@
+type: object
+
+description: Response with the effective business parameters of the organization.
+
+required:
+  - data
+
+properties:
+
+  data:
+    $ref: "./ConfigParametros.yaml"

@@ -1,0 +1,52 @@
+type: object
+
+description: |
+  Non-sensitive business parameters of the organization, each with its effective
+  value and origin. Credentials never appear here: integrations stay in the
+  environment (Configuraciones v1 §3).
+
+required:
+  - maxCommercialPer60d
+  - minDaysBetweenCommercial
+  - quoteExpiryDays
+  - whatsappMessageCost
+  - whatsappMessageCostCommercial
+  - smsCostPerSegment
+  - smsCurrency
+
+properties:
+
+  maxCommercialPer60d:
+    allOf:
+      - $ref: "./EffectiveValue.yaml"
+    description: Maximum commercial messages per customer in 60 days (anti-spam).
+
+  minDaysBetweenCommercial:
+    allOf:
+      - $ref: "./EffectiveValue.yaml"
+    description: Minimum days between two commercial messages (anti-spam).
+
+  quoteExpiryDays:
+    allOf:
+      - $ref: "./EffectiveValue.yaml"
+    description: Days before a sent quote expires automatically.
+
+  whatsappMessageCost:
+    allOf:
+      - $ref: "./EffectiveValue.yaml"
+    description: Estimated cost of a non-commercial WhatsApp message.
+
+  whatsappMessageCostCommercial:
+    allOf:
+      - $ref: "./EffectiveValue.yaml"
+    description: Estimated cost of a commercial WhatsApp message.
+
+  smsCostPerSegment:
+    allOf:
+      - $ref: "./EffectiveValue.yaml"
+    description: Estimated cost of an SMS segment.
+
+  smsCurrency:
+    allOf:
+      - $ref: "./EffectiveValue.yaml"
+    description: ISO currency code of the cost estimates.

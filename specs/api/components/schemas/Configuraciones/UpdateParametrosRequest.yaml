@@ -1,0 +1,40 @@
+type: object
+
+description: Partial update of the business parameters.
+
+properties:
+
+  maxCommercialPer60d:
+    type: integer
+    minimum: 1
+    maximum: 1000
+
+  minDaysBetweenCommercial:
+    type: integer
+    minimum: 0
+    maximum: 365
+
+  quoteExpiryDays:
+    type: integer
+    minimum: 1
+    maximum: 365
+
+  whatsappMessageCost:
+    type: integer
+    minimum: 1
+    maximum: 100000
+
+  whatsappMessageCostCommercial:
+    type: integer
+    minimum: 1
+    maximum: 100000
+
+  smsCostPerSegment:
+    type: integer
+    minimum: 0
+    maximum: 100000
+
+  smsCurrency:
+    type: string
+    pattern: "^[A-Z]{3}$"
+    example: COP

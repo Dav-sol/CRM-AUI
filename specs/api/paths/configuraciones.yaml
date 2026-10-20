@@ -1,0 +1,154 @@
+/configuraciones/horarios:
+  get:
+    tags:
+      - Configuraciones
+
+    summary: Get commercial schedule
+
+    description: |
+      Returns the commercial schedule of the caller's organization (Horarios).
+      Tenant-scoped: the organization always comes from the JWT. Requires
+      ADMINISTRADOR or PLATFORM_OWNER with an organization.
+    operationId: getConfiguracionesHorarios
+    security: [{ bearerAuth: [] }]
+    responses:
+      "200":
+        description: Schedule found
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/Configuraciones/ConfigHorariosResponse.yaml"
+      "403":
+        description: "Forbidden (FORBIDDEN)"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/responses/error.yaml"
+
+  patch:
+    tags:
+      - Configuraciones
+
+    summary: Update commercial schedule
+
+    description: |
+      Partially updates the commercial schedule. Requires ADMINISTRADOR or
+      PLATFORM_OWNER with an organization. Audited as
+      `configuration.horarios.updated` and emits `OrganizationConfigUpdated`.
+    operationId: updateConfiguracionesHorarios
+    security: [{ bearerAuth: [] }]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/Configuraciones/UpdateHorariosRequest.yaml"
+    responses:
+      "200":
+        description: Schedule updated
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/Configuraciones/ConfigHorariosResponse.yaml"
+      "400":
+        description: "Validation error (VALIDATION_ERROR)"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/responses/error.yaml"
+      "403":
+        description: "Forbidden (FORBIDDEN)"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/responses/error.yaml"
+
+/configuraciones/parametros:
+  get:
+    tags:
+      - Configuraciones
+
+    summary: Get business parameters
+
+    description: |
+      Returns the effective business parameters of the caller's organization
+      (Parámetros), each with its origin: `db`, `env` or `default`.
+    operationId: getConfiguracionesParametros
+    security: [{ bearerAuth: [] }]
+    responses:
+      "200":
+        description: Parameters found
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/Configuraciones/ConfigParametrosResponse.yaml"
+      "403":
+        description: "Forbidden (FORBIDDEN)"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/responses/error.yaml"
+
+  patch:
+    tags:
+      - Configuraciones
+
+    summary: Update business parameters
+
+    description: |
+      Partially updates the business parameters. Requires ADMINISTRADOR or
+      PLATFORM_OWNER with an organization. Audited as
+      `configuration.parametros.updated` and emits `OrganizationConfigUpdated`.
+    operationId: updateConfiguracionesParametros
+    security: [{ bearerAuth: [] }]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/Configuraciones/UpdateParametrosRequest.yaml"
+    responses:
+      "200":
+        description: Parameters updated
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/Configuraciones/ConfigParametrosResponse.yaml"
+      "400":
+        description: "Validation error (VALIDATION_ERROR)"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/responses/error.yaml"
+      "403":
+        description: "Forbidden (FORBIDDEN)"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/responses/error.yaml"
+
+/configuraciones/efectivas:
+  get:
+    tags:
+      - Configuraciones
+
+    summary: Get all effective values with their origin
+
+    description: |
+      Returns every effective business parameter with its origin, which is what
+      the UI shows in the badge of each field.
+    operationId: getConfiguracionesEfectivas
+    security: [{ bearerAuth: [] }]
+    responses:
+      "200":
+        description: Effective configuration
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/Configuraciones/ConfigParametrosResponse.yaml"
+      "403":
+        description: "Forbidden (FORBIDDEN)"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/responses/error.yaml"

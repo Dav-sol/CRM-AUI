@@ -1,0 +1,11 @@
+type: object
+
+description: Response with the commercial schedule of the organization.
+
+required:
+  - data
+
+properties:
+
+  data:
+    $ref: "./ConfigHorarios.yaml"
