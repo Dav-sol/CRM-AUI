@@ -116,7 +116,7 @@ export class EligibilityService {
 
     // G8: sin instalación válida no hay lifecycle que comunique (§1).
     if (input.cycleId) {
-      const g8 = await this.checkInstallation(input.cycleId);
+      const g8 = await this.checkCycleBase(input.cycleId);
       if (!g8.allowed) return g8;
 
       // G1: lifecycle pausado (reclamación, atención humana, pausa manual).
@@ -225,17 +225,24 @@ export class EligibilityService {
     return ALLOW;
   }
 
-  /** G8: el lifecycle requiere instalación válida (§1). */
-  async checkInstallation(cycleId: string): Promise<GateDecision> {
+  /**
+   * G8: el lifecycle requiere una base temporal canónica válida.
+   *
+   * La base es la fecha de compra del ERP (decisión aprobada), que es lo que
+   * `commercial_cycles.start_date` representa. Antes esta puerta exigía
+   * instalación, lo que excluía del lifecycle compras que sí tienen fecha de
+   * compra y que el PIT considera elegibles.
+   */
+  async checkCycleBase(cycleId: string): Promise<GateDecision> {
     const cycle = await this.prisma.commercialCycle.findUnique({
       where: { id: cycleId },
-      select: { purchase: { select: { installationDate: true } } },
+      select: { startDate: true },
     });
-    if (!cycle?.purchase.installationDate) {
+    if (!cycle?.startDate) {
       return {
         allowed: false,
         blockedBy: 'G8',
-        reason: 'sin instalación válida no hay lifecycle',
+        reason: 'el ciclo no tiene fecha base de compra válida',
         deferrable: true,
       };
     }

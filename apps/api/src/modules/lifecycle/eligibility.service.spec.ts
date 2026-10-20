@@ -77,7 +77,7 @@ describe('EligibilityService', () => {
       },
       commercialCycle: {
         findUnique: jest.fn().mockResolvedValue({
-          purchase: { installationDate: new Date('2026-01-15T12:00:00Z') },
+          startDate: new Date('2026-01-15T12:00:00Z'),
           lifecyclePausedAt: null,
         }),
       },
@@ -119,9 +119,82 @@ describe('EligibilityService', () => {
       expect(res.blockedBy).toBe('G4');
     });
 
+    // TASK 1: reloj controlado (miércoles 2026-09-30 10:00 Bogotá, en ventana
+    // Lun–Vie 08:00–19:30). No usa NOW ni local(): estas pruebas pasan igual
+    // cualquier día del año. Sin cycleId para aislar G3/G4 de G1/G7/G8.
+    describe('TASK 1 · G3/G4 consultan por customerId (reloj fijo)', () => {
+      // 2026-09-30 es miércoles. 15:00Z = 10:00 en Bogotá (UTC-5, sin DST).
+      const FIXED_NOW = new Date('2026-09-30T15:00:00.000Z');
+
+      function fixedSentAt(daysAgo: number): Date {
+        return new Date(FIXED_NOW.getTime() - daysAgo * 86_400_000);
+      }
+
+      it('G3 bloquea un AUTOMATIC de hace 8 días del mismo cliente', async () => {
+        prisma.message.findFirst.mockImplementation(
+          (args: { where: { type: string } }) =>
+            Promise.resolve(
+              args.where.type === 'AUTOMATIC'
+                ? { sentAt: fixedSentAt(8) }
+                : null,
+            ),
+        );
+        const res = await service.evaluate(
+          input({ now: FIXED_NOW, timeZone: TZ }),
+        );
+        expect(res.allowed).toBe(false);
+        expect(res.blockedBy).toBe('G3');
+        expect(res.deferrable).toBe(false);
+      });
+
+      it('G3 consulta el frequency por el customerId evaluado', async () => {
+        prisma.message.findFirst.mockResolvedValue(null);
+        await service.evaluate(input({ now: FIXED_NOW, timeZone: TZ }));
+        const calls = prisma.message.findFirst.mock.calls.map(
+          (call: Array<{ where: Record<string, unknown> }>) => call[0].where,
+        );
+        expect(calls.length).toBeGreaterThan(0);
+        // G4 consulta MANUAL y G3 consulta AUTOMATIC: ambas por cliente.
+        for (const where of calls) {
+          expect(where.customerId).toBe('cu-1');
+        }
+      });
+
+      it('G4 bloquea un MANUAL de hace 3 días del mismo cliente', async () => {
+        prisma.message.findFirst.mockImplementation(
+          (args: { where: { type: string } }) =>
+            Promise.resolve(
+              args.where.type === 'MANUAL' ? { sentAt: fixedSentAt(3) } : null,
+            ),
+        );
+        const res = await service.evaluate(
+          input({ now: FIXED_NOW, timeZone: TZ }),
+        );
+        expect(res.allowed).toBe(false);
+        expect(res.blockedBy).toBe('G4');
+      });
+
+      it('G4 consulta el silencio por el customerId evaluado', async () => {
+        prisma.message.findFirst.mockImplementation(
+          (args: { where: { type: string } }) =>
+            Promise.resolve(
+              args.where.type === 'MANUAL' ? { sentAt: fixedSentAt(3) } : null,
+            ),
+        );
+        await service.evaluate(input({ now: FIXED_NOW, timeZone: TZ }));
+        const manualCall = prisma.message.findFirst.mock.calls
+          .map(
+            (call: Array<{ where: Record<string, unknown> }>) => call[0].where,
+          )
+          .find((where) => where.type === 'MANUAL');
+        expect(manualCall).toBeDefined();
+        expect(manualCall?.customerId).toBe('cu-1');
+      });
+    });
+
     it('G1 (pausa) gana sobre frecuencia y silencio: es el primero', async () => {
       prisma.commercialCycle.findUnique.mockResolvedValue({
-        purchase: { installationDate: new Date() },
+        startDate: new Date('2026-01-15T12:00:00Z'),
         lifecyclePausedAt: new Date(),
       });
       prisma.message.findFirst.mockResolvedValue({
@@ -136,7 +209,7 @@ describe('EligibilityService', () => {
         noContactAt: new Date(),
       });
       prisma.commercialCycle.findUnique.mockResolvedValue({
-        purchase: { installationDate: new Date() },
+        startDate: new Date('2026-01-15T12:00:00Z'),
         lifecyclePausedAt: new Date(),
       });
       const res = await service.evaluate(input({ cycleId: 'cy-1' }));
@@ -382,14 +455,24 @@ describe('EligibilityService', () => {
   // G1 / G7 / G8
   // -------------------------------------------------------------------------
   describe('G1, G7 y G8', () => {
-    it('G8 bloquea sin instalación válida', async () => {
+    it('G8 bloquea si el ciclo no tiene fecha base de compra', async () => {
       prisma.commercialCycle.findUnique.mockResolvedValue({
-        purchase: { installationDate: null },
+        startDate: null,
         lifecyclePausedAt: null,
       });
       const res = await service.evaluate(input({ cycleId: 'cy-1' }));
       expect(res.blockedBy).toBe('G8');
       expect(res.deferrable).toBe(true);
+    });
+
+    // Decisión aprobada: la instalación ya NO es requisito de elegibilidad.
+    it('G8 permite un ciclo cuya compra no tiene fecha de instalación', async () => {
+      prisma.commercialCycle.findUnique.mockResolvedValue({
+        startDate: new Date('2026-01-15T12:00:00Z'),
+        lifecyclePausedAt: null,
+      });
+      const res = await service.evaluate(input({ cycleId: 'cy-1' }));
+      expect(res.blockedBy).not.toBe('G8');
     });
 
     it('G7 solo se consulta si la etapa es de mantenimiento', async () => {

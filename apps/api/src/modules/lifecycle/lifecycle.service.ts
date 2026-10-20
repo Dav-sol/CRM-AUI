@@ -40,40 +40,40 @@ export class LifecycleService {
   // ---------------------------------------------------------------------------
 
   /**
-   * ¿Tiene esta compra una instalación válida? Sin ella NO hay lifecycle
-   * (§1): la venta queda fuera y no se comunican hitos.
+   * ¿Tiene esta compra una fecha de compra válida? Esa es la condición de
+   * entrada al ciclo comercial: sin fecha de compra no hay base temporal y no
+   * se programa nada. La instalación es un dato del proceso de montaje y NO es
+   * requisito de elegibilidad.
    */
-  async tieneInstalacionValida(purchaseId: string): Promise<boolean> {
+  async tieneFechaCompraValida(purchaseId: string): Promise<boolean> {
     const purchase = await this.prisma.purchase.findUnique({
       where: { id: purchaseId },
-      select: { installationDate: true, deletedAt: true },
+      select: { purchaseDate: true, deletedAt: true },
     });
-    return Boolean(
-      purchase && !purchase.deletedAt && purchase.installationDate,
-    );
+    return Boolean(purchase && !purchase.deletedAt && purchase.purchaseDate);
   }
 
   /**
-   * Fecha base del ciclo: la instalación. Si no hay instalación devuelve null
-   * y el ciclo queda fuera del lifecycle. No sustituye por la fecha de venta
-   * ni inventa fechas (§1).
+   * Base temporal canónica de la compra: la fecha del ERP (decisión aprobada).
+   * Devuelve `null` solo si no hay fecha o la compra está eliminada; nunca
+   * sustituye por la instalación ni inventa una fecha.
    */
   async baseDateOf(
     purchaseId: string,
-  ): Promise<{ installationDate: Date; warrantyMonths: number | null } | null> {
+  ): Promise<{ purchaseDate: Date; warrantyMonths: number | null } | null> {
     const purchase = await this.prisma.purchase.findUnique({
       where: { id: purchaseId },
       select: {
-        installationDate: true,
+        purchaseDate: true,
         warrantyMonths: true,
         deletedAt: true,
       },
     });
-    if (!purchase || purchase.deletedAt || !purchase.installationDate) {
+    if (!purchase || purchase.deletedAt || !purchase.purchaseDate) {
       return null;
     }
     return {
-      installationDate: purchase.installationDate,
+      purchaseDate: purchase.purchaseDate,
       warrantyMonths: purchase.warrantyMonths ?? null,
     };
   }

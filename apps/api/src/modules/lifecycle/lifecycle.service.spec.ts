@@ -94,47 +94,49 @@ describe('LifecycleService', () => {
   });
 
   // -------------------------------------------------------------------------
-  // P0-A — lifecycle basado en instalación (§1)
+  // P0-A — entrada al lifecycle por la fecha de compra (decisión aprobada)
   // -------------------------------------------------------------------------
-  describe('P0-A · entrada al lifecycle (§1)', () => {
-    it('con instalación válida, el lifecycle puede existir', async () => {
+  describe('P0-A · entrada al lifecycle por fecha de compra', () => {
+    it('con fecha de compra válida, el lifecycle puede existir', async () => {
       prisma.purchase.findUnique.mockResolvedValue({
-        installationDate: new Date('2026-01-15T12:00:00.000Z'),
+        purchaseDate: new Date('2026-01-15T12:00:00.000Z'),
         warrantyMonths: 12,
         deletedAt: null,
       });
 
-      await expect(service.tieneInstalacionValida('pu-1')).resolves.toBe(true);
+      await expect(service.tieneFechaCompraValida('pu-1')).resolves.toBe(true);
       const base = await service.baseDateOf('pu-1');
-      expect(base?.installationDate.toISOString()).toBe(
-        '2026-01-15T12:00:00.000Z',
-      );
+      expect(base?.purchaseDate.toISOString()).toBe('2026-01-15T12:00:00.000Z');
     });
 
-    it('sin instalación, la venta NO pertenece al lifecycle', async () => {
+    it('sin instalación pero con fecha de compra, la venta SÍ pertenece al lifecycle', async () => {
+      // La instalación es un dato del montaje, no un requisito de elegibilidad.
       prisma.purchase.findUnique.mockResolvedValue({
+        purchaseDate: new Date('2026-01-15T12:00:00.000Z'),
         installationDate: null,
         warrantyMonths: 12,
         deletedAt: null,
       });
 
-      await expect(service.tieneInstalacionValida('pu-1')).resolves.toBe(false);
-      await expect(service.baseDateOf('pu-1')).resolves.toBeNull();
+      await expect(service.tieneFechaCompraValida('pu-1')).resolves.toBe(true);
+      const base = await service.baseDateOf('pu-1');
+      expect(base?.purchaseDate.toISOString()).toBe('2026-01-15T12:00:00.000Z');
     });
 
-    it('no inventa fecha de instalación a partir de la venta', async () => {
+    it('sin fecha de compra no hay base temporal y no se inventa ninguna', async () => {
       prisma.purchase.findUnique.mockResolvedValue({
-        installationDate: null,
+        purchaseDate: null,
         warrantyMonths: 24,
         deletedAt: null,
       });
-      // Ni devuelve purchaseDate ni un default: simplemente no hay lifecycle.
+      // Ni la instalación ni un default: simplemente no hay ciclo.
+      await expect(service.tieneFechaCompraValida('pu-1')).resolves.toBe(false);
       await expect(service.baseDateOf('pu-1')).resolves.toBeNull();
     });
 
     it('una compra borrada tampoco entra', async () => {
       prisma.purchase.findUnique.mockResolvedValue({
-        installationDate: new Date(),
+        purchaseDate: new Date(),
         warrantyMonths: 12,
         deletedAt: new Date(),
       });
