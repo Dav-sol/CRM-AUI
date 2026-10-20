@@ -12,7 +12,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, apiListQuickReplies } from "@/lib/api";
+import {
+  ApiError,
+  SEND_BLOCKED_MESSAGE,
+  SEND_BLOCKED_TITLE,
+  apiListQuickReplies,
+  isSendBlockedByPolicy,
+} from "@/lib/api";
 import { replySchema } from "@/lib/validators";
 
 type ReplyBoxProps = {
@@ -56,10 +62,19 @@ export function ReplyBox({ onSend }: ReplyBoxProps) {
     setSending(true);
     try {
       await onSend(text, quickReply?.uuid);
+      // Solo en éxito se limpia el borrador: si el envío se bloquea o falla,
+      // el texto que el asesor escribió sigue en el textarea para poder
+      // copiarlo o esperar a que se restablezca la operación.
       setContent("");
       textareaRef.current?.focus();
-    } catch {
-      toast.error("No se pudo enviar el mensaje. Inténtalo nuevamente.");
+    } catch (error) {
+      if (isSendBlockedByPolicy(error)) {
+        // Aviso explícito: NO se envió, NO se reintenta, NO se pide tocar la
+        // configuración. El borrador ya se conserva.
+        toast.error(SEND_BLOCKED_TITLE, { description: SEND_BLOCKED_MESSAGE });
+      } else {
+        toast.error("No se pudo enviar el mensaje. Inténtalo nuevamente.");
+      }
     } finally {
       setSending(false);
     }

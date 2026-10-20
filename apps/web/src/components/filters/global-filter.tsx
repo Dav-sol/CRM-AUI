@@ -1,6 +1,6 @@
 "use client";
 
-import { Filter, X } from "lucide-react";
+import { Filter, RotateCcw, X } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import { useFilters, type GlobalFilters } from "@/lib/filter-provider";
  */
 const WARRANTY_OPTIONS: {
   label: string;
-  value: GlobalFilters["warrantyStatus"];
+  value: NonNullable<GlobalFilters["warrantyStatus"]>;
 }[] = [
   { label: "Todas", value: "all" },
   { label: "Por vencer", value: "expiring" },
@@ -28,19 +28,55 @@ const WARRANTY_OPTIONS: {
 const inputClass =
   "h-8 w-full rounded-md border border-border/60 bg-background px-2 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/50";
 
+/**
+ * Global filter panel (specs/023-filters-v1 FR-005): every control edits a
+ * draft. Nothing is applied, requested or counted in the badge until
+ * "Aplicar filtros", and closing without applying drops the draft.
+ */
 export function GlobalFilter() {
-  const { filters, setFilter, resetFilters, activeCount } = useFilters();
+  const {
+    filters,
+    draft,
+    startDraft,
+    discardDraft,
+    setDraftFilter,
+    applyDraft,
+    resetFilters,
+    activeCount,
+  } = useFilters();
   const [open, setOpen] = useState(false);
 
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (next) {
+      startDraft();
+    } else {
+      discardDraft();
+    }
+  }
+
+  function handleApply() {
+    applyDraft();
+    setOpen(false);
+  }
+
+  function handleClear() {
+    resetFilters();
+    setOpen(false);
+  }
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger
         render={<Button variant="outline" size="sm" className="gap-1.5" />}
       >
         <Filter className="size-3.5" />
         Filtros
         {activeCount > 0 && (
-          <span className="ml-1 inline-flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+          <span
+            data-testid="global-filter-count"
+            className="ml-1 inline-flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground"
+          >
             {activeCount}
           </span>
         )}
@@ -61,10 +97,8 @@ export function GlobalFilter() {
           <input
             id="global-filter-city"
             type="text"
-            value={filters.city ?? ""}
-            onChange={(event) =>
-              setFilter("city", event.target.value.trim() || undefined)
-            }
+            value={draft.city ?? ""}
+            onChange={(event) => setDraftFilter("city", event.target.value)}
             placeholder="Todas las ciudades"
             maxLength={200}
             className={`${inputClass} mt-1`}
@@ -79,9 +113,9 @@ export function GlobalFilter() {
               <button
                 key={option.value}
                 type="button"
-                onClick={() => setFilter("warrantyStatus", option.value)}
+                onClick={() => setDraftFilter("warrantyStatus", option.value)}
                 className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${
-                  filters.warrantyStatus === option.value
+                  (draft.warrantyStatus ?? "all") === option.value
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted text-muted-foreground hover:text-foreground"
                 }`}
@@ -102,9 +136,9 @@ export function GlobalFilter() {
               id="global-filter-date-from"
               type="date"
               aria-label="Desde"
-              value={filters.dateFrom ?? ""}
+              value={draft.dateFrom ?? ""}
               onChange={(event) =>
-                setFilter("dateFrom", event.target.value || undefined)
+                setDraftFilter("dateFrom", event.target.value)
               }
               className={inputClass}
             />
@@ -113,26 +147,49 @@ export function GlobalFilter() {
               id="global-filter-date-to"
               type="date"
               aria-label="Hasta"
-              value={filters.dateTo ?? ""}
-              onChange={(event) =>
-                setFilter("dateTo", event.target.value || undefined)
-              }
+              value={draft.dateTo ?? ""}
+              onChange={(event) => setDraftFilter("dateTo", event.target.value)}
               className={inputClass}
             />
           </div>
         </div>
 
-        {activeCount > 0 && (
-          <button
+        <div className="mt-4 flex items-center gap-2">
+          <Button
             type="button"
-            onClick={() => {
-              resetFilters();
-            }}
-            className="mt-3 flex w-full items-center justify-center gap-1 rounded-md border border-border/60 px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            size="sm"
+            className="flex-1"
+            onClick={handleApply}
+            disabled={
+              (draft.city ?? "") === (filters.city ?? "") &&
+              (draft.warrantyStatus ?? "all") ===
+                (filters.warrantyStatus ?? "all") &&
+              (draft.dateFrom ?? "") === (filters.dateFrom ?? "") &&
+              (draft.dateTo ?? "") === (filters.dateTo ?? "")
+            }
           >
-            <X className="size-3" />
-            Limpiar filtros ({activeCount})
-          </button>
+            Aplicar filtros
+          </Button>
+          {activeCount > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={handleClear}
+              aria-label="Limpiar filtros"
+            >
+              <X className="size-3.5" aria-hidden="true" />
+              Limpiar
+            </Button>
+          )}
+        </div>
+        {activeCount > 0 && (
+          <p className="mt-2 flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
+            <RotateCcw className="size-3" aria-hidden="true" />
+            {activeCount} filtro{activeCount === 1 ? "" : "s"} aplicado
+            {activeCount === 1 ? "" : "s"}
+          </p>
         )}
       </PopoverContent>
     </Popover>

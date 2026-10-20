@@ -74,6 +74,12 @@ import {
   createTemplate,
   updateTemplate,
   deleteTemplate,
+  getMyOrganization,
+  updateMyOrganization,
+  getConfiguracionesHorarios,
+  updateConfiguracionesHorarios,
+  getConfiguracionesParametros,
+  updateConfiguracionesParametros,
 } from "@automatize-it/sdk";
 
 import type { ListQuotes200DataItem } from "@automatize-it/sdk/model/listQuotes200DataItem";
@@ -108,6 +114,9 @@ import type {
   TemplateListParams,
   CreateTemplateBody,
   UpdateTemplateBody,
+  UpdateMiEmpresaBody,
+  UpdateHorariosBody,
+  UpdateParametrosBody,
 } from "./sdk-types";
 
 export class ApiError extends Error {
@@ -130,6 +139,58 @@ export class SessionExpiredError extends ApiError {
     );
     this.name = "SessionExpiredError";
   }
+}
+
+/**
+ * Código de negocio que devuelve la API cuando la política de seguridad de
+ * salida (`SendPermitGuard`) impide enviar. Ver
+ * `whatsapp.service.ts::assertOutboundPermit`.
+ */
+export const SEND_BLOCKED_BY_POLICY = "SEND_BLOCKED_BY_POLICY";
+
+/** Título mostrado al asesor. Sin detalles internos. */
+export const SEND_BLOCKED_TITLE = "Envío bloqueado";
+
+/**
+ * Texto del aviso. Deja explícito que el mensaje NO se envió, que el borrador
+ * se conserva y que la acción es escalar al administrador. No sugiere
+ * reintentar (un reintento volvería a ser bloqueado) ni pide cambiar la
+ * configuración de seguridad.
+ */
+export const SEND_BLOCKED_MESSAGE =
+  "El mensaje no se envió porque los envíos están deshabilitados por la política de seguridad. Conserva el texto y contacta al administrador del sistema si necesitas asistencia.";
+
+/**
+ * Detecta el bloqueo por política sin depender del status HTTP: cualquier otro
+ * 503 (proveedor caído, indisponibilidad) mantiene su tratamiento genérico.
+ */
+export function isSendBlockedByPolicy(error: unknown): boolean {
+  return error instanceof ApiError && error.code === SEND_BLOCKED_BY_POLICY;
+}
+
+/**
+ * Normaliza el cuerpo de error de la API.
+ *
+ * El backend responde anidado — `{ "error": { "code", "message" } }` — tal y
+ * como documenta `ErrorBody` en
+ * `apps/api/src/core/filters/http-exception.filter.ts`. Antes se leía plano,
+ * así que NINGÚN código de negocio llegaba al frontend y todo caía en
+ * `UNKNOWN_ERROR`. Se acepta también el formato plano por compatibilidad con
+ * respuestas antiguas o de terceros.
+ */
+function extractApiErrorBody(data: unknown): {
+  code?: string;
+  message?: string;
+} {
+  const body = (data ?? {}) as {
+    error?: { code?: string; message?: string };
+    code?: string;
+    message?: string;
+  };
+  if (body.error && typeof body.error === "object") {
+    return { code: body.error.code, message: body.error.message };
+  }
+  return { code: body.code, message: body.message };
 }
 
 type SdkFn = (...args: never[]) => Promise<{ status: number; data: unknown }>;
@@ -175,7 +236,7 @@ function unwrap<T extends SdkFn>(
     return ((res.data as { data?: unknown } | null)?.data ??
       res.data) as SdkData<T>;
   }
-  const error = (res.data ?? {}) as { code?: string; message?: string };
+  const error = extractApiErrorBody(res.data);
   throw new ApiError(
     res.status,
     error.code ?? "UNKNOWN_ERROR",
@@ -199,7 +260,7 @@ async function callList<T extends ListSdkFn>(
       Extract<Awaited<ReturnType<T>>, { status: 200 | 201 }>["data"]
     >;
   }
-  const error = (res.data ?? {}) as { code?: string; message?: string };
+  const error = extractApiErrorBody(res.data);
   throw new ApiError(
     res.status,
     error.code ?? "UNKNOWN_ERROR",
@@ -1038,4 +1099,51 @@ export async function apiDeleteFollowUpSequence(
 ): Promise<SdkData<typeof deleteFollowUpSequence>> {
   const res = await call((options) => deleteFollowUpSequence(uuid, options));
   return unwrap(deleteFollowUpSequence, res);
+}
+
+// Configuraciones v1 (specs/024-configuraciones-v1). La organización siempre
+// viene del JWT: ningún endpoint acepta un organizationId del cliente.
+
+export async function apiGetMiEmpresa(): Promise<SdkData<typeof getMyOrganization>> {
+  const res = await call((options) => getMyOrganization(options));
+  return unwrap(getMyOrganization, res);
+}
+
+export async function apiUpdateMiEmpresa(
+  body: UpdateMiEmpresaBody,
+): Promise<SdkData<typeof updateMyOrganization>> {
+  const res = await call((options) => updateMyOrganization(body, options));
+  return unwrap(updateMyOrganization, res);
+}
+
+export async function apiGetConfigHorarios(): Promise<
+  SdkData<typeof getConfiguracionesHorarios>
+> {
+  const res = await call((options) => getConfiguracionesHorarios(options));
+  return unwrap(getConfiguracionesHorarios, res);
+}
+
+export async function apiUpdateConfigHorarios(
+  body: UpdateHorariosBody,
+): Promise<SdkData<typeof updateConfiguracionesHorarios>> {
+  const res = await call((options) =>
+    updateConfiguracionesHorarios(body, options),
+  );
+  return unwrap(updateConfiguracionesHorarios, res);
+}
+
+export async function apiGetConfigParametros(): Promise<
+  SdkData<typeof getConfiguracionesParametros>
+> {
+  const res = await call((options) => getConfiguracionesParametros(options));
+  return unwrap(getConfiguracionesParametros, res);
+}
+
+export async function apiUpdateConfigParametros(
+  body: UpdateParametrosBody,
+): Promise<SdkData<typeof updateConfiguracionesParametros>> {
+  const res = await call((options) =>
+    updateConfiguracionesParametros(body, options),
+  );
+  return unwrap(updateConfiguracionesParametros, res);
 }

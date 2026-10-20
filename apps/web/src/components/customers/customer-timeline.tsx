@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 
 import type { CustomerTimeline as TimelineData } from "@/lib/api";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCivilDate, formatCurrency, formatDate } from "@/lib/format";
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
   COMPLETED: { label: "Completada", color: "text-green-600" },
@@ -101,7 +101,7 @@ export function CustomerTimeline({ timeline }: CustomerTimelineProps) {
                       </p>
                       <p className="mt-0.5 text-[11px] text-muted-foreground">
                         {purchase.product.code} · Factura #{purchase.invoiceNumber} ·{" "}
-                        {formatDate(purchase.purchaseDate)}
+                        {formatCivilDate(purchase.purchaseDate)}
                       </p>
                       <div className="mt-1 flex flex-wrap items-center gap-2">
                         <span className="text-[11px] font-medium">

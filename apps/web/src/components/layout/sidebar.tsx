@@ -1,18 +1,14 @@
 "use client";
 
 import {
-  BarChart3,
-  FileText,
   FileUp,
   LayoutDashboard,
-  Library,
   Megaphone,
   MessagesSquare,
   Package,
   Settings,
   ShoppingCart,
   Users,
-  Workflow,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -41,7 +37,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Clientes", icon: Users, href: "/customers", available: true },
   { label: "Compras", icon: ShoppingCart, href: "/purchases", available: true },
   { label: "Productos", icon: Package, href: "/products", available: true },
-  { label: "Cotizaciones", icon: FileText, href: "/quotes", available: true },
+  { label: "Importaciones", icon: FileUp, href: "/imports", available: true },
   {
     label: "Conversaciones",
     icon: MessagesSquare,
@@ -50,16 +46,11 @@ const NAV_ITEMS: NavItem[] = [
   },
   { label: "Campañas", icon: Megaphone, href: "/campaigns", available: true },
   {
-    label: "Automatizaciones",
-    icon: Workflow,
-    href: "/automations",
+    label: "Configuración",
+    icon: Settings,
+    href: "/configuraciones",
     available: true,
   },
-  { label: "Importaciones", icon: FileUp, href: "/imports", available: true },
-  { label: "Biblioteca", icon: Library, href: "/library", available: true },
-  { label: "Mensajes", icon: Megaphone, href: "/messages", available: true },
-  { label: "Reportes", icon: BarChart3, href: "/reports", available: true },
-  { label: "Configuración", icon: Settings, available: false },
 ];
 
 export function Sidebar({ collapsed }: { collapsed: boolean }) {

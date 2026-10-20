@@ -34,14 +34,7 @@ import {
   apiListPurchases,
   type CustomerTimeline as CustomerTimelineData,
 } from "@/lib/api";
-import {
-  formatCurrency,
-  formatDate,
-  formatDateTime,
-  formatNumber,
-  formatPhone,
-  formatRelative,
-} from "@/lib/format";
+import { formatCivilDate, formatCurrency, formatDate, formatDateTime, formatNumber, formatPhone, formatRelative } from "@/lib/format";
 import { AUTOMATION_STATUS_LABELS } from "@/lib/validators";
 
 type Customer = Awaited<ReturnType<typeof apiGetCustomer>>;
@@ -435,7 +428,7 @@ export function CustomerDetailView({ uuid }: { uuid: string }) {
                   {purchases.map((purchase) => (
                     <tr key={purchase.uuid}>
                       <td className="py-2 pr-4 whitespace-nowrap">
-                        {formatDate(purchase.purchaseDate)}
+                        {formatCivilDate(purchase.purchaseDate)}
                       </td>
                       <td className="max-w-[180px] truncate py-2 pr-4">
                         {purchase.product.name}

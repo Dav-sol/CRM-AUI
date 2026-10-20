@@ -1091,7 +1091,10 @@ async function ensureHeroAutomations(
           data: {
             purchaseId: purchase.id,
             status: 'ACTIVE',
-            startDate: new Date(),
+            // Base temporal canónica (decisión aprobada): la fecha de compra
+            // del ERP, igual que en `automations.service` y `campaigns.service`.
+            // Nunca `new Date()`: inventaría un arranque que no ocurrió.
+            startDate: purchase.purchaseDate,
           },
           select: { id: true, status: true },
         });

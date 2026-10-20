@@ -11,7 +11,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { ApiError, apiGetAutomation } from "@/lib/api";
-import { formatDateTime, formatPhone } from "@/lib/format";
+import { formatCivilDateTime, formatDateTime, formatPhone } from "@/lib/format";
 import type { AutomationDetail } from "@/lib/sdk-types";
 
 type AutomationDetailSheetProps = {
@@ -113,7 +113,7 @@ function AutomationDetailContent({ detail }: { detail: AutomationDetail }) {
           {detail.purchase.productName}
         </p>
         <p className="text-xs text-muted-foreground">
-          {formatDateTime(detail.purchase.purchaseDate)}
+          {formatCivilDateTime(detail.purchase.purchaseDate)}
         </p>
       </div>
       <div className="space-y-1">

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, apiListPurchases } from "@/lib/api";
-import { formatDate } from "@/lib/format";
+import { formatCivilDate } from "@/lib/format";
 import type { PurchaseItem, PurchaseListParams } from "@/lib/sdk-types";
 
 export type PurchaseFilters = {
@@ -181,7 +181,7 @@ export function PurchaseList({ items, error }: PurchaseListProps) {
                       </span>
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {formatDate(purchase.purchaseDate)} · {purchase.quantity}{" "}
+                      {formatCivilDate(purchase.purchaseDate)} · {purchase.quantity}{" "}
                       {purchase.quantity === 1 ? "unidad" : "unidades"}
                     </p>
                   </div>

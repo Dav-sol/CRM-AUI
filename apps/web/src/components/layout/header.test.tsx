@@ -8,8 +8,15 @@ const routerMocks = vi.hoisted(() => ({
 }));
 
 const filterMocks = vi.hoisted(() => ({
-  setFilter: vi.fn(),
+  setDraftFilter: vi.fn(),
+  applyDraft: vi.fn(),
   resetFilters: vi.fn(),
+  startDraft: vi.fn(),
+  discardDraft: vi.fn(),
+  state: {
+    filters: { warrantyStatus: "all" },
+    draft: { warrantyStatus: "all" },
+  },
 }));
 
 vi.mock("next/navigation", () => ({
@@ -26,8 +33,12 @@ vi.mock("@/components/auth/auth-provider", () => ({
 vi.mock("@/lib/filter-provider", () => ({
   FilterProvider: ({ children }: { children: React.ReactNode }) => children,
   useFilters: () => ({
-    filters: {},
-    setFilter: filterMocks.setFilter,
+    filters: filterMocks.state.filters,
+    draft: filterMocks.state.draft,
+    startDraft: filterMocks.startDraft,
+    discardDraft: filterMocks.discardDraft,
+    setDraftFilter: filterMocks.setDraftFilter,
+    applyDraft: filterMocks.applyDraft,
     resetFilters: filterMocks.resetFilters,
     activeCount: 0,
   }),

@@ -30,30 +30,59 @@ const user: LoginUser = {
 };
 
 function Probe() {
-  const { filters, setFilter, resetFilters, activeCount } = useFilters();
+  const state = useFilters();
   return (
     <div>
-      <p data-testid="city">{filters.city ?? ""}</p>
-      <p data-testid="warranty">{filters.warrantyStatus ?? ""}</p>
-      <p data-testid="from">{filters.dateFrom ?? ""}</p>
-      <p data-testid="count">{String(activeCount)}</p>
-      <button type="button" onClick={() => setFilter("city", "Barranquilla")}>
-        set city
+      <p data-testid="applied-city">{state.filters.city ?? ""}</p>
+      <p data-testid="applied-warranty">{state.filters.warrantyStatus ?? ""}</p>
+      <p data-testid="applied-from">{state.filters.dateFrom ?? ""}</p>
+      <p data-testid="applied-to">{state.filters.dateTo ?? ""}</p>
+      <p data-testid="draft-city">{state.draft.city ?? ""}</p>
+      <p data-testid="draft-warranty">{state.draft.warrantyStatus ?? ""}</p>
+      <p data-testid="count">{String(state.activeCount)}</p>
+      <button
+        type="button"
+        onClick={() => state.setDraftFilter("city", "Barranquilla")}
+      >
+        draft city
       </button>
       <button
         type="button"
-        onClick={() => setFilter("warrantyStatus", "expiring")}
+        onClick={() => state.setDraftFilter("warrantyStatus", "expiring")}
       >
-        set warranty
+        draft warranty
       </button>
-      <button type="button" onClick={resetFilters}>
+      <button
+        type="button"
+        onClick={() => state.setDraftFilter("dateFrom", "2026-01-01")}
+      >
+        draft from
+      </button>
+      <button type="button" onClick={state.startDraft}>
+        start draft
+      </button>
+      <button type="button" onClick={state.discardDraft}>
+        discard draft
+      </button>
+      <button type="button" onClick={state.applyDraft}>
+        apply
+      </button>
+      <button type="button" onClick={state.resetFilters}>
         reset
       </button>
     </div>
   );
 }
 
-describe("FilterProvider: global filters", () => {
+describe("FilterProvider: global filters con borrador (FR-005)", () => {
+  function setup() {
+    return render(
+      <FilterProvider>
+        <Probe />
+      </FilterProvider>,
+    );
+  }
+
   beforeEach(() => {
     window.localStorage.clear();
     vi.clearAllMocks();
@@ -65,61 +94,126 @@ describe("FilterProvider: global filters", () => {
     });
   });
 
-  it("starts with the defaults and counts only real filters", () => {
-    render(
-      <FilterProvider>
-        <Probe />
-      </FilterProvider>,
-    );
+  it("arranca con los valores por defecto y sin filtros aplicados", () => {
+    setup();
 
-    expect(screen.getByTestId("city").textContent).toBe("");
-    expect(screen.getByTestId("warranty").textContent).toBe("all");
+    expect(screen.getByTestId("applied-city").textContent).toBe("");
+    expect(screen.getByTestId("applied-warranty").textContent).toBe("all");
     expect(screen.getByTestId("count").textContent).toBe("0");
     expect(DEFAULT_FILTERS.warrantyStatus).toBe("all");
   });
 
-  it("keeps the warranty windows in the spec", () => {
+  it("mantiene las ventanas de garantía de la spec", () => {
     expect(WARRANTY_EXPIRING_IN_DAYS).toBe(30);
     expect(WARRANTY_EXPIRED_IN_DAYS).toBe(730);
   });
 
-  it("persists the filters scoped to the signed-in identity", async () => {
+  it("escribir en el borrador no aplica ni cambia el badge", async () => {
     const userEventRef = userEvent.setup();
-    const { unmount } = render(
-      <FilterProvider>
-        <Probe />
-      </FilterProvider>,
-    );
+    setup();
 
-    await userEventRef.click(screen.getByText("set city"));
-    await userEventRef.click(screen.getByText("set warranty"));
+    await userEventRef.click(screen.getByText("draft city"));
+    await userEventRef.click(screen.getByText("draft warranty"));
 
-    expect(screen.getByTestId("count").textContent).toBe("2");
+    expect(screen.getByTestId("draft-city").textContent).toBe("Barranquilla");
+    expect(screen.getByTestId("applied-city").textContent).toBe("");
+    expect(screen.getByTestId("applied-warranty").textContent).toBe("all");
+    expect(screen.getByTestId("count").textContent).toBe("0");
+  });
+
+  it("aplicar el borrador cambia los filtros aplicados y el badge", async () => {
+    const userEventRef = userEvent.setup();
+    setup();
+
+    await userEventRef.click(screen.getByText("draft city"));
+    await userEventRef.click(screen.getByText("apply"));
+
+    expect(screen.getByTestId("applied-city").textContent).toBe("Barranquilla");
+    expect(screen.getByTestId("count").textContent).toBe("1");
+  });
+
+  it("cerrar sin aplicar descarta el borrador y conserva lo aplicado", async () => {
+    const userEventRef = userEvent.setup();
+    setup();
+
+    await userEventRef.click(screen.getByText("draft city"));
+    await userEventRef.click(screen.getByText("apply"));
+    // A new draft change that is never applied.
+    await userEventRef.click(screen.getByText("start draft"));
+    await userEventRef.click(screen.getByText("draft city"));
+    expect(screen.getByTestId("draft-city").textContent).toBe("Barranquilla");
+
+    await userEventRef.click(screen.getByText("discard draft"));
+
+    // The draft goes back to the applied value, which is untouched.
+    expect(screen.getByTestId("draft-city").textContent).toBe("Barranquilla");
+    expect(screen.getByTestId("count").textContent).toBe("1");
+  });
+
+  it("abrir el panel carga el borrador con lo aplicado (sobrevive al ciclo)", async () => {
+    const userEventRef = userEvent.setup();
+    setup();
+
+    await userEventRef.click(screen.getByText("draft city"));
+    await userEventRef.click(screen.getByText("apply"));
+    await userEventRef.click(screen.getByText("discard draft"));
+    await userEventRef.click(screen.getByText("start draft"));
+
+    expect(screen.getByTestId("draft-city").textContent).toBe("Barranquilla");
+    expect(screen.getByTestId("count").textContent).toBe("1");
+  });
+
+  it("las fechas siguen el mismo modelo de borrador", async () => {
+    const userEventRef = userEvent.setup();
+    setup();
+
+    await userEventRef.click(screen.getByText("draft from"));
+    expect(screen.getByTestId("applied-from").textContent).toBe("");
+    expect(screen.getByTestId("count").textContent).toBe("0");
+
+    await userEventRef.click(screen.getByText("apply"));
+    expect(screen.getByTestId("applied-from").textContent).toBe("2026-01-01");
+    expect(screen.getByTestId("count").textContent).toBe("1");
+  });
+
+  it("limpiar borra aplicados y borrador y deja el badge a 0", async () => {
+    const userEventRef = userEvent.setup();
+    setup();
+
+    await userEventRef.click(screen.getByText("draft city"));
+    await userEventRef.click(screen.getByText("apply"));
+    await userEventRef.click(screen.getByText("draft warranty"));
+
+    await userEventRef.click(screen.getByText("reset"));
+
+    expect(screen.getByTestId("applied-city").textContent).toBe("");
+    expect(screen.getByTestId("applied-warranty").textContent).toBe("all");
+    expect(screen.getByTestId("draft-warranty").textContent).toBe("all");
+    expect(screen.getByTestId("count").textContent).toBe("0");
+  });
+
+  it("persiste lo aplicado con scope por identidad y lo restaura", async () => {
+    const userEventRef = userEvent.setup();
+    const { unmount } = setup();
+
+    await userEventRef.click(screen.getByText("draft city"));
+    await userEventRef.click(screen.getByText("apply"));
+
     const stored = window.localStorage.getItem(
       "automatizeit-filters:ORGANIZATION:org-1:user-1",
     );
     expect(stored).toContain("Barranquilla");
-    expect(stored).toContain("expiring");
     unmount();
 
-    // A new mount for the same user restores them.
-    render(
-      <FilterProvider>
-        <Probe />
-      </FilterProvider>,
-    );
-    expect(screen.getByTestId("city").textContent).toBe("Barranquilla");
-    expect(screen.getByTestId("warranty").textContent).toBe("expiring");
+    setup();
+    expect(screen.getByTestId("applied-city").textContent).toBe("Barranquilla");
   });
 
-  it("does not leak the filters to another user", async () => {
+  it("otro usuario no hereda los filtros", async () => {
     const userEventRef = userEvent.setup();
-    const { unmount } = render(
-      <FilterProvider>
-        <Probe />
-      </FilterProvider>,
-    );
-    await userEventRef.click(screen.getByText("set city"));
+    const { unmount } = setup();
+    await userEventRef.click(screen.getByText("draft city"));
+    await userEventRef.click(screen.getByText("apply"));
     unmount();
 
     vi.mocked(useAuth).mockReturnValue({
@@ -128,23 +222,16 @@ describe("FilterProvider: global filters", () => {
       login: vi.fn(),
       logout: vi.fn(),
     });
-    render(
-      <FilterProvider>
-        <Probe />
-      </FilterProvider>,
-    );
+    setup();
 
-    expect(screen.getByTestId("city").textContent).toBe("");
+    expect(screen.getByTestId("applied-city").textContent).toBe("");
+    expect(screen.getByTestId("count").textContent).toBe("0");
   });
 
-  it("picks up a change applied in another tab", async () => {
-    render(
-      <FilterProvider>
-        <Probe />
-      </FilterProvider>,
-    );
-
+  it("recoge un cambio aplicado en otra pestaña", async () => {
+    setup();
     const scope = filterScopeOf(user);
+
     act(() => {
       window.dispatchEvent(
         new StorageEvent("storage", {
@@ -157,15 +244,11 @@ describe("FilterProvider: global filters", () => {
       );
     });
 
-    expect(screen.getByTestId("city").textContent).toBe("Cartagena");
+    expect(screen.getByTestId("applied-city").textContent).toBe("Cartagena");
   });
 
-  it("ignores a storage event for another key", () => {
-    render(
-      <FilterProvider>
-        <Probe />
-      </FilterProvider>,
-    );
+  it("ignora eventos de storage de otra clave", () => {
+    setup();
 
     act(() => {
       window.dispatchEvent(
@@ -176,25 +259,22 @@ describe("FilterProvider: global filters", () => {
       );
     });
 
-    expect(screen.getByTestId("city").textContent).toBe("");
+    expect(screen.getByTestId("applied-city").textContent).toBe("");
   });
 
-  it("ignores corrupted storage content", () => {
+  it("ignora contenido de storage corrupto", () => {
     window.localStorage.setItem(
       "automatizeit-filters:ORGANIZATION:org-1:user-1",
       "{no-json",
     );
-    render(
-      <FilterProvider>
-        <Probe />
-      </FilterProvider>,
-    );
 
-    expect(screen.getByTestId("city").textContent).toBe("");
+    setup();
+
+    expect(screen.getByTestId("applied-city").textContent).toBe("");
     expect(screen.getByTestId("count").textContent).toBe("0");
   });
 
-  it("scopes platform accounts without an organization", () => {
+  it("acota las cuentas de plataforma sin organización", () => {
     const platform: LoginUser = { ...user, organizationId: null };
     expect(filterScopeOf(platform)).toBe("ORGANIZATION:platform:user-1");
     expect(filterScopeOf(null)).toBe("anonymous");

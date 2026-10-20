@@ -31,7 +31,7 @@ import {
   type PurchaseFormInput,
   type PurchaseFormValues,
 } from "@/lib/validators";
-import { formatDate } from "@/lib/format";
+import { formatCivilDate } from "@/lib/format";
 
 import type { CreatePurchaseBodyWarrantyMonths } from "@automatize-it/sdk/model/createPurchaseBodyWarrantyMonths";
 
@@ -298,7 +298,7 @@ export function CreatePurchaseSheet({
                       <span className="text-muted-foreground">Vence: </span>
                       <span className="font-medium">
                         <Calendar className="size-3 inline-block align-middle mr-1" />
-                        {formatDate(warrantyExpiresAt.toISOString())}
+                        {formatCivilDate(warrantyExpiresAt.toISOString())}
                       </span>
                     </div>
                   )}

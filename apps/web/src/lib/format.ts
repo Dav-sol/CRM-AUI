@@ -1,25 +1,103 @@
-import { format, formatDistanceToNowStrict } from "date-fns";
+import { formatDistanceToNowStrict } from "date-fns";
 import { es } from "date-fns/locale";
 
-export function formatDateTime(value: string | null | undefined): string {
+/**
+ * Zona horaria de presentación.
+ *
+ * Antes estas funciones usaban `date-fns` sin zona, por lo que el resultado
+ * dependía de la zona horaria del NAVEGADOR del asesor: la misma compra podía
+ * mostrarse con un día distinto según desde dónde se abría la pantalla.
+ * Fijarla hace que la fecha mostrada sea siempre la fecha civil de Colombia,
+ * que es el calendario operativo del producto (RNF-07).
+ *
+ * No altera datos, cálculos ni contratos de API: solo la presentación.
+ */
+export const PRESENTATION_TIME_ZONE = "America/Bogota";
+
+const dateFormatter = new Intl.DateTimeFormat("es-ES", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  timeZone: PRESENTATION_TIME_ZONE,
+});
+
+const dateTimeFormatter = new Intl.DateTimeFormat("es-ES", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  timeZone: PRESENTATION_TIME_ZONE,
+});
+
+const timeFormatter = new Intl.DateTimeFormat("es-ES", {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  timeZone: PRESENTATION_TIME_ZONE,
+});
+
+function toDate(value: string | null | undefined): Date | null {
   if (!value) {
-    return "—";
+    return null;
   }
-  return format(new Date(value), "dd MMM yyyy, HH:mm", { locale: es });
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function formatDateTime(value: string | null | undefined): string {
+  const date = toDate(value);
+  return date ? dateTimeFormatter.format(date) : "—";
+}
+
+const civilDateFormatter = new Intl.DateTimeFormat("es-ES", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  // Una fecha civil es el día del calendario, no un instante: se lee con sus
+  // propios campos UTC. Aplicarle la zona operativa la desplazaría un día hacia
+  // atrás, porque las columnas `DATE` llegan a las 00:00 UTC.
+  timeZone: "UTC",
+});
+
+const civilDateTimeFormatter = new Intl.DateTimeFormat("es-ES", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  timeZone: "UTC",
+});
+
+/**
+ * Formatea una **fecha civil** (columna `DATE`: `purchaseDate`,
+ * `warrantyExpiresAt`, `installationDate`). Muestra exactamente el día que
+ * registró el negocio.
+ *
+ * No usar `formatDate` para estos campos: al aplicar la zona operativa, un
+ * valor a las 00:00 UTC se mostraría como el día anterior.
+ */
+export function formatCivilDate(value: string | null | undefined): string {
+  const date = toDate(value);
+  return date ? civilDateFormatter.format(date) : "—";
+}
+
+/** Igual que `formatCivilDate`, con hora. */
+export function formatCivilDateTime(value: string | null | undefined): string {
+  const date = toDate(value);
+  return date ? civilDateTimeFormatter.format(date) : "—";
 }
 
 export function formatDate(value: string | null | undefined): string {
-  if (!value) {
-    return "—";
-  }
-  return format(new Date(value), "dd MMM yyyy", { locale: es });
+  const date = toDate(value);
+  return date ? dateFormatter.format(date) : "—";
 }
 
 export function formatTime(value: string | null | undefined): string {
-  if (!value) {
-    return "—";
-  }
-  return format(new Date(value), "HH:mm", { locale: es });
+  const date = toDate(value);
+  return date ? timeFormatter.format(date) : "—";
 }
 
 export function formatRelative(value: string | null | undefined): string {

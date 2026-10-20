@@ -5,6 +5,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { configuration, envValidationSchema } from './core/config';
 
 import { PrismaModule } from './core/database/prisma.module';
+import { SafetyModule } from './core/safety/send-permit.module';
 import { HealthModule } from './modules/health/health.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -40,6 +41,7 @@ import { MessagingModule } from './modules/messaging/messaging.module';
     EventEmitterModule.forRoot(),
 
     PrismaModule,
+    SafetyModule,
 
     HealthModule,
 

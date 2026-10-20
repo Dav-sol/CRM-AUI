@@ -41,6 +41,12 @@ import type {
   createTemplate,
   updateTemplate,
   deleteTemplate,
+  getMyOrganization,
+  updateMyOrganization,
+  getConfiguracionesHorarios,
+  updateConfiguracionesHorarios,
+  getConfiguracionesParametros,
+  updateConfiguracionesParametros,
 } from "@automatize-it/sdk";
 
 type SuccessData<
@@ -155,3 +161,27 @@ export type TemplateListParams = Parameters<typeof listTemplates>[0];
 export type TemplateDetail = NonNullable<SuccessData<typeof getTemplate>>;
 export type CreateTemplateBody = Parameters<typeof createTemplate>[0];
 export type UpdateTemplateBody = Parameters<typeof updateTemplate>[1];
+
+// Configuraciones v1 (specs/024-configuraciones-v1).
+
+export type MiEmpresa = NonNullable<SuccessData<typeof getMyOrganization>>;
+export type UpdateMiEmpresaBody = Parameters<typeof updateMyOrganization>[0];
+
+export type ConfigHorarios = NonNullable<
+  SuccessData<typeof getConfiguracionesHorarios>
+>;
+export type ConfigBusinessDay = ConfigHorarios["businessDays"][number];
+export type UpdateHorariosBody = Parameters<
+  typeof updateConfiguracionesHorarios
+>[0];
+
+/** Each parameter with its effective value and where it comes from. */
+export type ConfigParametros = NonNullable<
+  SuccessData<typeof getConfiguracionesParametros>
+>;
+export type ConfigParamSource = ConfigParametros["quoteExpiryDays"]["source"];
+export type ConfigEffectiveValue =
+  ConfigParametros["quoteExpiryDays"];
+export type UpdateParametrosBody = Parameters<
+  typeof updateConfiguracionesParametros
+>[0];

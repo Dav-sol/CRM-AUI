@@ -57,6 +57,14 @@ COPY apps/api/prisma/templates-seed.json ./apps/api/prisma/
 # Set working directory to API
 WORKDIR /app/apps/api
 
+# AUTO-SAFETY-002: default outbound-send policy is DENY, baked into the image so
+# it can never boot with real sends enabled because a variable was forgotten.
+# Real sends require OUTBOUND_SEND_ENABLED=ENABLED *plus* an explicit
+# organization allowlist, an explicit channel allowlist and a non-expired
+# OUTBOUND_SEND_UNTIL window. docker-compose declares the variable explicitly,
+# which overrides this default.
+ENV OUTBOUND_SEND_ENABLED=DENIED
+
 # Expose port
 EXPOSE 3002
 

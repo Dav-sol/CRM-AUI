@@ -32,6 +32,20 @@ services:
       WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:?WHATSAPP_WEBHOOK_VERIFY_TOKEN requerido}
       WHATSAPP_WEBHOOK_SECRET: ${WHATSAPP_WEBHOOK_SECRET:?WHATSAPP_WEBHOOK_SECRET requerido}
       WHATSAPP_DEFAULT_ORGANIZATION_ID: ${WHATSAPP_DEFAULT_ORGANIZATION_ID:?WHATSAPP_DEFAULT_ORGANIZATION_ID requerido}
+      # AUTO-SAFETY-002: outbound-send policy, declared HERE on purpose so the
+      # containment does not depend on the optional, gitignored .env.extra that
+      # scripts/human-testing-up.sh rewrites. `environment:` always wins over
+      # `env_file:`, so no script can lift the DENY by editing .env.extra.
+      #
+      # Joi (env.validation.ts) accepts ONLY the tokens ENABLED|DENIED for the
+      # switch — 'true'/'1'/'yes' are rejected at boot. Keep this DENIED unless
+      # real sends are explicitly authorized AND an org allowlist, a channel
+      # allowlist and a non-expired OUTBOUND_SEND_UNTIL window are configured;
+      # the app refuses to start on an incoherent combination.
+      OUTBOUND_SEND_ENABLED: ${OUTBOUND_SEND_ENABLED:-DENIED}
+      OUTBOUND_SEND_ALLOWED_ORGANIZATION_IDS: ${OUTBOUND_SEND_ALLOWED_ORGANIZATION_IDS:-}
+      OUTBOUND_SEND_ALLOWED_CHANNELS: ${OUTBOUND_SEND_ALLOWED_CHANNELS:-}
+      OUTBOUND_SEND_UNTIL: ${OUTBOUND_SEND_UNTIL:-}
       # Optional integrations (Pancake/SMS, sandbox routing, COOKIE_SECURE) are
       # NOT declared here on purpose: an empty value would be rejected by Joi
       # ("not allowed to be empty"). They are delivered through env_file below,

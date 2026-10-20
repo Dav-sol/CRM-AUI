@@ -27,12 +27,7 @@ import {
   apiListConversations,
   apiListPurchases,
 } from "@/lib/api";
-import {
-  formatCurrency,
-  formatDate,
-  formatNumber,
-  formatPhone,
-} from "@/lib/format";
+import { formatCivilDate, formatCurrency, formatNumber, formatPhone } from "@/lib/format";
 
 type CustomerDetailSheetProps = {
   customerUuid: string | null;
@@ -251,7 +246,7 @@ function CustomerSheetBody({ customerUuid }: { customerUuid: string }) {
                     {purchase.product.name}
                   </p>
                   <span className="shrink-0 text-[11px] text-muted-foreground">
-                    {formatDate(purchase.purchaseDate)}
+                    {formatCivilDate(purchase.purchaseDate)}
                   </span>
                 </div>
                 <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
@@ -261,7 +256,7 @@ function CustomerSheetBody({ customerUuid }: { customerUuid: string }) {
                       variant="outline"
                       className="px-1.5 py-0 text-[10px]"
                     >
-                      Garantía {formatDate(purchase.warrantyExpiresAt)}
+                      Garantía {formatCivilDate(purchase.warrantyExpiresAt)}
                     </Badge>
                   )}
                 </div>

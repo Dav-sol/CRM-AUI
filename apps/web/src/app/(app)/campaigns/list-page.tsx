@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { FollowUpRecommendations } from "@/components/campaigns/recommender";
 import {
   CampaignList,
   useCampaigns,
@@ -17,17 +16,10 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 const STATUS_TABS: { label: string; value: CampaignFilters["status"] }[] = [
-  { label: "Todas", value: undefined },
-  { label: "Borradores", value: "DRAFT" },
-  { label: "Aprobadas", value: "APPROVED" },
   { label: "Activas", value: "ACTIVE" },
-  { label: "Pausadas", value: "PAUSED" },
-  { label: "Finalizadas", value: "FINISHED" },
-  { label: "Canceladas", value: "CANCELLED" },
+  { label: "Borradores", value: "DRAFT" },
+  { label: "Todas", value: undefined },
 ];
-
-const selectClass =
-  "h-8 rounded-md border border-border/60 bg-background px-2 text-xs text-foreground outline-none transition-colors focus:border-primary/50";
 
 export function CampaignsIndexPage() {
   const router = useRouter();
@@ -36,8 +28,6 @@ export function CampaignsIndexPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<CampaignFilters["status"]>(undefined);
-  const [type, setType] = useState("");
-  const [sort, setSort] = useState("");
   const [from, setFrom] = useState<string | undefined>();
   const [to, setTo] = useState<string | undefined>();
   const [page, setPage] = useState(1);
@@ -46,8 +36,7 @@ export function CampaignsIndexPage() {
     page,
     search,
     status,
-    type,
-    sort,
+    sort: "",
     createdFrom: from,
     createdTo: to,
     refreshKey,
@@ -141,37 +130,6 @@ export function CampaignsIndexPage() {
             Limpiar búsqueda
           </Button>
         )}
-        <select
-          value={type}
-          onChange={(event) => {
-            setType(event.target.value);
-            setPage(1);
-          }}
-          className={cn(selectClass, "appearance-none")}
-          aria-label="Filtrar por tipo"
-        >
-          <option value="">Tipo</option>
-          <option value="AUTOMATIC">Automática</option>
-          <option value="MANUAL">Manual</option>
-          <option value="REPURCHASE">Recompra</option>
-          <option value="SPECIAL">Especial</option>
-        </select>
-        <select
-          value={sort}
-          onChange={(event) => {
-            setSort(event.target.value);
-            setPage(1);
-          }}
-          className={cn(selectClass, "appearance-none")}
-          aria-label="Ordenar campañas"
-        >
-          <option value="">Orden</option>
-          <option value="-createdAt">Creada (nueva → vieja)</option>
-          <option value="createdAt">Creada (vieja → nueva)</option>
-          <option value="-startAt">Inicio (nuevo → viejo)</option>
-          <option value="name">Nombre (A → Z)</option>
-          <option value="status">Estado</option>
-        </select>
         <DateRangePicker
           value={{ from, to }}
           onChange={(range) => {
@@ -219,10 +177,6 @@ export function CampaignsIndexPage() {
           </div>
         </div>
       )}
-
-      <div className="mt-6">
-        <FollowUpRecommendations />
-      </div>
     </div>
   );
 }

@@ -10,6 +10,7 @@ import {
 } from "@/components/conversations/conversation-list";
 import { ReplyBox } from "@/components/conversations/reply-box";
 import { Thread } from "@/components/conversations/thread";
+import { CustomerDetailSheet } from "@/components/customers/customer-detail-sheet";
 import { QuoteSheet } from "@/components/quotes/quote-sheet";
 import { CreatePurchaseSheet } from "@/components/purchases/create-purchase-sheet";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +54,7 @@ export function ConversationsIndexPage() {
   > | null>(null);
   const [selectedLoading, setSelectedLoading] = useState(false);
   const [quoteOpen, setQuoteOpen] = useState(false);
+  const [customerSheetUuid, setCustomerSheetUuid] = useState<string | null>(null);
 
   // Tiempo real ligero (Fase 5): refresca la bandeja cada 30s mientras esté
   // visible. (SSE/WebSocket queda documentado como siguiente paso.)
@@ -96,8 +98,14 @@ export function ConversationsIndexPage() {
       await selectConversation(selectedUuid, false);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
+        // La sesión expirada ya la gestiona el cliente API (redirect + aviso).
+        // El 401 se consume para no duplicar el mensaje de sesión expirada.
         return;
       }
+      // Cualquier otro error (incluido SEND_BLOCKED_BY_POLICY) se propaga al
+      // ReplyBox, que es quien conoce el borrador y muestra el aviso correcto.
+      // Antes se silenciaba y el asesor no recibía ninguna señal.
+      throw err;
     }
   }
 
@@ -234,9 +242,14 @@ export function ConversationsIndexPage() {
                     <ArrowLeft className="size-4" />
                   </Button>
                   <div className="min-w-0">
-                    <h2 className="truncate text-sm font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => selected?.customer?.uuid && setCustomerSheetUuid(selected.customer.uuid)}
+                      className="truncate text-sm font-semibold hover:underline"
+                      disabled={!selected?.customer?.uuid}
+                    >
                       {selected?.customer?.name ?? "Cliente sin vincular"}
-                    </h2>
+                    </button>
                     <p className="text-xs text-muted-foreground">
                       {selected?.customer?.status === "PENDING"
                         ? "Pendiente de vinculación"
@@ -281,6 +294,14 @@ export function ConversationsIndexPage() {
           )}
         </div>
       </div>
+
+      <CustomerDetailSheet
+        customerUuid={customerSheetUuid}
+        open={customerSheetUuid !== null}
+        onOpenChange={(open) => {
+          if (!open) setCustomerSheetUuid(null);
+        }}
+      />
 
       <QuoteSheet
         open={quoteOpen}

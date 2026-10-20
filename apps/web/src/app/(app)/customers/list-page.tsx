@@ -4,10 +4,14 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 
 import { CreateCustomerSheet } from "@/components/customers/create-customer-sheet";
-import { CustomerList, useCustomers } from "@/components/customers/customer-list";
+import {
+  CustomerList,
+  useCustomers,
+} from "@/components/customers/customer-list";
 import { ListToolbar } from "@/components/ui/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { useFilters } from "@/lib/filter-provider";
+import { useGlobalFilterUrl } from "@/lib/use-global-filter-url";
 import { useListQuery } from "@/lib/use-list-query";
 
 const CUSTOMER_SORT_OPTIONS = [
@@ -23,9 +27,10 @@ export function CustomersIndexPage() {
   const { state, set } = useListQuery({});
   // Global filters (header) are the single source of truth for city, warranty
   // window and date range on this screen; the URL keeps the screen's own
-  // filters (search, status, sort). See specs/023-filters-v1 FR-004 for the
-  // pending step of mirroring the global dimensions into the URL.
+  // filters (search, status, sort) and carries the applied global ones through
+  // useGlobalFilterUrl (specs/023-filters-v1 FR-004/FR-005).
   const { filters: globalFilters, resetFilters } = useFilters();
+  useGlobalFilterUrl(globalFilters);
   const [refreshKey, setRefreshKey] = useState(0);
   const { items, meta, error } = useCustomers({
     page: state.page,
@@ -47,7 +52,9 @@ export function CustomersIndexPage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Clientes</h1>
           <p className="text-sm text-muted-foreground">
-            {meta ? `${meta.total} clientes en la organización` : "Administrá tus clientes."}
+            {meta
+              ? `${meta.total} clientes en la organización`
+              : "Administrá tus clientes."}
           </p>
         </div>
         <div className="flex items-center gap-2">

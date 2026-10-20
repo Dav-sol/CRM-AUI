@@ -7,9 +7,10 @@
     "doc": "docs"
   },
   "scripts": {
-    "test": "turbo run test --filter=web",
-    "lint": "turbo run lint --filter=web",
-    "typecheck": "turbo run typecheck --filter=web",
+    "test": "turbo run test --continue --concurrency=1",
+    "lint": "turbo run lint --continue --filter=api --filter=web",
+    "typecheck": "turbo run typecheck --continue",
+    "build": "turbo run build",
     "build:web": "turbo run build --filter=web",
     "api:lint": "redocly lint --config .redocly.yaml",
     "api:bundle": "redocly bundle specs/api/openapi.yaml -o specs/api/dist/openapi.yaml",

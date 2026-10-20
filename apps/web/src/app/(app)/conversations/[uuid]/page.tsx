@@ -11,6 +11,7 @@ import {
   useConversations,
 } from "@/components/conversations/conversation-list";
 import { ConversationInfoPanel } from "@/components/conversations/info-panel";
+import { CustomerDetailSheet } from "@/components/customers/customer-detail-sheet";
 import { CreatePurchaseSheet } from "@/components/purchases/create-purchase-sheet";
 import { ReplyBox } from "@/components/conversations/reply-box";
 import { StatusBadge } from "@/components/conversations/status-badge";
@@ -46,6 +47,7 @@ export default function ConversationDetailPage() {
     Awaited<ReturnType<typeof apiListConversationTags>>
   >([]);
   const [loading, setLoading] = useState(true);
+  const [customerSheetUuid, setCustomerSheetUuid] = useState<string | null>(null);
 
   const { items: listItems, error: listError } = useConversations({}, 0);
 
@@ -206,12 +208,17 @@ useEffect(() => {
               <ArrowLeft />
             </Link>
             <div className="min-w-0">
-              <h2 className="truncate text-sm font-semibold">
+              <button
+                type="button"
+                onClick={() => conversation.customer?.uuid && setCustomerSheetUuid(conversation.customer.uuid)}
+                className="truncate text-sm font-semibold hover:underline"
+                disabled={!conversation.customer?.uuid}
+              >
                 {conversation.customer?.name ??
                   (conversation.customerId
                     ? `Cliente #${conversation.customerId.slice(0, 8)}`
                     : "Cliente sin vincular")}
-              </h2>
+              </button>
               <p className="text-xs text-muted-foreground">
                 {conversation.messageCount} mensajes
               </p>
@@ -287,6 +294,14 @@ useEffect(() => {
           onReopen={handleReopen}
         />
       </aside>
+
+      <CustomerDetailSheet
+        customerUuid={customerSheetUuid}
+        open={customerSheetUuid !== null}
+        onOpenChange={(open) => {
+          if (!open) setCustomerSheetUuid(null);
+        }}
+      />
     </div>
   );
 }

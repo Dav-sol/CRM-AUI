@@ -8,7 +8,6 @@ import {
   useMemo,
   useState,
 } from "react";
-
 import { useAuth } from "@/components/auth/auth-provider";
 import type { LoginUser } from "@/lib/sdk-types";
 
@@ -36,13 +35,23 @@ export const WARRANTY_EXPIRING_IN_DAYS = 30;
 export const WARRANTY_EXPIRED_IN_DAYS = 730;
 
 type FilterContextValue = {
+  /** Applied filters: the only ones a screen sends and the badge counts */
   filters: GlobalFilters;
-  setFilter: <K extends keyof GlobalFilters>(
+  /** Draft being edited in the panel; no request, no URL and no badge until applied */
+  draft: GlobalFilters;
+  /** Load the draft from the applied filters (opening the panel) */
+  startDraft: () => void;
+  /** Drop the draft and go back to the applied filters (closing without applying) */
+  discardDraft: () => void;
+  setDraftFilter: <K extends keyof GlobalFilters>(
     key: K,
     value: GlobalFilters[K],
   ) => void;
+  /** Commit the draft as the applied filters */
+  applyDraft: () => void;
+  /** Clear draft and applied filters */
   resetFilters: () => void;
-  /** Number of active filters, excluding defaults */
+  /** Number of applied filters, excluding defaults */
   activeCount: number;
 };
 
@@ -54,6 +63,20 @@ export const DEFAULT_FILTERS: GlobalFilters = {
 };
 
 const STORAGE_PREFIX = "automatizeit-filters";
+
+/**
+ * URL keys carrying the global dimensions (see useGlobalFilterUrl, which
+ * publishes the applied filters). They are deliberately not the screen's own
+ * filter keys (`from`/`to`/`search`/...), so the URL shows applied global
+ * filters and the screen's filters side by side without either writer dropping
+ * the other's keys.
+ */
+export const GLOBAL_URL_KEYS = [
+  "city",
+  "warrantyStatus",
+  "dateFrom",
+  "dateTo",
+] as const;
 
 type Identity = Pick<LoginUser, "id" | "organizationId" | "accountType">;
 
@@ -71,28 +94,53 @@ function storageKey(scope: string): string {
   return `${STORAGE_PREFIX}:${scope}`;
 }
 
-function parseFilters(raw: string | null): GlobalFilters {
-  if (!raw) return DEFAULT_FILTERS;
-  try {
-    const parsed = JSON.parse(raw) as Partial<GlobalFilters>;
-    const warranty = parsed.warrantyStatus;
-    return {
-      city: typeof parsed.city === "string" ? parsed.city : undefined,
-      warrantyStatus:
-        warranty === "expiring" || warranty === "expired" ? warranty : "all",
-      dateFrom:
-        typeof parsed.dateFrom === "string" ? parsed.dateFrom : undefined,
-      dateTo: typeof parsed.dateTo === "string" ? parsed.dateTo : undefined,
-    };
-  } catch {
-    return DEFAULT_FILTERS;
-  }
+function normalize(
+  raw: Partial<GlobalFilters> | null | undefined,
+): GlobalFilters {
+  const warranty = raw?.warrantyStatus;
+  return {
+    city:
+      typeof raw?.city === "string" && raw.city.trim()
+        ? raw.city.trim()
+        : undefined,
+    warrantyStatus:
+      warranty === "expiring" || warranty === "expired" ? warranty : "all",
+    dateFrom: typeof raw?.dateFrom === "string" ? raw.dateFrom : undefined,
+    dateTo: typeof raw?.dateTo === "string" ? raw.dateTo : undefined,
+  };
 }
 
-function loadFilters(scope: string): GlobalFilters {
+function fromSearchParams(search: URLSearchParams): GlobalFilters {
+  return normalize({
+    city: search.get("city") ?? undefined,
+    warrantyStatus: (search.get("warrantyStatus") ?? undefined) as
+      GlobalFilters["warrantyStatus"] | undefined,
+    dateFrom: search.get("dateFrom") ?? undefined,
+    dateTo: search.get("dateTo") ?? undefined,
+  });
+}
+
+function hasUrlFilters(search: URLSearchParams): boolean {
+  return GLOBAL_URL_KEYS.some((key) => search.get(key));
+}
+
+/**
+ * Restore the applied filters: a shared link wins over the stored ones, so a
+ * URL that carries the global dimensions is the source of truth for that visit
+ * (specs/023-filters-v1 FR-004).
+ */
+export function restoreFilters(
+  scope: string,
+  search: URLSearchParams,
+): GlobalFilters {
+  if (hasUrlFilters(search)) return fromSearchParams(search);
   if (typeof window === "undefined") return DEFAULT_FILTERS;
   try {
-    return parseFilters(window.localStorage.getItem(storageKey(scope)));
+    return normalize(
+      JSON.parse(
+        window.localStorage.getItem(storageKey(scope)) ?? "null",
+      ) as Partial<GlobalFilters> | null,
+    );
   } catch {
     return DEFAULT_FILTERS;
   }
@@ -122,14 +170,21 @@ const FilterContext = createContext<FilterContextValue | null>(null);
  * Mounted by AppShell, so it only exists for a signed-in user: the initial
  * state can read that user's stored filters without waiting for an effect, and
  * a logout unmounts the provider instead of resetting state from an effect.
+ *
+ * The provider owns state and storage only; publishing to the URL is the job of
+ * useGlobalFilterUrl, so a component that renders the panel never has to know
+ * about the router.
  */
 export function FilterProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const scope = filterScopeOf(user);
-  const [filters, setFiltersState] = useState<GlobalFilters>(() =>
-    loadFilters(scope),
-  );
 
+  const [filters, setFilters] = useState<GlobalFilters>(() =>
+    restoreFilters(scope, new URLSearchParams()),
+  );
+  const [draft, setDraft] = useState<GlobalFilters>(filters);
+
+  // Persist the applied filters for this identity.
   useEffect(() => {
     saveFilters(scope, filters);
   }, [scope, filters]);
@@ -138,31 +193,59 @@ export function FilterProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     function onStorage(event: StorageEvent) {
       if (event.key !== storageKey(scope) || event.newValue === null) return;
-      setFiltersState(parseFilters(event.newValue));
+      const applied = normalize(
+        JSON.parse(event.newValue) as Partial<GlobalFilters>,
+      );
+      setFilters(applied);
     }
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, [scope]);
 
-  const setFilter = useCallback(
+  const startDraft = useCallback(() => {
+    setDraft(filters);
+  }, [filters]);
+
+  const discardDraft = useCallback(() => {
+    setDraft(filters);
+  }, [filters]);
+
+  const setDraftFilter = useCallback(
     <K extends keyof GlobalFilters>(key: K, value: GlobalFilters[K]) => {
-      setFiltersState((prev) => ({ ...prev, [key]: value }));
+      setDraft((prev) => normalize({ ...prev, [key]: value }));
     },
     [],
   );
 
+  const applyDraft = useCallback(() => {
+    setFilters(draft);
+  }, [draft]);
+
   const resetFilters = useCallback(() => {
-    setFiltersState(DEFAULT_FILTERS);
+    setDraft(DEFAULT_FILTERS);
+    setFilters(DEFAULT_FILTERS);
   }, []);
 
   const value = useMemo(
     () => ({
       filters,
-      setFilter,
+      draft,
+      startDraft,
+      discardDraft,
+      setDraftFilter,
+      applyDraft,
       resetFilters,
       activeCount: countActive(filters),
     }),
-    [filters, setFilter, resetFilters],
+    [
+      filters,
+      draft,
+      startDraft,
+      discardDraft,
+      setDraftFilter,
+      applyDraft,
+      resetFilters,
+    ],
   );
 
   return (
