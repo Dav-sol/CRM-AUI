@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Interval } from '@nestjs/schedule';
 import { SmsExecutionService } from './sms-execution.service';
 import { PrismaService } from '../../core/database/prisma.service';
+import { SendPermitGuard } from '../../core/safety/send-permit.guard';
 
 const TICK_MS = 60_000;
 const SCHEDULER_BATCH_SIZE = 100;
@@ -16,11 +17,22 @@ export class SmsScheduler {
     private readonly executionService: SmsExecutionService,
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly sendPermit: SendPermitGuard,
   ) {}
 
   @Interval(TICK_MS)
   async tick(): Promise<void> {
     if (this.configService.get('app.environment') === 'test') {
+      return;
+    }
+    // AUTO-SAFETY-002: under a DENIED policy the SMS tick selects nothing and
+    // touches no automation state (see WhatsappScheduler.tick for the same
+    // rationale applied to WhatsApp).
+    const probe = this.sendPermit.evaluate(null, 'SMS');
+    if (!probe.allowed) {
+      this.logger.debug(
+        `outbound send policy denies SMS (${probe.reason}); skipping tick`,
+      );
       return;
     }
     try {

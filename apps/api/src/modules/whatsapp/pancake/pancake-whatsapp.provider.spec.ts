@@ -29,6 +29,7 @@ describe('PancakeWhatsAppProvider', () => {
       'waba_1146111635255630_573001112233',
       'Hola',
       'user-1',
+      undefined,
     );
     expect(result).toEqual({
       providerMessageId: 'msg-1',
@@ -65,6 +66,7 @@ describe('PancakeWhatsAppProvider', () => {
       'waba_1146111635255630_CO.1372227101779105',
       'Hola',
       undefined,
+      undefined,
     );
     expect(result.providerConversationId).toBe(
       'waba_1146111635255630_CO.1372227101779105',
@@ -91,6 +93,7 @@ describe('PancakeWhatsAppProvider', () => {
       'waba_1146111635255630_573001112233',
       'Hola',
       undefined,
+      undefined,
     );
   });
 
@@ -112,11 +115,15 @@ describe('PancakeWhatsAppProvider', () => {
       templateParams: { BODY_PARAMS: { customer_name: 'Ana' } },
     });
 
-    expect(api.sendTemplate).toHaveBeenCalledWith('c-1', {
-      templateId: 'tpl-1',
-      templateParams: { BODY_PARAMS: { customer_name: 'Ana' } },
-      senderId: 'user-1',
-    });
+    expect(api.sendTemplate).toHaveBeenCalledWith(
+      'c-1',
+      {
+        templateId: 'tpl-1',
+        templateParams: { BODY_PARAMS: { customer_name: 'Ana' } },
+        senderId: 'user-1',
+      },
+      undefined,
+    );
     expect(result.providerMessageId).toBe('msg-tpl');
   });
 
@@ -153,6 +160,7 @@ describe('PancakeWhatsAppProvider', () => {
         },
         senderId: 'user-1',
       },
+      undefined,
     );
     expect(result).toEqual({
       providerMessageId: 'msg-tpl',
@@ -188,6 +196,7 @@ describe('PancakeWhatsAppProvider', () => {
     expect(api.sendTemplate).toHaveBeenCalledWith(
       'waba_1146111635255630_CO.1372227101779105',
       expect.objectContaining({ templateId: 'tpl-global' }),
+      undefined,
     );
   });
 
@@ -253,6 +262,7 @@ describe('PancakeWhatsAppProvider', () => {
           },
         },
       }),
+      undefined,
     );
   });
 
@@ -286,6 +296,7 @@ describe('PancakeWhatsAppProvider', () => {
           BODY_PARAMS: { customer_name: 'Ana', product_name: '' },
         },
       }),
+      undefined,
     );
   });
 
@@ -323,6 +334,7 @@ describe('PancakeWhatsAppProvider', () => {
           },
         },
       }),
+      undefined,
     );
   });
 

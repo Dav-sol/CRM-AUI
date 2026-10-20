@@ -7,6 +7,7 @@ import {
   SmsSendResult,
 } from '../sms-provider.interface';
 import { countSmsSegments } from '../sms-segments.util';
+import { SendPermitGuard } from '../../../core/safety/send-permit.guard';
 
 export interface AltiriaSmsConfig {
   username: string;
@@ -45,7 +46,12 @@ const PHONE_NON_DIGITS = /[^0-9]/g;
 export class AltiriaSmsProvider implements SmsProvider {
   private readonly logger = new Logger(AltiriaSmsProvider.name);
 
-  constructor(private readonly config: AltiriaSmsConfig) {
+  constructor(
+    private readonly config: AltiriaSmsConfig,
+    // Mandatory dependency (AUTO-SAFETY-002): last barrier before the HTTPS
+    // request that produces the external effect.
+    private readonly sendPermit: SendPermitGuard,
+  ) {
     if (!config.username || !config.apiPassword) {
       throw new Error(
         'AltiriaSmsProvider: ALTIRIA_USERNAME and ALTIRIA_API_PASSWORD are required',
@@ -54,6 +60,8 @@ export class AltiriaSmsProvider implements SmsProvider {
   }
 
   async send(input: SmsSendInput): Promise<SmsSendResult> {
+    // Last barrier. Throws SendBlockedError, never an https error.
+    this.sendPermit.assert(input.organizationId, 'SMS');
     const normalizedTo = this.normalizePhone(input.to);
     const content = input.content;
     const { segments, encoding } = countSmsSegments(content);

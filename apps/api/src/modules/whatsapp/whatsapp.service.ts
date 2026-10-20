@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ConfigService } from '@nestjs/config';
@@ -56,6 +57,8 @@ import type {
 import { ProviderSendError, WHATSAPP_PROVIDER } from './whatsapp.provider';
 import { PancakeWhatsAppProvider } from './pancake/pancake-whatsapp.provider';
 import { PancakeError } from './pancake/pancake.client';
+import { SendPermitGuard } from '../../core/safety/send-permit.guard';
+import { SendBlockedError } from '../../core/safety/send-permit';
 
 const MODULE = 'whatsapp';
 
@@ -193,6 +196,7 @@ export class WhatsappService {
     private readonly configuraciones: ConfiguracionesService,
     private readonly eligibility: EligibilityService,
     private readonly lifecycle: LifecycleService,
+    private readonly sendPermit: SendPermitGuard,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -246,16 +250,35 @@ export class WhatsappService {
     // excepción es el hito VENCIDO durante una pausa, que pasa a SKIPPED al
     // reanudar (LifecycleService.resume, §4.5), no en cada tick.
     const now = new Date();
+    // La zona se resuelve UNA vez por organización en este tick. El batch
+    // mezcla organizaciones (`due` no se agrupa), y sin esta caché cada
+    // automatización abriría su propia consulta a `organization_configs`
+    // solo para presentation. La puerta de elegibilidad (arriba) y el
+    // renderizado de la plantilla consumen exactamente la misma zona.
+    const timeZoneCache = new Map<string, string>();
+    const timeZoneDe = async (organizationId: string): Promise<string> => {
+      const cached = timeZoneCache.get(organizationId);
+      if (cached !== undefined) {
+        return cached;
+      }
+      const resolved =
+        await this.configuraciones.timeZoneOrganizacion(organizationId);
+      timeZoneCache.set(organizationId, resolved);
+      return resolved;
+    };
+
     for (const automation of due) {
       const purchase = automation.purchase;
+      // Una sola resolución de zona por automatización: se reutiliza tanto en
+      // la puerta de elegibilidad como en el renderizado de la plantilla, de
+      // modo que ambas decisiones usan exactamente la misma zona.
+      const timeZone = await timeZoneDe(automation.organizationId);
       const decision = await this.eligibility.evaluate({
         customerId: purchase.customer.id,
         organizationId: automation.organizationId,
         cycleId: automation.commercialCycleId,
         now,
-        timeZone: await this.configuraciones.timeZoneOrganizacion(
-          automation.organizationId,
-        ),
+        timeZone,
         requiresMaintenanceConsent: this.esEtapaDeMantenimiento(
           automation.messageTemplate,
         ),
@@ -270,7 +293,7 @@ export class WhatsappService {
         continue;
       }
 
-      await this.executeOneAutomation(automation);
+      await this.executeOneAutomation(automation, timeZone);
     }
   }
 
@@ -345,41 +368,86 @@ export class WhatsappService {
     }
   }
 
-  private async executeOneAutomation(automation: {
-    id: string;
-    uuid: string;
-    organizationId: string;
-    purchaseId: string;
-    scheduledDate: Date;
-    messageTemplate?: string | null;
-    purchase: {
-      purchaseDate: Date;
-      warrantyExpiresAt?: Date | null;
-      customer: {
-        id: string;
-        uuid: string;
-        phone: string | null;
-        name: string;
-        status: CustomerStatus;
+  private async executeOneAutomation(
+    automation: {
+      id: string;
+      uuid: string;
+      organizationId: string;
+      purchaseId: string;
+      scheduledDate: Date;
+      messageTemplate?: string | null;
+      purchase: {
+        purchaseDate: Date;
+        warrantyExpiresAt?: Date | null;
+        customer: {
+          id: string;
+          uuid: string;
+          phone: string | null;
+          name: string;
+          status: CustomerStatus;
+        };
+        product: { name: string; category?: string | null } | null;
       };
-      product: { name: string; category?: string | null } | null;
-    };
-    organization: { name: string } | null;
-    campaign?: {
-      template: string;
-      templateD3: string | null;
-      templateD180: string | null;
-      templateD365: string | null;
-    } | null;
-  }): Promise<void> {
+      organization: { name: string } | null;
+      campaign?: {
+        template: string;
+        templateD3: string | null;
+        templateD180: string | null;
+        templateD365: string | null;
+      } | null;
+      /**
+       * Zona de presentación ya resuelta por el scheduler. Se reutiliza para el
+       * render de la plantilla; si no llega, `renderTemplate` aplica el valor por
+       * defecto documentado.
+       */
+    },
+    timeZone?: string,
+  ): Promise<void> {
     const customer = automation.purchase.customer;
-    const content = this.buildAutomaticContent(automation);
 
     // AU-005: only ACTIVE customers. The query pre-filters; a status change
     // between scan and execution is re-checked inside the transaction.
     if (customer.status !== CustomerStatus.ACTIVE) {
       return;
     }
+
+    // AUTO-SAFETY-002: authorization BEFORE any side effect — before the
+    // SCHEDULED -> EXECUTING transition and before the `messages` row exists,
+    // so a denied policy leaves no QUEUED row that could be mistaken for a
+    // pending real delivery, and no automation state change at all.
+    //
+    // Sandbox organizations keep simulating: a simulation produces no external
+    // effect, so it is compatible with the policy (requirement 6).
+    const simulated = this.isSandboxOrganization(automation.organizationId);
+    if (!simulated) {
+      const permit = this.sendPermit.evaluate(
+        automation.organizationId,
+        'WHATSAPP',
+      );
+      if (!permit.allowed) {
+        this.logger.warn(
+          `automation send blocked by policy automation=${automation.uuid} reason=${
+            permit.reason ?? 'UNKNOWN'
+          }`,
+        );
+        await this.auditService.record({
+          module: MODULE,
+          action: 'outbound.send',
+          outcome: 'blocked',
+          userId: null,
+          organizationId: automation.organizationId,
+          description: `automatic send blocked by policy automation=${automation.uuid}`,
+          metadata: {
+            automationId: automation.uuid,
+            channel: 'WHATSAPP',
+            reason: permit.reason ?? 'UNKNOWN',
+          },
+        });
+        return;
+      }
+    }
+
+    const content = this.buildAutomaticContent(automation, timeZone);
 
     let message: { id: string; uuid: string };
     let conversationUuid: string;
@@ -410,6 +478,7 @@ export class WhatsappService {
           data: {
             organizationId: automation.organizationId,
             conversationId: conversation.id,
+            customerId: customer.id,
             automationId: automation.id,
             type: MessageType.AUTOMATIC,
             content,
@@ -490,8 +559,7 @@ export class WhatsappService {
     // `human-testing-up.sh up --pancake` dejaba la organización sin barrera y
     // las automatizaciones pendientes salían reales. Ahora una organización en
     // WHATSAPP_SANDBOX_ORGANIZATION_IDS simula siempre, venga por Pancake o por
-    // Meta.
-    const simulated = this.isSandboxOrganization(automation.organizationId);
+    // Meta. `simulated` ya se resolvió antes de cualquier efecto (arriba).
     const usePancake = this.shouldUsePancake(automation.organizationId);
     if (simulated && usePancake) {
       this.logger.warn(
@@ -506,12 +574,20 @@ export class WhatsappService {
             providerConversationId: null,
           }
         : usePancake
-          ? await this.pancakeProvider.sendTemplate(phone, {
-              customer_name: automation.purchase.customer.name,
-              product_name: automation.purchase.product?.name ?? '',
-              organization_name: automation.organization?.name ?? '',
-            })
-          : await this.provider.sendMessage(phone, content);
+          ? await this.pancakeProvider.sendTemplate(
+              phone,
+              {
+                customer_name: automation.purchase.customer.name,
+                product_name: automation.purchase.product?.name ?? '',
+                organization_name: automation.organization?.name ?? '',
+              },
+              automation.organizationId,
+            )
+          : await this.provider.sendMessage(
+              phone,
+              content,
+              automation.organizationId,
+            );
       await this.markSent(message, automation.organizationId, sendResult);
       // Only EXECUTED after the send is confirmed (P1, demo D1).
       await this.markAutomationExecuted(automation.id);
@@ -538,6 +614,43 @@ export class WhatsappService {
     } catch (error) {
       // Pancake rejections must be logged: the CRM otherwise records nothing
       // about why a send was blocked (see specs/API-Pancake/integration.md).
+      if (error instanceof SendBlockedError) {
+        // AUTO-SAFETY-002: this is a SECURITY condition, not a provider
+        // failure. It must not consume a retry, must not mark the automation
+        // as EXECUTED, ERROR, CANCELLED or SKIPPED, and must not change
+        // scheduledDate. The only mutation is EXECUTING -> SCHEDULED, a
+        // guarded transition that returns the automation to the queue with
+        // its original date and its original retryCount, plus a FAILED message
+        // row carrying the denial reason (it never left the system).
+        this.logger.warn(
+          `automation send blocked by policy automation=${automation.uuid} reason=${error.denialReason}`,
+        );
+        await this.prisma.message.update({
+          where: { id: message.id },
+          data: {
+            status: MessageStatus.FAILED,
+            failureReason: 'send_blocked_by_policy',
+          },
+        });
+        await this.prisma.automation.updateMany({
+          where: { id: automation.id, status: 'EXECUTING' },
+          data: { status: 'SCHEDULED' },
+        });
+        await this.auditService.record({
+          module: MODULE,
+          action: 'outbound.send',
+          outcome: 'blocked',
+          userId: null,
+          organizationId: automation.organizationId,
+          description: `automatic send blocked by policy automation=${automation.uuid}`,
+          metadata: {
+            automationId: automation.uuid,
+            channel: error.channel,
+            reason: error.denialReason,
+          },
+        });
+        return;
+      }
       this.logger.error(
         `automatic send failed automation=${automation.uuid}`,
         error instanceof Error ? error.message : String(error),
@@ -582,23 +695,31 @@ export class WhatsappService {
     }
   }
 
-  private buildAutomaticContent(automation: {
-    scheduledDate: Date;
-    messageTemplate?: string | null;
-    purchase: {
-      purchaseDate: Date;
-      warrantyExpiresAt?: Date | null;
-      customer: { name: string };
-      product: { name: string; category?: string | null } | null;
-    };
-    organization: { name: string } | null;
-    campaign?: {
-      template: string;
-      templateD3: string | null;
-      templateD180: string | null;
-      templateD365: string | null;
-    } | null;
-  }): string {
+  private buildAutomaticContent(
+    automation: {
+      scheduledDate: Date;
+      messageTemplate?: string | null;
+      purchase: {
+        purchaseDate: Date;
+        warrantyExpiresAt?: Date | null;
+        customer: { name: string };
+        product: { name: string; category?: string | null } | null;
+      };
+      organization: { name: string } | null;
+      campaign?: {
+        template: string;
+        templateD3: string | null;
+        templateD180: string | null;
+        templateD365: string | null;
+      } | null;
+      /**
+       * Zona de presentación de la organización. Opcional para no romper
+       * llamadores ni pruebas existentes: si no se pasa, `renderTemplate`
+       * aplica su valor por defecto documentado.
+       */
+    },
+    timeZone?: string,
+  ): string {
     // Snapshot template (sequence-generated automations) wins over every
     // heuristic; the automation is self-sufficient at generation time.
     const snapshotTemplate =
@@ -606,7 +727,11 @@ export class WhatsappService {
         ? automation.messageTemplate
         : null;
     if (snapshotTemplate) {
-      return renderTemplate(snapshotTemplate, this.varsOf(automation));
+      return renderTemplate(
+        snapshotTemplate,
+        this.varsOf(automation),
+        timeZone,
+      );
     }
     // AU-005 stages: +3 días, +6 meses, +12 meses. La plantilla de etapa
     // gana; si no está definida se usa la plantilla base de la campaña.
@@ -621,7 +746,7 @@ export class WhatsappService {
       (campaign && days <= 180 && campaign.templateD180) ||
       (campaign && days <= 365 && campaign.templateD365);
     const template = stageTemplate || campaign?.template || AUTOMATIC_TEMPLATE;
-    return renderTemplate(template, this.varsOf(automation));
+    return renderTemplate(template, this.varsOf(automation), timeZone);
   }
 
   private varsOf(automation: {
@@ -682,6 +807,10 @@ export class WhatsappService {
 
     const channel = dto.channel ?? ChannelType.WHATSAPP_CLIENTS;
 
+    // AUTO-SAFETY-002: reject BEFORE creating any outgoing row, so a denied
+    // policy leaves no QUEUED message that looks like a pending delivery.
+    await this.assertOutboundPermit(customer.organizationId);
+
     const { message, conversationUuid } = await this.prisma.$transaction(
       async (tx) => {
         const conversation = await this.findOrOpenCustomerConversation(
@@ -694,6 +823,7 @@ export class WhatsappService {
           data: {
             organizationId: customer.organizationId,
             conversationId: conversation.id,
+            customerId: customer.id,
             type: MessageType.MANUAL,
             content: dto.content,
             direction: MessageDirection.OUTBOUND,
@@ -824,12 +954,18 @@ export class WhatsappService {
       });
     }
 
+    // AUTO-SAFETY-002: reject BEFORE creating any outgoing row (see
+    // sendManualMessage). The advisor gets a stable error code the UI can
+    // surface; no message, no conversation reopen, no audit success.
+    await this.assertOutboundPermit(conversation.organizationId);
+
     // HG-5: reply reopens a CLOSED conversation to OPEN (atomic with message).
     const { message } = await this.prisma.$transaction(async (tx) => {
       const created = await tx.message.create({
         data: {
           organizationId: conversation.organizationId,
           conversationId: conversation.id,
+          customerId: conversation.customerId,
           type: MessageType.OUTGOING,
           content,
           direction: MessageDirection.OUTBOUND,
@@ -1013,6 +1149,11 @@ export class WhatsappService {
           status: MessageStatus.SENT,
           providerMessageId: message.providerMessageId,
           providerConversationId: message.providerConversationId,
+          // Tarea 1 (transporte únicamente): se persiste tal cual llegó. No se
+          // sobrescribe `content` con el título ni se infiere semántica.
+          buttonId: message.buttonId ?? null,
+          buttonTitle: message.buttonTitle ?? null,
+          inReplyToProviderId: message.inReplyToProviderId ?? null,
           sentAt: this.toDate(message.timestamp),
           ...(replyOrigin
             ? {
@@ -1545,6 +1686,7 @@ export class WhatsappService {
     uuid: string;
     organizationId: string;
     status: ConversationStatus;
+    customerId: string | null;
     customer: { phone: string | null } | null;
   } | null> {
     const where: Prisma.ConversationWhereInput =
@@ -1562,6 +1704,7 @@ export class WhatsappService {
         uuid: true,
         organizationId: true,
         status: true,
+        customerId: true,
         customer: { select: { phone: true } },
       },
     });
@@ -1814,9 +1957,47 @@ export class WhatsappService {
         organizationId,
         phone,
       );
-      return this.pancakeProvider.sendTemplate(phone, params);
+      return this.pancakeProvider.sendTemplate(phone, params, organizationId);
     }
-    return this.provider.sendMessage(phone, content);
+    return this.provider.sendMessage(phone, content, organizationId);
+  }
+
+  /**
+   * AUTO-SAFETY-002: front-door check for advisor-initiated sends.
+   *
+   * Throws `ServiceUnavailableException` (503) so the frontend can tell the
+   * advisor the channel is temporarily disabled. The audit entry records the
+   * denial reason only — never the message body, the phone or any token.
+   */
+  private async assertOutboundPermit(organizationId: string): Promise<void> {
+    const permit = this.sendPermit.evaluate(organizationId, 'WHATSAPP');
+    if (permit.allowed) {
+      return;
+    }
+    this.logger.warn(
+      `advisor send blocked by policy organization=${organizationId} reason=${
+        permit.reason ?? 'UNKNOWN'
+      }`,
+    );
+    await this.auditService.record({
+      module: MODULE,
+      action: 'outbound.send',
+      outcome: 'blocked',
+      userId: null,
+      organizationId,
+      description: 'advisor-initiated send blocked by policy',
+      metadata: {
+        channel: 'WHATSAPP',
+        reason: permit.reason ?? 'UNKNOWN',
+      },
+    });
+    throw new ServiceUnavailableException({
+      error: {
+        code: 'SEND_BLOCKED_BY_POLICY',
+        message:
+          'El envío de mensajes está deshabilitado temporalmente. Contacta al administrador.',
+      },
+    });
   }
 
   // Manual sends and advisor replies carry free text, but the Pancake path

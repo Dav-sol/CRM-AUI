@@ -1,5 +1,6 @@
 import { PancakeClient, type PancakeClientConfig } from './pancake.client';
 import { PancakePublicApi } from './pancake.adapter';
+import { SendBlockedError } from '../../../core/safety/send-permit';
 
 const CONFIG: PancakeClientConfig = {
   apiToken: 'tok-secret',
@@ -24,10 +25,14 @@ function jsonResponse(body: unknown, status = 200): Response {
 describe('PancakePublicApi', () => {
   let client: PancakeClient;
   let api: PancakePublicApi;
+  // AUTO-SAFETY-002: default permissive so pre-existing assertions hold; the
+  // DENY behaviour has its own dedicated tests further down.
+  let permit: { assert: jest.Mock; evaluate: jest.Mock };
 
   beforeEach(() => {
+    permit = { assert: jest.fn(), evaluate: jest.fn(() => ({ allowed: true })) };
     client = new PancakeClient({ ...CONFIG });
-    api = new PancakePublicApi(client, CONFIG.pageId);
+    api = new PancakePublicApi(client, CONFIG.pageId, permit as never);
     global.fetch = jest.fn();
   });
 
@@ -147,6 +152,66 @@ describe('PancakePublicApi', () => {
       action: 'reply_inbox',
       message: 'Hola',
       sender_id: 'user-1',
+    });
+  });
+
+  // AUTO-SAFETY-002
+  describe('política de salida (fail-closed)', () => {
+    const deniedPermit = () => ({
+      assert: jest.fn(() => {
+        throw new SendBlockedError('SWITCH_DENIED', 'WHATSAPP');
+      }),
+      evaluate: jest.fn(() => ({ allowed: false })),
+    });
+
+    it('sendTemplate no ejecuta fetch cuando la política deniega', async () => {
+      const blocked = new PancakePublicApi(
+        new PancakeClient({ ...CONFIG }),
+        CONFIG.pageId,
+        deniedPermit() as never,
+      );
+      (global.fetch as jest.Mock).mockClear();
+
+      await expect(
+        blocked.sendTemplate('c-1', { templateId: 'tpl-1' }, 'org-1'),
+      ).rejects.toBeInstanceOf(SendBlockedError);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('sendInboxMessage no ejecuta fetch cuando la política deniega', async () => {
+      const blocked = new PancakePublicApi(
+        new PancakeClient({ ...CONFIG }),
+        CONFIG.pageId,
+        deniedPermit() as never,
+      );
+      (global.fetch as jest.Mock).mockClear();
+
+      await expect(
+        blocked.sendInboxMessage('c-1', 'Hola', undefined, 'org-1'),
+      ).rejects.toBeInstanceOf(SendBlockedError);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('sin organizationId el permiso no puede concederse', async () => {
+      const strict = {
+        assert: jest.fn((org?: string | null) => {
+          if (!org) {
+            throw new SendBlockedError('ORG_MISSING', 'WHATSAPP');
+          }
+        }),
+        evaluate: jest.fn(),
+      };
+      const blocked = new PancakePublicApi(
+        new PancakeClient({ ...CONFIG }),
+        CONFIG.pageId,
+        strict as never,
+      );
+      (global.fetch as jest.Mock).mockClear();
+
+      await expect(
+        blocked.sendTemplate('c-1', { templateId: 'tpl-1' }),
+      ).rejects.toBeInstanceOf(SendBlockedError);
+      expect(global.fetch).not.toHaveBeenCalled();
     });
   });
 });

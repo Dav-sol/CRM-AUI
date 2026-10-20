@@ -1,6 +1,7 @@
 import * as https from 'https';
 import { EventEmitter } from 'events';
 import { AltiriaSmsProvider } from './altiria-sms.provider';
+import { SendBlockedError } from '../../../core/safety/send-permit';
 
 jest.mock('https');
 
@@ -62,30 +63,37 @@ function setupHttpsMock(statusCode: number, body: unknown) {
 
 describe('AltiriaSmsProvider', () => {
   let provider: AltiriaSmsProvider;
+  // AUTO-SAFETY-002: default permissive so pre-existing assertions hold; the
+  // DENY behaviour has its own dedicated test.
+  let permit: { assert: jest.Mock; evaluate: jest.Mock };
 
   beforeEach(() => {
     jest.clearAllMocks();
-    provider = new AltiriaSmsProvider(ALTIRIA_CONFIG);
+    permit = {
+      assert: jest.fn(),
+      evaluate: jest.fn(() => ({ allowed: true })),
+    };
+    provider = new AltiriaSmsProvider(ALTIRIA_CONFIG, permit as never);
   });
 
   describe('constructor', () => {
     it('throws when username is missing', () => {
       expect(
         () =>
-          new AltiriaSmsProvider({
-            ...ALTIRIA_CONFIG,
-            username: '',
-          }),
+          new AltiriaSmsProvider(
+            { ...ALTIRIA_CONFIG, username: '' },
+            permit as never,
+          ),
       ).toThrow('ALTIRIA_USERNAME and ALTIRIA_API_PASSWORD are required');
     });
 
     it('throws when apiPassword is missing', () => {
       expect(
         () =>
-          new AltiriaSmsProvider({
-            ...ALTIRIA_CONFIG,
-            apiPassword: '',
-          }),
+          new AltiriaSmsProvider(
+            { ...ALTIRIA_CONFIG, apiPassword: '' },
+            permit as never,
+          ),
       ).toThrow('ALTIRIA_USERNAME and ALTIRIA_API_PASSWORD are required');
     });
 
@@ -123,10 +131,10 @@ describe('AltiriaSmsProvider', () => {
     });
 
     it('sends with from field when sender is provided', async () => {
-      const providerWithSender = new AltiriaSmsProvider({
-        ...ALTIRIA_CONFIG,
-        sender: 'MiEmpresa',
-      });
+      const providerWithSender = new AltiriaSmsProvider(
+        { ...ALTIRIA_CONFIG, sender: 'MiEmpresa' },
+        permit as never,
+      );
 
       setupHttpsMock(202, {
         result: [{ accepted: true, to: '573001234567', id: 'id1', parts: 1 }],
@@ -278,10 +286,10 @@ describe('AltiriaSmsProvider', () => {
     });
 
     it('omits notificationUrl when webhookBaseUrl is not configured', async () => {
-      const providerNoWebhook = new AltiriaSmsProvider({
-        ...ALTIRIA_CONFIG,
-        webhookBaseUrl: '',
-      });
+      const providerNoWebhook = new AltiriaSmsProvider(
+        { ...ALTIRIA_CONFIG, webhookBaseUrl: '' },
+        permit as never,
+      );
 
       setupHttpsMock(202, {
         result: [{ accepted: true, to: '573001234567', id: 'id10', parts: 1 }],
@@ -450,6 +458,29 @@ describe('AltiriaSmsProvider', () => {
   describe('getName', () => {
     it('returns ALTIRIA', () => {
       expect(provider.getName()).toBe('ALTIRIA');
+    });
+  });
+
+  // AUTO-SAFETY-002
+  describe('política de salida (fail-closed)', () => {
+    it('no ejecuta https.request cuando la política deniega', async () => {
+      const denied = {
+        assert: jest.fn(() => {
+          throw new SendBlockedError('SWITCH_DENIED', 'SMS');
+        }),
+        evaluate: jest.fn(() => ({ allowed: false })),
+      };
+      const blocked = new AltiriaSmsProvider(ALTIRIA_CONFIG, denied as never);
+
+      await expect(
+        blocked.send({
+          to: '573001234567',
+          from: 'X',
+          content: 'hola',
+          organizationId: 'org-1',
+        }),
+      ).rejects.toBeInstanceOf(SendBlockedError);
+      expect(https.request).not.toHaveBeenCalled();
     });
   });
 });

@@ -4,6 +4,7 @@ import { createHmac } from 'crypto';
 import { WhatsappWebhookController } from './whatsapp.webhook.controller';
 import { MetaWhatsAppProvider } from './whatsapp.provider';
 import { WhatsappService } from './whatsapp.service';
+import { SendPermitGuard } from '../../core/safety/send-permit.guard';
 
 describe('WhatsappWebhookController', () => {
   let controller: WhatsappWebhookController;
@@ -30,6 +31,10 @@ describe('WhatsappWebhookController', () => {
         { provide: WhatsappService, useValue: service },
         MetaWhatsAppProvider,
         { provide: ConfigService, useValue: configService },
+        // AUTO-SAFETY-002: mandatory dependency of MetaWhatsAppProvider. The
+        // webhook path only receives, never sends, so a permissive stub is
+        // enough here; the DENY behaviour is covered in provider/service specs.
+        { provide: SendPermitGuard, useValue: { assert: jest.fn() } },
       ],
     }).compile();
 

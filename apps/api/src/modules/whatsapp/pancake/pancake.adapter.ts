@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { PancakeClient } from './pancake.client';
+import { SendPermitGuard } from '../../../core/safety/send-permit.guard';
 import {
   PancakeInboxMessage,
   PancakeListConversationsResponse,
@@ -35,6 +36,10 @@ export class PancakePublicApi {
   constructor(
     private readonly client: PancakeClient,
     @Inject(PANCAKE_PAGE_ID) private readonly pageId: string,
+    // Mandatory dependency (AUTO-SAFETY-002): a Pancake adapter cannot be
+    // constructed without the outbound authorization policy. This is the last
+    // barrier before the network call that produces the external effect.
+    private readonly sendPermit: SendPermitGuard,
   ) {}
 
   private get v1(): string {
@@ -93,7 +98,10 @@ export class PancakePublicApi {
   async sendTemplate(
     conversationId: string,
     input: PancakeSendTemplateInput,
+    organizationId?: string | null,
   ): Promise<PancakeSendMessageResponse> {
+    // Last barrier: nothing reaches Pancake without an explicit permit.
+    this.sendPermit.assert(organizationId, 'WHATSAPP');
     const payload = this.buildWhatsappTemplateMessage(conversationId, input);
     return this.client.post<PancakeSendMessageResponse>(
       `/pages/${this.pageId}/conversations/${conversationId}/messages`,
@@ -133,7 +141,10 @@ export class PancakePublicApi {
     conversationId: string,
     text: string,
     senderId?: string,
+    organizationId?: string | null,
   ): Promise<PancakeSendMessageResponse> {
+    // Last barrier, same as sendTemplate.
+    this.sendPermit.assert(organizationId, 'WHATSAPP');
     const payload: PancakeInboxMessage = {
       action: 'reply_inbox',
       message: text,

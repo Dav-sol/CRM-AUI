@@ -13,6 +13,8 @@ import type { SmsProvider } from './sms-provider.interface';
 import { SMS_PROVIDER } from './sms-provider.interface';
 import { countSmsSegments } from './sms-segments.util';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { SendPermitGuard } from '../../core/safety/send-permit.guard';
+import { SendBlockedError } from '../../core/safety/send-permit';
 
 const MAX_AUTOMATION_RETRIES = 3;
 const MODULE = 'sms';
@@ -27,6 +29,7 @@ export class SmsExecutionService {
     private readonly eventEmitter: EventEmitter2,
     private readonly configService: ConfigService,
     @Inject(SMS_PROVIDER) private readonly smsProvider: SmsProvider,
+    private readonly sendPermit: SendPermitGuard,
   ) {}
 
   async executeOneAutomation(automationId: string): Promise<void> {
@@ -62,6 +65,32 @@ export class SmsExecutionService {
     const content = this.buildContent(automation);
     if (!content) {
       await this.markAutomationFailed(automation.id, 'empty_content');
+      return;
+    }
+
+    // AUTO-SAFETY-002: authorization BEFORE the SCHEDULED -> EXECUTING
+    // transition and before the `messages` row exists. A denied policy leaves
+    // no QUEUED row and no automation state change.
+    const permit = this.sendPermit.evaluate(automation.organizationId, 'SMS');
+    if (!permit.allowed) {
+      this.logger.warn(
+        `SMS automation send blocked by policy automation=${automation.uuid} reason=${
+          permit.reason ?? 'UNKNOWN'
+        }`,
+      );
+      await this.auditService.record({
+        module: MODULE,
+        action: 'outbound.send',
+        outcome: 'blocked',
+        userId: null,
+        organizationId: automation.organizationId,
+        description: `automatic SMS send blocked by policy automation=${automation.uuid}`,
+        metadata: {
+          automationId: automation.uuid,
+          channel: 'SMS',
+          reason: permit.reason ?? 'UNKNOWN',
+        },
+      });
       return;
     }
 
@@ -150,6 +179,40 @@ export class SmsExecutionService {
         organizationId: automation.organizationId,
       });
     } catch (error) {
+      if (error instanceof SendBlockedError) {
+        // AUTO-SAFETY-002: security condition, not a provider failure. No
+        // retry consumed, no EXECUTED, no scheduledDate change. The only
+        // mutation is EXECUTING -> SCHEDULED (guarded), returning the
+        // automation to the queue with its original date and retryCount.
+        this.logger.warn(
+          `SMS automation send blocked by policy automation=${automation.uuid} reason=${error.denialReason}`,
+        );
+        await this.prisma.message.update({
+          where: { id: message.id },
+          data: {
+            status: MessageStatus.FAILED,
+            failureReason: 'send_blocked_by_policy',
+          },
+        });
+        await this.prisma.automation.updateMany({
+          where: { id: automation.id, status: 'EXECUTING' },
+          data: { status: 'SCHEDULED' },
+        });
+        await this.auditService.record({
+          module: MODULE,
+          action: 'outbound.send',
+          outcome: 'blocked',
+          userId: null,
+          organizationId: automation.organizationId,
+          description: `automatic SMS send blocked by policy automation=${automation.uuid}`,
+          metadata: {
+            automationId: automation.uuid,
+            channel: 'SMS',
+            reason: error.denialReason,
+          },
+        });
+        return;
+      }
       this.logger.error(
         `SMS provider send failed for automation ${automation.uuid}`,
         error instanceof Error ? error.stack : String(error),

@@ -81,7 +81,11 @@ export class PancakeWhatsAppProvider implements WhatsAppProvider {
     );
   }
 
-  async sendMessage(to: string, text: string): Promise<ProviderSendResult> {
+  async sendMessage(
+    to: string,
+    text: string,
+    organizationId?: string | null,
+  ): Promise<ProviderSendResult> {
     if (!this.isConfigured()) {
       throw new PancakeError('Pancake provider is not configured');
     }
@@ -91,6 +95,7 @@ export class PancakeWhatsAppProvider implements WhatsAppProvider {
       conversationId,
       text,
       this.senderId,
+      organizationId,
     );
     if (!result.id) {
       throw new PancakeError('Pancake send response missing id');
@@ -106,14 +111,19 @@ export class PancakeWhatsAppProvider implements WhatsAppProvider {
   async sendTemplateMessage(
     conversationId: string,
     input: PancakeSendTemplateInput,
+    organizationId?: string | null,
   ): Promise<ProviderSendResult> {
     if (!this.isConfigured()) {
       throw new PancakeError('Pancake provider is not configured');
     }
-    const result = await this.api.sendTemplate(conversationId, {
-      ...input,
-      senderId: input.senderId ?? this.senderId,
-    });
+    const result = await this.api.sendTemplate(
+      conversationId,
+      {
+        ...input,
+        senderId: input.senderId ?? this.senderId,
+      },
+      organizationId,
+    );
     if (!result.id) {
       throw new PancakeError('Pancake send response missing id');
     }
@@ -133,6 +143,7 @@ export class PancakeWhatsAppProvider implements WhatsAppProvider {
   async sendTemplate(
     to: string,
     params: Record<string, string>,
+    organizationId?: string | null,
   ): Promise<ProviderSendResult> {
     if (!this.isConfigured()) {
       throw new PancakeError('Pancake provider is not configured');
@@ -147,13 +158,17 @@ export class PancakeWhatsAppProvider implements WhatsAppProvider {
     }
     const conversationId =
       (await this.resolveConversation(to)) ?? `${this.pageId}_${to}`;
-    const result = await this.api.sendTemplate(conversationId, {
-      templateId,
-      templateParams: {
-        BODY_PARAMS: await this.alignBodyParams(templateId, params),
+    const result = await this.api.sendTemplate(
+      conversationId,
+      {
+        templateId,
+        templateParams: {
+          BODY_PARAMS: await this.alignBodyParams(templateId, params),
+        },
+        senderId: this.senderId,
       },
-      senderId: this.senderId,
-    });
+      organizationId,
+    );
     if (!result.id) {
       throw new PancakeError('Pancake send response missing id');
     }

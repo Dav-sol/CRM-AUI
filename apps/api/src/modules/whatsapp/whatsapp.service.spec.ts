@@ -3,6 +3,7 @@ import {
   BadRequestException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -12,6 +13,8 @@ import { PrismaService } from '../../core/database/prisma.service';
 import type { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
 import { ConfiguracionesService } from '../configuraciones/configuraciones.service';
+import { SendPermitGuard } from '../../core/safety/send-permit.guard';
+import { SendBlockedError } from '../../core/safety/send-permit';
 import { EligibilityService } from '../lifecycle/eligibility.service';
 import { LifecycleService } from '../lifecycle/lifecycle.service';
 import { WhatsappService } from './whatsapp.service';
@@ -63,6 +66,7 @@ describe('WhatsappService', () => {
       create: jest.Mock;
       count: jest.Mock;
       findMany: jest.Mock;
+      updateMany: jest.Mock;
     };
     customer: { findMany: jest.Mock; findFirst: jest.Mock; create: jest.Mock };
     organization: { findUnique: jest.Mock };
@@ -77,6 +81,7 @@ describe('WhatsappService', () => {
     isConfigured: jest.Mock;
   };
   let configService: { get: jest.Mock };
+  let sendPermit: { evaluate: jest.Mock; assert: jest.Mock };
   let configuraciones: {
     dentroDeHorario: jest.Mock;
     timeZoneOrganizacion: jest.Mock;
@@ -107,6 +112,7 @@ describe('WhatsappService', () => {
         create: jest.fn(),
         count: jest.fn(),
         findMany: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       customer: {
         findMany: jest.fn(),
@@ -149,6 +155,10 @@ describe('WhatsappService', () => {
         .fn()
         .mockResolvedValue({ id: 'cp-1', alreadyOpen: false }),
     };
+    sendPermit = {
+      evaluate: jest.fn(() => ({ allowed: true })),
+      assert: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -165,6 +175,9 @@ describe('WhatsappService', () => {
         // un bloqueo los cubren los tests de EligibilityService.
         { provide: EligibilityService, useValue: eligibility },
         { provide: LifecycleService, useValue: lifecycle },
+        // AUTO-SAFETY-002: default permissive so the pre-existing assertions
+        // hold. The DENY behaviour is asserted in its own describe block below.
+        { provide: SendPermitGuard, useValue: sendPermit },
       ],
     }).compile();
 
@@ -327,6 +340,138 @@ describe('WhatsappService', () => {
       });
     });
 
+    // T-D5.3: la zona de la organización debe llegar hasta el renderizado de
+    // la plantilla, y la resolución debe ser única por organización en el tick.
+    describe('zona horaria de la organización (T-D5.3)', () => {
+      function arrangeSend() {
+        prisma.automation.findMany.mockResolvedValue([dueAutomation]);
+        prisma.$transaction.mockImplementation(
+          async (fn: (tx: unknown) => Promise<unknown>) => fn(txMock()),
+        );
+        provider.sendMessage.mockResolvedValue({
+          providerMessageId: 'wamid-1',
+          providerConversationId: '573000000000',
+          status: 'SENT',
+        });
+        prisma.message.update.mockResolvedValue({});
+      }
+
+      it('resuelve la zona una sola vez por organización en el tick', async () => {
+        // Tres automatizaciones de la misma organización: una sola consulta.
+        const other = { ...dueAutomation, id: 'a-2', uuid: 'au-2' };
+        const third = { ...dueAutomation, id: 'a-3', uuid: 'au-3' };
+        prisma.automation.findMany.mockResolvedValue([
+          dueAutomation,
+          other,
+          third,
+        ]);
+        prisma.$transaction.mockImplementation(
+          async (fn: (tx: unknown) => Promise<unknown>) => fn(txMock()),
+        );
+        provider.sendMessage.mockResolvedValue({
+          providerMessageId: 'wamid-1',
+          providerConversationId: '573000000000',
+          status: 'SENT',
+        });
+        prisma.message.update.mockResolvedValue({});
+
+        await service.executeDueAutomations();
+
+        expect(configuraciones.timeZoneOrganizacion).toHaveBeenCalledTimes(1);
+        expect(configuraciones.timeZoneOrganizacion).toHaveBeenCalledWith(
+          'org-1',
+        );
+      });
+
+      it('propaga la zona de la organización al renderizar la plantilla', async () => {
+        // La plantilla del snapshot incluye {purchaseDate}: el snapshot gana
+        // sobre la heurística de campaña (buildAutomaticContent).
+        const withTemplate = {
+          ...dueAutomation,
+          messageTemplate: 'Compra: {purchaseDate}',
+        };
+        prisma.automation.findMany.mockResolvedValue([withTemplate]);
+        let createdContent: string | undefined;
+        prisma.$transaction.mockImplementation(
+          async (fn: (tx: unknown) => Promise<unknown>) => {
+            const tx = txMock();
+            tx.message.create.mockImplementation(
+              (args: { data: { content: string } }) => {
+                createdContent = args.data.content;
+                return Promise.resolve({ id: 'm-1', uuid: 'mu-1' });
+              },
+            );
+            return fn(tx);
+          },
+        );
+        provider.sendMessage.mockResolvedValue({
+          providerMessageId: 'wamid-1',
+          providerConversationId: '573000000000',
+          status: 'SENT',
+        });
+        prisma.message.update.mockResolvedValue({});
+
+        // La compra está a 3 días de `now`; con TZ Asia/Tokyo el día civil
+        // puede avanzar respecto a Bogotá en un instante cercano a medianoche.
+        configuraciones.timeZoneOrganizacion.mockResolvedValue('Asia/Tokyo');
+
+        await service.executeDueAutomations();
+
+        expect(configuraciones.timeZoneOrganizacion).toHaveBeenCalledWith(
+          'org-1',
+        );
+        expect(createdContent).toBeDefined();
+        expect(createdContent).toContain('Compra: ');
+      });
+
+      it('cae al fallback cuando la organización no tiene zona resoluble', async () => {
+        arrangeSend();
+        // `timeZoneOrganizacion` siempre devuelve un identificador; el
+        // modelo de no-resoluble se representa con el valor por defecto.
+        configuraciones.timeZoneOrganizacion.mockResolvedValue(
+          'America/Bogota',
+        );
+
+        await service.executeDueAutomations();
+
+        expect(eligibility.evaluate).toHaveBeenCalledWith(
+          expect.objectContaining({ timeZone: 'America/Bogota' }),
+        );
+      });
+    });
+
+    // TASK 1: el mensaje automático persiste el customerId de la compra para
+    // que G3 (eligibility.checkAutomaticFrequency) pueda encontrarlo.
+    it('persists customerId on automatic messages so G3 can find them', async () => {
+      prisma.automation.findMany.mockResolvedValue([dueAutomation]);
+      let txMessageCreate: jest.Mock | undefined;
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = txMock();
+          txMessageCreate = tx.message.create;
+          return fn(tx);
+        },
+      );
+      provider.sendMessage.mockResolvedValue({
+        providerMessageId: 'wamid-1',
+        providerConversationId: '573000000000',
+        status: 'SENT',
+      });
+      prisma.message.update.mockResolvedValue({});
+
+      await service.executeDueAutomations();
+
+      expect(txMessageCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            automationId: 'a-1',
+            customerId: 'cu-1',
+            type: 'AUTOMATIC',
+          }) as object,
+        }),
+      );
+    });
+
     it('uses the per-stage campaign template for +3d/+6m/+12m (AU-005)', async () => {
       const withCampaign = (days: number) => ({
         ...dueAutomation,
@@ -368,6 +513,7 @@ describe('WhatsappService', () => {
         expect(provider.sendMessage).toHaveBeenCalledWith(
           '573000000000',
           expect.stringContaining(entry.expected),
+          'org-1',
         );
       }
     });
@@ -397,6 +543,7 @@ describe('WhatsappService', () => {
       expect(provider.sendMessage).toHaveBeenCalledWith(
         '573000000000',
         expect.stringContaining('base Juan Perez'),
+        'org-1',
       );
     });
 
@@ -434,6 +581,7 @@ describe('WhatsappService', () => {
       expect(provider.sendMessage).toHaveBeenCalledWith(
         '573000000000',
         'Hola Juan Perez, tu Lavadora vence pronto.',
+        'org-1',
       );
       expect(txMessageCreate).toHaveBeenCalledWith(
         expectData({
@@ -479,6 +627,7 @@ describe('WhatsappService', () => {
         expect(provider.sendMessage).toHaveBeenCalledWith(
           '573000000000',
           expect.stringContaining('base Juan Perez'),
+          'org-1',
         );
       }
     });
@@ -505,6 +654,7 @@ describe('WhatsappService', () => {
       expect(provider.sendMessage).toHaveBeenCalledWith(
         '573000000000',
         expect.stringContaining('Juan Perez'),
+        'org-1',
       );
       expect(txMessageCreate).toHaveBeenCalledWith(
         expectData({
@@ -611,6 +761,7 @@ describe('WhatsappService', () => {
           product_name: 'Lavadora',
           organization_name: 'Org Uno',
         },
+        'org-1',
       );
       expect(pancakeProvider.sendMessage).not.toHaveBeenCalled();
     });
@@ -974,9 +1125,81 @@ describe('WhatsappService', () => {
         'key-1',
       );
 
-      expect(provider.sendMessage).toHaveBeenCalledWith('573000000000', 'Hola');
+      expect(provider.sendMessage).toHaveBeenCalledWith(
+        '573000000000',
+        'Hola',
+        'org-1',
+      );
       expect(result).toEqual(
         expect.objectContaining({ uuid: 'msg-uuid-1', status: 'SENT' }),
+      );
+    });
+
+    // TASK 1: el mensaje manual persiste el customerId del cliente para
+    // que G4 (eligibility.checkManualSilence) pueda encontrarlo.
+    it('persists customerId on manual messages so G4 can find them', async () => {
+      prisma.customer.findFirst.mockResolvedValue({
+        id: 'cu-1',
+        uuid: 'cuu-1',
+        organizationId: 'org-1',
+        phone: '573000000000',
+      });
+      let txMessageCreate: jest.Mock | undefined;
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => {
+          const tx = {
+            conversation: {
+              findFirst: jest.fn().mockResolvedValue(null),
+              create: jest.fn().mockResolvedValue({
+                id: 'conv-1',
+                uuid: 'conv-uuid-1',
+              }),
+            },
+            message: {
+              create: jest.fn().mockResolvedValue({
+                id: 'msg-1',
+                uuid: 'msg-uuid-1',
+              }),
+            },
+          };
+          txMessageCreate = tx.message.create;
+          return fn(tx);
+        },
+      );
+      provider.sendMessage.mockResolvedValue({
+        providerMessageId: 'wamid-1',
+        providerConversationId: '573000000000',
+        status: 'SENT',
+      });
+      prisma.message.update.mockResolvedValue({});
+      prisma.message.findFirst.mockResolvedValue({
+        uuid: 'msg-uuid-1',
+        conversationId: 'conv-uuid-1',
+        automationId: null,
+        type: 'MANUAL',
+        content: 'Hola',
+        direction: 'OUTBOUND',
+        status: 'SENT',
+        sentAt: new Date(now),
+        deliveredAt: null,
+        readAt: null,
+        createdAt: new Date(now),
+        conversation: { customer: null },
+      });
+
+      await service.sendManualMessage(
+        orgUser,
+        { customerId: 'cuu-1', content: 'Hola' },
+        'key-1',
+      );
+
+      expect(txMessageCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            customerId: 'cu-1',
+            type: 'MANUAL',
+          }) as object,
+        }),
       );
     });
 
@@ -1387,9 +1610,44 @@ describe('WhatsappService', () => {
 
       const result = await service.sendReply(orgUser, 'cou-1', 'Hola', 'key-1');
 
-      expect(provider.sendMessage).toHaveBeenCalledWith('573000000000', 'Hola');
+      expect(provider.sendMessage).toHaveBeenCalledWith(
+        '573000000000',
+        'Hola',
+        'org-1',
+      );
       expect(emittedNames()).toContain('MessageQueued');
       expect(result).toEqual(expect.objectContaining({ status: 'SENT' }));
+    });
+
+    // TASK 1: la respuesta del asesor propaga el customerId de la
+    // conversación para que G3/G4 vean también este OUTBOUND.
+    it('propagates customerId from the conversation on advisor replies', async () => {
+      prisma.conversation.findFirst.mockResolvedValue({
+        ...replyConversation,
+        customerId: 'cu-1',
+      });
+      const tx = replyTx();
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) => fn(tx),
+      );
+      provider.sendMessage.mockResolvedValue({
+        providerMessageId: 'wamid-1',
+        providerConversationId: '573000000000',
+        status: 'SENT',
+      });
+      prisma.message.update.mockResolvedValue({});
+      prisma.message.findFirst.mockResolvedValue(replyMessageDetail);
+
+      await service.sendReply(orgUser, 'cou-1', 'Hola');
+
+      expect(tx.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            customerId: 'cu-1',
+            type: 'OUTGOING',
+          }) as object,
+        }),
+      );
     });
 
     it('reopens a CLOSED conversation to OPEN atomically with the reply (HG-5)', async () => {
@@ -1679,6 +1937,105 @@ describe('WhatsappService', () => {
       );
       // Decisión 4: inbound never creates a purchase nor triggers AU-001.
       expect(emittedNames()).not.toContain('PurchaseImported');
+    });
+
+    it('persists button fields from a button_reply without inferring meaning', async () => {
+      prisma.message.findFirst.mockResolvedValue(null);
+      prisma.customer.findMany.mockResolvedValue([
+        {
+          id: 'cu-1',
+          uuid: 'cuu-1',
+          organizationId: 'org-1',
+          phone: '573000000000',
+        },
+      ]);
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) =>
+          fn({
+            conversation: {
+              findFirst: jest.fn().mockResolvedValue({
+                id: 'conv-1',
+                uuid: 'conv-uuid-1',
+              }),
+              create: jest.fn(),
+            },
+          }),
+      );
+      prisma.message.create.mockResolvedValue({
+        id: 'msg-1',
+        uuid: 'msg-uuid-1',
+      });
+
+      await service.handleInboundMessage({
+        providerMessageId: 'wamid.in.btn.1',
+        from: '573000000000',
+        text: '',
+        timestamp: '1755000000',
+        providerConversationId: null,
+        buttonId: 'review-consent-yes',
+        buttonTitle: 'Sí, activar',
+        inReplyToProviderId: 'wamid.out.review.1',
+      });
+
+      // Transporte únicamente: se persiste tal cual. El título NO sustituye
+      // `content` y no se registra ningún consentimiento aquí.
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            content: '',
+            buttonId: 'review-consent-yes',
+            buttonTitle: 'Sí, activar',
+            inReplyToProviderId: 'wamid.out.review.1',
+          }) as object,
+        }),
+      );
+    });
+
+    it('persists null button fields for plain text (unchanged behavior)', async () => {
+      prisma.message.findFirst.mockResolvedValue(null);
+      prisma.customer.findMany.mockResolvedValue([
+        {
+          id: 'cu-1',
+          uuid: 'cuu-1',
+          organizationId: 'org-1',
+          phone: '573000000000',
+        },
+      ]);
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: unknown) => Promise<unknown>) =>
+          fn({
+            conversation: {
+              findFirst: jest.fn().mockResolvedValue({
+                id: 'conv-1',
+                uuid: 'conv-uuid-1',
+              }),
+              create: jest.fn(),
+            },
+          }),
+      );
+      prisma.message.create.mockResolvedValue({
+        id: 'msg-1',
+        uuid: 'msg-uuid-1',
+      });
+
+      await service.handleInboundMessage({
+        providerMessageId: 'wamid.in.3',
+        from: '573000000000',
+        text: 'Hola',
+        timestamp: '1755000000',
+        providerConversationId: null,
+      });
+
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            content: 'Hola',
+            buttonId: null,
+            buttonTitle: null,
+            inReplyToProviderId: null,
+          }) as object,
+        }),
+      );
     });
 
     it('is a no-op for a replayed providerMessageId (idempotency, HG-13)', async () => {
@@ -2449,6 +2806,7 @@ describe('WhatsappService', () => {
           product_name: '',
           organization_name: 'Org Uno',
         },
+        'org-1',
       );
     });
 
@@ -2495,8 +2853,265 @@ describe('WhatsappService', () => {
           product_name: '',
           organization_name: 'Org Uno',
         },
+        'org-1',
       );
       expect(provider.sendMessage).not.toHaveBeenCalled();
+    });
+  });
+  // AUTO-SAFETY-002 ---------------------------------------------------
+  describe('contención de envíos por política', () => {
+    const denied = { allowed: false, reason: 'SWITCH_DENIED' as const };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      sendPermit.evaluate.mockReturnValue({ allowed: true });
+      prisma.$transaction.mockImplementation(
+        async (fn: (t: unknown) => Promise<unknown>) =>
+          fn({
+            automation: {
+              updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+            },
+            conversation: {
+              findFirst: jest.fn().mockResolvedValue(null),
+              create: jest
+                .fn()
+                .mockResolvedValue({ id: 'conv-1', uuid: 'conv-uuid-1' }),
+            },
+            message: {
+              create: jest
+                .fn()
+                .mockResolvedValue({ id: 'msg-1', uuid: 'msg-uuid-1' }),
+            },
+          }),
+      );
+    });
+
+    function denyPolicy() {
+      sendPermit.evaluate.mockReturnValue(denied);
+    }
+
+    it('R1 · no llama al proveedor ni crea mensaje bajo política denegada', async () => {
+      denyPolicy();
+      prisma.automation.findMany.mockResolvedValue([
+        {
+          id: 'au-1',
+          uuid: 'auu-1',
+          organizationId: 'org-1',
+          purchaseId: 'pu-1',
+          scheduledDate: new Date(),
+          messageTemplate: null,
+          purchase: {
+            purchaseDate: new Date(),
+            warrantyExpiresAt: null,
+            customer: {
+              id: 'cu-1',
+              uuid: 'cuu-1',
+              phone: '573001234567',
+              name: 'Ana',
+              status: 'ACTIVE',
+            },
+            product: { name: 'Bateria', category: null },
+          },
+          organization: { name: 'Org' },
+          campaign: null,
+        },
+      ] as never);
+
+      await service.executeDueAutomations();
+
+      expect(provider.sendMessage).not.toHaveBeenCalled();
+      expect(pancakeProvider.sendTemplate).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'outbound.send',
+          outcome: 'blocked',
+        }),
+      );
+    });
+
+    it('R2 · sendManualMessage se bloquea antes de crear el mensaje', async () => {
+      denyPolicy();
+      prisma.customer.findFirst.mockResolvedValue({
+        id: 'cu-1',
+        uuid: 'cuu-1',
+        phone: '573001234567',
+        organizationId: 'org-1',
+      });
+      const orgUser = {
+        id: 'u-1',
+        organizationId: 'org-1',
+        accountType: 'ORGANIZATION',
+        roles: [],
+      } as never;
+
+      await expect(
+        service.sendManualMessage(orgUser, {
+          customerId: 'cu-1',
+          content: 'Hola',
+        }),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+      expect(prisma.message.create).not.toHaveBeenCalled();
+      expect(provider.sendMessage).not.toHaveBeenCalled();
+      expect(pancakeProvider.sendTemplate).not.toHaveBeenCalled();
+    });
+
+    it('R3 · sendReply se bloquea antes de crear el mensaje ni reabrir', async () => {
+      denyPolicy();
+      prisma.conversation.findFirst.mockResolvedValue({
+        id: 'co-1',
+        uuid: 'cou-1',
+        organizationId: 'org-1',
+        status: 'CLOSED',
+        customerId: 'cu-1',
+        customer: { phone: '573001234567' },
+      });
+      const orgUser = {
+        id: 'u-1',
+        organizationId: 'org-1',
+        accountType: 'ORGANIZATION',
+        roles: [],
+      } as never;
+
+      await expect(
+        service.sendReply(orgUser, 'cou-1', 'Hola'),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+      expect(prisma.message.create).not.toHaveBeenCalled();
+      expect(prisma.conversation.updateMany).not.toHaveBeenCalled();
+      expect(provider.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('R1 · un bloqueo en el punto de salida no consume reintentos ni marca EXECUTED', async () => {
+      const tx = {
+        automation: {
+          updateMany: jest
+            .fn()
+            .mockResolvedValueOnce({ count: 1 }) // SCHEDULED -> EXECUTING
+            .mockResolvedValueOnce({ count: 1 }), // EXECUTING -> SCHEDULED
+        },
+        conversation: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          create: jest
+            .fn()
+            .mockResolvedValue({ id: 'conv-1', uuid: 'conv-uuid-1' }),
+        },
+        message: {
+          create: jest
+            .fn()
+            .mockResolvedValue({ id: 'msg-1', uuid: 'msg-uuid-1' }),
+        },
+      };
+      const automationUpdateMany = tx.automation.updateMany;
+      prisma.automation.updateMany = jest.fn();
+      prisma.message.update = jest.fn().mockResolvedValue(undefined);
+
+      prisma.automation.findMany.mockResolvedValue([
+        {
+          id: 'au-1',
+          uuid: 'auu-1',
+          organizationId: 'org-1',
+          purchaseId: 'pu-1',
+          scheduledDate: new Date(),
+          messageTemplate: null,
+          purchase: {
+            purchaseDate: new Date(),
+            warrantyExpiresAt: null,
+            customer: {
+              id: 'cu-1',
+              uuid: 'cuu-1',
+              phone: '573001234567',
+              name: 'Ana',
+              status: 'ACTIVE',
+            },
+            product: { name: 'Bateria', category: null },
+          },
+          organization: { name: 'Org' },
+          campaign: null,
+        },
+      ] as never);
+      prisma.$transaction.mockImplementation(
+        async (fn: (t: unknown) => Promise<unknown>) => fn(tx),
+      );
+      tx.automation.updateMany.mockClear();
+      provider.sendMessage.mockRejectedValue(
+        new SendBlockedError('SWITCH_DENIED', 'WHATSAPP'),
+      );
+
+      await service.executeDueAutomations();
+
+      // La automatización vuelve a SCHEDULED y NO se toca retryCount ni
+      // scheduledDate: solo la transición guardada EXECUTING -> SCHEDULED.
+      expect(prisma.automation.updateMany).toHaveBeenCalledWith({
+        where: { id: 'au-1', status: 'EXECUTING' },
+        data: { status: 'SCHEDULED' },
+      });
+      // Ninguna de las dos transiciones toca retryCount ni scheduledDate.
+      expect(JSON.stringify(automationUpdateMany.mock.calls)).not.toContain(
+        'retryCount',
+      );
+      expect(
+        JSON.stringify(prisma.automation.updateMany.mock.calls),
+      ).not.toContain('retryCount');
+      expect(JSON.stringify(automationUpdateMany.mock.calls)).not.toContain(
+        'scheduledDate',
+      );
+      expect(
+        JSON.stringify(prisma.automation.updateMany.mock.calls),
+      ).not.toContain('scheduledDate');
+      expect(prisma.message.update).toHaveBeenCalledWith({
+        where: { id: 'msg-1' },
+        data: { status: 'FAILED', failureReason: 'send_blocked_by_policy' },
+      });
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'outbound.send',
+          outcome: 'blocked',
+        }),
+      );
+    });
+
+    it('R1 · organización sandbox sigue simulando aunque la política deniegue', async () => {
+      denyPolicy();
+      configService.get.mockImplementation((key: string) => {
+        if (key === 'whatsapp.defaultOrganizationId') return 'org-1';
+        if (key === 'whatsapp.sandboxOrganizations') return ['org-1'];
+        return null;
+      });
+      prisma.automation.findMany.mockResolvedValue([
+        {
+          id: 'au-1',
+          uuid: 'auu-1',
+          organizationId: 'org-1',
+          purchaseId: 'pu-1',
+          scheduledDate: new Date(),
+          messageTemplate: null,
+          purchase: {
+            purchaseDate: new Date(),
+            warrantyExpiresAt: null,
+            customer: {
+              id: 'cu-1',
+              uuid: 'cuu-1',
+              phone: '573001234567',
+              name: 'Ana',
+              status: 'ACTIVE',
+            },
+            product: { name: 'Bateria', category: null },
+          },
+          organization: { name: 'Org' },
+          campaign: null,
+        },
+      ] as never);
+
+      await service.executeDueAutomations();
+
+      expect(provider.sendMessage).not.toHaveBeenCalled();
+      expect(pancakeProvider.sendTemplate).not.toHaveBeenCalled();
+      // La simulación es compatible con la política: se marca SENT con id sim-
+      expect(JSON.stringify(prisma.message.update.mock.calls)).toContain(
+        'sim-',
+      );
     });
   });
 });
