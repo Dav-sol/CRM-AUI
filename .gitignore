@@ -36,6 +36,28 @@ Thumbs.db
 .opencode/auth/
 .opencode/state/
 
+# ERP exports (T4.18). These are real business extracts — a customer
+# directory and two sales reports — and must never be versioned. Scoped to
+# this directory on purpose: a global *.xlsx rule would also hide legitimate
+# test fixtures and spec assets elsewhere in the repo.
+specs/Data-Excel/*.xlsx
+
+# Local private data and ephemeral audit artifacts (T4.17).
+# All patterns are anchored with a leading slash so they can only match at the
+# repository root. They must never become a global *.xlsx / *.png / data/ rule:
+# those would also hide documentation images, test fixtures and spec assets.
+# `/mi-carpeta/` holds business exports that must never leave this machine.
+/mi-carpeta/
+# Browser-automation snapshots of the running UI; they can capture customer
+# rows rendered on screen and are fully regenerable.
+/.playwright-mcp/
+# Local agent configuration (distinct from the .opencode/ rules above, which
+# only cover files *inside* the .opencode directory).
+/opencode.json
+# Screenshots captured during local audits.
+/audit-desktop-*.png
+/connection-test-localhost-3000.png
+
 # impeccable-ignore-start
 # Ephemeral output, runtime state, and per-dev overrides.
 .impeccable/*
@@ -44,6 +66,3 @@ Thumbs.db
 !.impeccable/design.json
 !.impeccable/critique/
 # impeccable-ignore-end
-
-# ERP exports: never track spreadsheets
-specs/Data-Excel/*.xlsx
