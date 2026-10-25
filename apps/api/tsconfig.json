@@ -21,5 +21,10 @@
 
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src/**/*"]
+  // `test/**/*` entra en el proyecto de TypeScript a propósito: los e2e de
+  // `test/` son código de la aplicación y deben quedar cubiertos por
+  // `npm run typecheck` y por el lint tipado. Con `test/` fuera del tsconfig,
+  // ESLint los reportaba como "not found by the project service" (no se
+  // analizaban, no se tipaban y sus errores quedaban invisibles).
+  "include": ["src/**/*", "test/**/*"]
 }

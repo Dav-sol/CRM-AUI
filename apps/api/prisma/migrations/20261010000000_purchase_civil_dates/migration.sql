@@ -1,0 +1,49 @@
+-- Fechas comerciales de compra como fecha civil (`DATE`), no como instante.
+--
+-- Contrato aprobado (PIT §2.1, decisiones D-1 y P1.8):
+--   · La fecha de compra del ERP es la FECHA BASE del vencimiento de garantía.
+--     La fecha de instalación no la sustituye (D-1).
+--   · El ERP entrega fechas civiles `YYYY-MM-DD`.
+--   · Zona operativa del cliente: `America/Bogota` (RNF-07).
+--   · El vencimiento suma meses calendario conservando el día y ajustando al
+--     último día válido del mes destino (P1.8).
+--
+-- POR QUÉ `DATE` Y NO `TIMESTAMPTZ`
+-- Estas columnas nunca representaron un instante: son días del calendario
+-- comercial. Guardarlas como `timestamp without time zone` obligaba a decidir
+-- en cada consumidor si leía `getDate()` o `getUTCDate()`, y esas dos lecturas
+-- discrepan en un día cuando el proceso corre fuera de la zona del cliente
+-- (el host corre en `America/Bogota` y el contenedor de API en UTC). Con
+-- `DATE` la ambigüedad desaparece: la columna ES el día.
+--
+-- CONVERSIÓN SIN DESPLAZAMIENTO
+-- `col::date` toma el componente de fecha ya almacenado, literalmente. No
+-- aplica ninguna conversión de zona horaria, a diferencia de lo que ocurriría
+-- con `col AT TIME ZONE`. Verificado en solo lectura sobre los datos actuales:
+--   · las 5 536 filas con `purchase_date` conservan exactamente su día
+--     almacenado (0 filas donde `purchase_date::date` difiera del día UTC);
+--   · 33 filas de `purchase_date` y 25 de `warranty_expires_at` tienen hora, que
+--     es lo único que HG-01 autoriza a perder;
+--   · `installation_date` no tiene hora en ninguna fila.
+--
+-- ÍNDICES
+-- PostgreSQL reconstruye automáticamente los índices que incluyen una columna
+-- cuyo tipo cambia; no es necesario recrearlos. El índice único
+-- `purchases_organization_id_invoice_number_customer_id_produc_key` incluye
+-- `purchase_date`: la conversión solo fallaría si aparecieran dos compras con
+-- la misma organización, factura, cliente, producto y DÍA. Verificado sobre los
+-- datos actuales: 0 grupos duplicados por día civil.
+--
+-- COHERENCIA DE LA GARANTÍA TRAS LA MIGRACIÓN
+-- `warranty_expires_at` NO se recalcula aquí: se convierte. Verificado que las
+-- 27 compras con `warranty_months` siguen cumpliendo compra + meses de
+-- calendario con clamp (P1.8) después del cast: 27 coinciden, 0 discrepan.
+--
+-- Lo que esta migración NO hace: no backfillea, no recalcula
+-- `warranty_expires_at` a partir de `purchase_date`, no reprograma
+-- automatizaciones y no toca `automations.scheduled_date` (que sí es un
+-- instante de disparo y depende del reloj del scheduler).
+ALTER TABLE "purchases"
+  ALTER COLUMN "purchase_date" TYPE DATE USING "purchase_date"::date,
+  ALTER COLUMN "warranty_expires_at" TYPE DATE USING "warranty_expires_at"::date,
+  ALTER COLUMN "installation_date" TYPE DATE USING "installation_date"::date;

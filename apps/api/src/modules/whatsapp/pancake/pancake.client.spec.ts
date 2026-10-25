@@ -24,9 +24,20 @@ function jsonResponse(body: unknown, status = 200): Response {
     ok: status >= 200 && status < 300,
     status,
     statusText: `status-${status}`,
-    json: async () => body,
-    text: async () => JSON.stringify(body),
+    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(JSON.stringify(body)),
   } as unknown as Response;
+}
+
+/**
+ * `mock.calls` de un `jest.Mock` sin genéricos es `any[][]`. Se tipa una
+ * sola vez para que las aserciones sobre la URL y el `init` no operen sobre
+ * `any`.
+ */
+type FetchCall = [string, RequestInit];
+
+function fetchCalls(): FetchCall[] {
+  return (global.fetch as jest.Mock).mock.calls as FetchCall[];
 }
 
 describe('PancakeClient', () => {
@@ -62,7 +73,7 @@ describe('PancakeClient', () => {
       CONFIG.apiBaseUrl,
     );
     expect(result.conversations[0].id).toBe('c-1');
-    const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
+    const [url, init] = fetchCalls()[0];
     expect(init.method).toBe('GET');
     expect(String(url)).toContain('page_access_token=tok-secret-abc');
   });
@@ -75,7 +86,7 @@ describe('PancakeClient', () => {
       '/pages/p1/message_templates',
     );
     expect(result.data[0].id).toBe('t-1');
-    const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
+    const [url, init] = fetchCalls()[0];
     expect(String(url)).not.toContain('page_access_token');
     expect(init.headers).toEqual({
       Authorization: 'Bearer botcake-secret',
@@ -286,7 +297,7 @@ describe('PancakeClient', () => {
       { action: 'reply_inbox', message: 'hola' },
     );
     expect(result.id).toBe('m-1');
-    const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
+    const [url, init] = fetchCalls()[0];
     expect(init.method).toBe('POST');
     expect(init.body).toContain('reply_inbox');
     expect(String(url)).toContain('page_access_token=tok-secret-abc');

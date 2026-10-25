@@ -10,6 +10,8 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
+import { parsePurchaseDateInput } from '../../common/civil-date';
+import { addMonthsClamped } from '../lifecycle/lifecycle.rules';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { UpdatePurchaseDto } from './dto/update-purchase.dto';
 import { QueryPurchasesDto } from './dto/query-purchases.dto';
@@ -61,10 +63,39 @@ const CUSTOMER_PRODUCT_SELECT = {
   product: { select: { id: true, code: true, name: true } },
 } as const;
 
-function addMonths(date: Date, months: number): Date {
-  const result = new Date(date);
-  result.setMonth(result.getMonth() + months);
-  return result;
+/**
+ * Aplica el contrato de entrada y traduce el fallo a `BadRequestException` para
+ * que la API no exponga un error interno ante un formato no admitido.
+ *
+ * Acepta la fecha civil canónica `YYYY-MM-DD` y también un instante inequívoco
+ * con zona declarada, que se convierte a su día civil en `America/Bogota`. Un
+ * instante SIN zona se rechaza: su interpretación dependería del reloj del
+ * proceso. El DTO ya filtra el formato; esta es la segunda barrera.
+ */
+function civilDateOrBadRequest(value: string): Date {
+  try {
+    return parsePurchaseDateInput(value);
+  } catch {
+    throw new BadRequestException(
+      'purchaseDate debe ser una fecha civil YYYY-MM-DD (ej. 2026-01-31) o un ' +
+        'instante ISO 8601 con zona (ej. 2026-01-31T18:00:00Z)',
+    );
+  }
+}
+
+/**
+ * El vencimiento usa la aritmética compartida de meses calendario (P1.8) en
+ * lugar de un `setMonth` local, que desbordaba al mes siguiente y dependía de
+ * la zona horaria del proceso. `addMonthsClamped` opera sobre los campos UTC.
+ */
+function warrantyExpiresFrom(
+  purchaseDate: Date,
+  warrantyMonths: number | null,
+): Date | null {
+  if (!warrantyMonths || warrantyMonths <= 0) {
+    return null;
+  }
+  return addMonthsClamped(purchaseDate, warrantyMonths);
 }
 
 @Injectable()
@@ -111,7 +142,7 @@ export class PurchasesService {
     dto: CreatePurchaseDto,
   ): Promise<PurchaseListItem> {
     const organizationId = await this.resolveOrganizationId(user, dto);
-    const purchaseDate = new Date(dto.purchaseDate);
+    const purchaseDate = civilDateOrBadRequest(dto.purchaseDate);
 
     const customer = await this.prisma.customer.findFirst({
       where: { id: dto.customerId, organizationId, deletedAt: null },
@@ -166,9 +197,7 @@ export class PurchasesService {
     });
 
     const warrantyMonths = dto.warrantyMonths ?? product.warrantyMonths ?? null;
-    const warrantyExpiresAt = warrantyMonths
-      ? addMonths(purchaseDate, warrantyMonths)
-      : null;
+    const warrantyExpiresAt = warrantyExpiresFrom(purchaseDate, warrantyMonths);
 
     if (existing) {
       await this.auditService.record({
@@ -302,16 +331,18 @@ export class PurchasesService {
 
     if (dto.purchaseDate || dto.warrantyMonths !== undefined) {
       const newPurchaseDate = dto.purchaseDate
-        ? new Date(dto.purchaseDate)
+        ? civilDateOrBadRequest(dto.purchaseDate)
         : purchase.purchaseDate;
       const months = warrantyMonths ?? purchase.warrantyMonths ?? null;
-      warrantyExpiresAt = months ? addMonths(newPurchaseDate, months) : null;
+      warrantyExpiresAt = warrantyExpiresFrom(newPurchaseDate, months);
     }
 
     const updated = await this.prisma.purchase.update({
       where: { id: purchase.id },
       data: {
-        purchaseDate: dto.purchaseDate ? new Date(dto.purchaseDate) : undefined,
+        purchaseDate: dto.purchaseDate
+          ? civilDateOrBadRequest(dto.purchaseDate)
+          : undefined,
         warrantyMonths,
         warrantyExpiresAt,
         quantity: dto.quantity ?? undefined,

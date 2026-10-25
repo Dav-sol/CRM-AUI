@@ -31,28 +31,24 @@ properties:
     description: URL-safe unique organization slug.
     example: baterias-del-caribe
   nit:
-    type:
-      - string
-      - "null"
+    type: string
+    nullable: true
     description: Optional unique tax identification number.
     example: "900123456-7"
   email:
-    type:
-      - string
-      - "null"
+    type: string
+    nullable: true
     format: email
     description: Optional organization email address.
     example: contacto@bateriasdelcaribe.com
   phone:
-    type:
-      - string
-      - "null"
+    type: string
+    nullable: true
     description: Optional organization phone number.
     example: "+576001234567"
   city:
-    type:
-      - string
-      - "null"
+    type: string
+    nullable: true
     description: Optional organization city.
     example: Barranquilla
   status:
@@ -77,9 +73,8 @@ properties:
     description: Last update timestamp in UTC.
     example: "2026-08-11T14:00:00Z"
   deletedAt:
-    type:
-      - string
-      - "null"
+    type: string
+    nullable: true
     format: date-time
     readOnly: true
     description: Soft-delete timestamp.

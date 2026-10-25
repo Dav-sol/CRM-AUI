@@ -7,6 +7,7 @@ import { createHash } from 'crypto';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/core/database/prisma.service';
 import { configureApp } from './../src/app.setup';
+import { deleteFixtureInvitations } from './helpers/fixture-cleanup';
 
 describe('Invitations (e2e) — US4 PLATFORM_OWNER + US5 ADMINISTRADOR', () => {
   let app: INestApplication<App>;
@@ -55,7 +56,9 @@ describe('Invitations (e2e) — US4 PLATFORM_OWNER + US5 ADMINISTRADOR', () => {
 
     prisma = app.get(PrismaService);
 
-    await prisma.invitation.deleteMany({});
+    await deleteFixtureInvitations(prisma, {
+      slugs: ['inv-org-1', 'inv-org-2'],
+    });
     await prisma.userSession.deleteMany({
       where: {
         user: {
@@ -128,7 +131,9 @@ describe('Invitations (e2e) — US4 PLATFORM_OWNER + US5 ADMINISTRADOR', () => {
         },
       },
     });
-    await prisma.invitation.deleteMany({});
+    await deleteFixtureInvitations(prisma, {
+      slugs: ['inv-org-1', 'inv-org-2'],
+    });
     await prisma.user.deleteMany({
       where: {
         OR: [

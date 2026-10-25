@@ -27,7 +27,12 @@ properties:
 
   purchaseDate:
     type: string
-    format: date-time
+    description: >-
+      Fecha de compra del ERP. Acepta la fecha civil canónica `YYYY-MM-DD`
+      (formato recomendado) o un instante ISO 8601 con zona declarada
+      (`2026-01-31T18:00:00Z`), que se convierte a su día civil en
+      America/Bogota. Se rechaza un instante sin zona por ambiguo. Persistida
+      como fecha civil (columna DATE), no como instante.
 
   quantity:
     type: integer

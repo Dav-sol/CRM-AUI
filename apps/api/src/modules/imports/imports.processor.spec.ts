@@ -581,8 +581,13 @@ describe('ImportsProcessor', () => {
 
       await processor.process(csvJob('PURCHASES', 'uploads/x.csv'));
 
-      const expected = new Date('2026-08-01T00:00:00.000Z');
-      expected.setMonth(expected.getMonth() + 18);
+      // El vencimiento se ancla en la FECHA DE COMPRA y suma meses calendario
+      // en UTC (P1.8 / RNF-07): 2026-08-01 + 18 meses = 2028-02-01 a
+      // medianoche UTC. La aritmetica es en UTC a proposito: con
+      // `setMonth` (que opera en hora local) el valor esperado dependia de la
+      // zona del proceso y el test fallaba con TZ=Europe/Madrid, donde el
+      // cambio de horario de verano desplaza el instante una hora.
+      const expected = new Date('2028-02-01T00:00:00.000Z');
       expect(prisma.purchase.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -763,8 +768,12 @@ describe('ImportsProcessor', () => {
       expect((installationDate as Date).getTime()).toBe(
         (purchaseDate as Date).getTime(),
       );
-      // Tampoco es "hoy": 15/06/2026 está en el pasado.
-      expect((installationDate as Date).getTime()).toBeLessThan(Date.now());
+      // La fecha es la del ERP, copiada tal cual: 15/06/2026. La asercion
+      // determinista de "no es hoy" es que el valor es EXACTAMENTE ese dia
+      // civil. Compararlo con `Date.now()` hacia que el test dependiera del
+      // dia en que se ejecutaba (fallaba al desplazar el reloj 400 dias hacia
+      // atras, cuando 2026-06-15 todavia estaba en el futuro).
+      expect(installationDate).toEqual(new Date('2026-06-15'));
     });
 
     it('opt-in explícito false equivale a no tenerlo', async () => {

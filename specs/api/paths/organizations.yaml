@@ -1,3 +1,70 @@
+/organizations/me:
+  get:
+    tags:
+      - Organizations
+
+    summary: Get own organization
+
+    description: |
+      Returns the organization of the caller (Empresa, Configuraciones v1).
+      The organization always comes from the JWT: no organization id is
+      accepted from the client. Requires ADMINISTRADOR or PLATFORM_OWNER with
+      an organization; an account without one gets 403.
+    operationId: getMyOrganization
+    security: [{ bearerAuth: [] }]
+    responses:
+      "200":
+        description: Organization found
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/Organization/OrganizationResponse.yaml"
+      "403":
+        description: "The account has no organization (FORBIDDEN)"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/responses/error.yaml"
+
+  patch:
+    tags:
+      - Organizations
+
+    summary: Update own organization
+
+    description: |
+      Updates the editable fields of the caller's organization (Empresa,
+      Configuraciones v1, AC-10). `slug` and `status` are not editable here:
+      the slug is the public identifier and the status belongs to the platform.
+      Every field is optional and a partial patch leaves the rest untouched.
+    operationId: updateMyOrganization
+    security: [{ bearerAuth: [] }]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas/Organization/UpdateOrganizationRequest.yaml"
+    responses:
+      "200":
+        description: Organization updated
+        content:
+          application/json:
+            schema:
+              $ref: "../components/schemas/Organization/OrganizationResponse.yaml"
+      "400":
+        description: "Validation error (VALIDATION_ERROR)"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/responses/error.yaml"
+      "403":
+        description: "The account has no organization (FORBIDDEN)"
+        content:
+          application/json:
+            schema:
+              $ref: "../components/responses/error.yaml"
+
 /organizations/{id}:
   get:
     tags:
@@ -9,110 +76,31 @@
       Returns an organization. Tenant-scoped: organization users can only
       access their own organization (403 otherwise); PLATFORM_OWNER bypasses
       the tenant filter.
-
     operationId: getOrganization
-
-    security:
-      - bearerAuth: []
-
+    security: [{ bearerAuth: [] }]
     parameters:
-
       - name: id
         in: path
         required: true
         description: Organization id
         schema:
           type: string
-
     responses:
-
       "200":
         description: Organization found
-
         content:
-
           application/json:
-
             schema:
-
-              type: object
-
-              properties:
-
-                data:
-
-                  type: object
-
-                  properties:
-
-                    organization:
-
-                      type: object
-
-                      properties:
-
-                        id:
-                          type: string
-
-                        name:
-                          type: string
-
-                        createdAt:
-                          type: string
-                          format: date-time
-
-                        updatedAt:
-                          type: string
-                          format: date-time
-
+              $ref: "../components/schemas/Organization/OrganizationResponse.yaml"
       "403":
         description: "Cross-tenant access (FORBIDDEN)"
-
         content:
-
           application/json:
-
             schema:
-
-              type: object
-
-              properties:
-
-                error:
-                  type: object
-                  required:
-                    - code
-                    - message
-                  properties:
-                    code:
-                      type: string
-                      example: FORBIDDEN
-                    message:
-                      type: string
-                      example: Forbidden
-
+              $ref: "../components/responses/error.yaml"
       "404":
         description: Organization not found
-
         content:
-
           application/json:
-
             schema:
-
-              type: object
-
-              properties:
-
-                error:
-                  type: object
-                  required:
-                    - code
-                    - message
-                  properties:
-                    code:
-                      type: string
-                      example: NOT_FOUND
-                    message:
-                      type: string
-                      example: Organization not found
+              $ref: "../components/responses/error.yaml"

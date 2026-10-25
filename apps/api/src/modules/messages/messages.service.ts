@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuthUser } from '../../core/decorators/current-user.decorator';
 
@@ -59,10 +58,17 @@ export class MessagesService {
           const stage = c.stages[i] as Record<string, unknown>;
           const body = (stage.template as string) || '';
           if (!body.trim()) continue;
+          // `stage` viene de una columna JSON: `name` no tiene tipo garantizado.
+          // Se estrecha antes de interpolarlo para no producir un "[object
+          // Object]" en el nombre de la fuente.
+          const stageName =
+            typeof stage.name === 'string' && stage.name.trim()
+              ? stage.name
+              : `Etapa ${i + 1}`;
           messages.push({
             id: `campaign-stage-${c.id}-${i}`,
             source: 'campaign_stage',
-            sourceName: `${c.name} — ${stage.name ?? `Etapa ${i + 1}`}`,
+            sourceName: `${c.name} — ${stageName}`,
             sourceId: c.uuid,
             body,
             anchor: stage.anchor as string | undefined,

@@ -74,16 +74,40 @@ services:
   # duplicated runs comes from Prisma's Postgres advisory lock, not from the
   # schema. A single task keeps concurrency out of the picture even if the API
   # service is scaled.
+  #
+  # GUARD (scripts/check-migrations.sh): BEFORE `migrate deploy`, the task
+  # verifies that every migration on disk is approved (listed in
+  # `apps/api/prisma/migrations/MIGRATIONS.sha256` with its exact sha256) and
+  # that the repository and the database describe the same schema. `migrate
+  # deploy` applies whatever it finds on disk without asking, and
+  # `.dockerignore` does not exclude `apps/api/prisma/migrations/`, so without
+  # this guard an unreviewed migration reached the container and was applied by
+  # itself on the next `up`. The guard only reads: it never migrates, never
+  # repairs and never approves anything by itself. If it fails, NO migration is
+  # applied and the API does not start (`service_completed_successfully`).
+  #
+  # The script is mounted read-only: the image does not carry `scripts/`, and
+  # the container has no git (the manifest is the source of truth there).
   migrate:
     build:
       context: ../../
       dockerfile: apps/api/Dockerfile
     container_name: automatizeit-migrate
     restart: "no"
-    command: ["sh", "-c", "npx prisma migrate deploy"]
+    command:
+      [
+        "sh",
+        "-c",
+        "sh /guard/check-migrations.sh --allow-pending && npx prisma migrate deploy",
+      ]
+    volumes:
+      - ../../scripts:/guard:ro
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-automatizeit}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requerido - ver infrastructure/docker/.env.example}@postgres:5432/${POSTGRES_DB:-automatizeit}
+      # La guarda se monta en `/guard`, fuera del arbol del repositorio: se le
+      # indica donde esta la API dentro de la imagen (WORKDIR /app/apps/api).
+      API_DIR: /app/apps/api
     depends_on:
       postgres:
         condition: service_healthy

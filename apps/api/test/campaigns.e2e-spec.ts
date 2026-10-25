@@ -8,6 +8,7 @@ import * as bcrypt from 'bcrypt';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/core/database/prisma.service';
 import { configureApp } from './../src/app.setup';
+import { deleteFixtureAudits } from './helpers/fixture-cleanup';
 
 describe('Campaigns (e2e) — Flujo 08, US1..US8, FR-001..FR-010', () => {
   let app: INestApplication<App>;
@@ -55,7 +56,9 @@ describe('Campaigns (e2e) — Flujo 08, US1..US8, FR-001..FR-010', () => {
     seedPrisma = new PrismaService();
     await seedPrisma.$connect();
 
-    await seedPrisma.audit.deleteMany({ where: { module: 'campaigns' } });
+    await deleteFixtureAudits(seedPrisma, {
+      slugs: ['camp-org-1', 'camp-org-2'],
+    });
     await seedPrisma.automation.deleteMany({
       where: { organization: { slug: { in: ['camp-org-1', 'camp-org-2'] } } },
     });
@@ -331,11 +334,11 @@ describe('Campaigns (e2e) — Flujo 08, US1..US8, FR-001..FR-010', () => {
     );
     expect((res.body as { data: Record<string, unknown> }).data).toEqual(
       expect.objectContaining({
-        estimatedAutomations: expect.any(Number),
-        estimatedCost: expect.any(Number),
-        estimatedMessages: expect.any(Number),
-        estimatedSegments: expect.any(Number),
-        currency: expect.any(String),
+        estimatedAutomations: expect.any(Number) as number,
+        estimatedCost: expect.any(Number) as number,
+        estimatedMessages: expect.any(Number) as number,
+        estimatedSegments: expect.any(Number) as number,
+        currency: expect.any(String) as string,
       }),
     );
   });

@@ -164,13 +164,16 @@ model Purchase {
   customerId        String         @map("customer_id")
   productId         String         @map("product_id")
   invoiceNumber     String         @map("invoice_number")
-  purchaseDate      DateTime       @map("purchase_date")
+  purchaseDate      DateTime       @db.Date @map("purchase_date")
   warrantyMonths    Int?           @map("warranty_months")
-  warrantyExpiresAt DateTime?      @map("warranty_expires_at")
+  warrantyExpiresAt DateTime?      @db.Date @map("warranty_expires_at")
   // Lifecycle 025 §1: la fecha de instalación es la fecha base del lifecycle.
   // Null = la venta existe pero la batería aún no consta como instalada, por
   // lo que NO hay lifecycle (gate G8). ERP puede corregirla: se usa la última.
-  installationDate  DateTime?      @map("installation_date")
+  //
+  // Civil, no instante: la captura el ERP como YYYY-MM-DD. El vencimiento de
+  // garantía NO se ancla aquí (D-1: se ancla en `purchaseDate`).
+  installationDate  DateTime?      @db.Date @map("installation_date")
   // Atribución de ventas (Fase 2): conversación que originó la venta (uuid).
   sourceConversationId String?     @map("source_conversation_id")
   // Fase P0-C: cotización que originó la venta (uuid).
@@ -576,6 +579,14 @@ model Message {
   status                 MessageStatus    @default(QUEUED)
   providerMessageId      String?          @map("provider_message_id")
   providerConversationId String?          @map("provider_conversation_id")
+  // Tarea 1 (transporte únicamente): respuesta a un botón interactivo de Meta
+  // (`interactive.button_reply`). Se normaliza y persiste; ninguna decisión de
+  // negocio se deriva aquí. `buttonId` es el identificador técnico que vuelve
+  // en el payload; `buttonTitle` es la etiqueta visible; `inReplyToProviderId`
+  // es el `context.id` de Meta (wamid del saliente que llevaba el botón).
+  buttonId               String?          @map("button_id")
+  buttonTitle            String?          @map("button_title")
+  inReplyToProviderId    String?          @map("in_reply_to_provider_id")
   // Fase 1: canal de envío (denormalized para queries).
   channel                ChannelType?
   channelAccountId       String?          @map("channel_account_id")

@@ -327,7 +327,7 @@ describe('PurchasesService', () => {
       customerId: 'c-1',
       productId: 'p-1',
       invoiceNumber: 'INV-0001',
-      purchaseDate: '2026-07-22T14:35:18Z',
+      purchaseDate: '2026-07-22',
       quantity: 2,
       value: '450.50',
     };
@@ -360,7 +360,7 @@ describe('PurchasesService', () => {
           customerId: 'c-1',
           productId: 'p-1',
           invoiceNumber: 'INV-0001',
-          purchaseDate: new Date('2026-07-22T14:35:18Z'),
+          purchaseDate: new Date('2026-07-22T00:00:00.000Z'),
           warrantyMonths: null,
           warrantyExpiresAt: null,
           sourceConversationId: null,
@@ -399,7 +399,7 @@ describe('PurchasesService', () => {
           customerId: 'c-1',
           productId: 'p-1',
           invoiceNumber: 'INV-0001',
-          purchaseDate: new Date('2026-07-22T14:35:18Z'),
+          purchaseDate: new Date('2026-07-22T00:00:00.000Z'),
           warrantyMonths: null,
           warrantyExpiresAt: null,
           sourceConversationId: null,
@@ -441,6 +441,77 @@ describe('PurchasesService', () => {
       await expect(service.create(orgUser, validDto)).rejects.toBeInstanceOf(
         ConflictException,
       );
+    });
+
+    // T-B3: el formulario web envía un instante con zona; la frontera lo
+    // reduce al día civil de America/Bogota antes de persistir.
+    describe('contrato de entrada de purchaseDate (T-B3)', () => {
+      beforeEach(() => {
+        prisma.purchase.create.mockResolvedValue({ id: 'pu-1' });
+        prisma.purchase.findFirst.mockResolvedValue(null);
+        prisma.product.findFirst.mockResolvedValue({
+          id: 'p-1',
+          warrantyMonths: 12,
+          deletedAt: null,
+        });
+      });
+
+      it('acepta el instante con zona que envía el formulario web', async () => {
+        await service.create(orgUser, {
+          ...validDto,
+          purchaseDate: '2026-07-22T14:35:18.000Z',
+        });
+
+        expect(prisma.purchase.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              purchaseDate: new Date('2026-07-22T00:00:00.000Z'),
+            }) as object,
+          }),
+        );
+      });
+
+      it('convierte a Bogotá: un instante UTC de madrugada no adelanta el día', async () => {
+        await service.create(orgUser, {
+          ...validDto,
+          purchaseDate: '2026-08-01T02:00:00.000Z', // 31-jul 21:00 en Bogotá
+        });
+
+        expect(prisma.purchase.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              purchaseDate: new Date('2026-07-31T00:00:00.000Z'),
+            }) as object,
+          }),
+        );
+      });
+
+      it('calcula el vencimiento desde ese día civil (D-1 + P1.8)', async () => {
+        await service.create(orgUser, {
+          ...validDto,
+          purchaseDate: '2026-01-31T18:00:00.000Z',
+        });
+
+        // 31-ene + 12 meses → 31-ene del año siguiente (clamp de P1.8).
+        expect(prisma.purchase.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              purchaseDate: new Date('2026-01-31T00:00:00.000Z'),
+              warrantyExpiresAt: new Date('2027-01-31T00:00:00.000Z'),
+            }) as object,
+          }),
+        );
+      });
+
+      it('rechaza un instante sin zona en lugar de adivinar el día', async () => {
+        await expect(
+          service.create(orgUser, {
+            ...validDto,
+            purchaseDate: '2026-07-22T14:35:18',
+          }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(prisma.purchase.create).not.toHaveBeenCalled();
+      });
     });
 
     it('rejects a customerId outside the tenant', async () => {
@@ -538,7 +609,7 @@ describe('PurchasesService', () => {
           customerId: 'c-1',
           productId: 'p-1',
           invoiceNumber: 'INV-0001',
-          purchaseDate: new Date('2026-07-22T14:35:18Z'),
+          purchaseDate: new Date('2026-07-22T00:00:00.000Z'),
           warrantyMonths: null,
           warrantyExpiresAt: null,
           sourceConversationId: null,
@@ -645,7 +716,7 @@ describe('PurchasesService', () => {
           customerId: 'c-1',
           productId: 'p-1',
           invoiceNumber: 'INV-0001',
-          purchaseDate: '2026-07-22T14:35:18Z',
+          purchaseDate: '2026-07-22',
           quantity: 1,
           value: '1.00',
         }),
@@ -669,7 +740,7 @@ describe('PurchasesService', () => {
       customerId: 'c-1',
       productId: 'p-1',
       invoiceNumber: 'INV-0002',
-      purchaseDate: '2026-08-01T00:00:00Z',
+      purchaseDate: '2026-08-01',
       quantity: 1,
       value: '100.00',
     };
@@ -693,7 +764,7 @@ describe('PurchasesService', () => {
           data: expect.objectContaining({
             warrantyMonths: 12,
             warrantyExpiresAt: new Date('2027-08-01T00:00:00.000Z'),
-          }),
+          }) as object,
         }),
       );
     });
@@ -708,7 +779,7 @@ describe('PurchasesService', () => {
           data: expect.objectContaining({
             warrantyMonths: 24,
             warrantyExpiresAt: new Date('2028-08-01T00:00:00.000Z'),
-          }),
+          }) as object,
         }),
       );
     });
@@ -727,7 +798,7 @@ describe('PurchasesService', () => {
           data: expect.objectContaining({
             warrantyMonths: 15,
             warrantyExpiresAt: new Date('2027-11-01T00:00:00.000Z'),
-          }),
+          }) as object,
         }),
       );
     });
@@ -803,7 +874,7 @@ describe('PurchasesService', () => {
       );
       expect(prisma.purchase.count).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ status: 'COMPLETED' }),
+          where: expect.objectContaining({ status: 'COMPLETED' }) as object,
         }),
       );
       expect(prisma.purchase.findMany).toHaveBeenCalledWith(

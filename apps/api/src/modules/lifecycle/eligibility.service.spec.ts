@@ -15,8 +15,38 @@ const TZ = 'America/Bogota'; // UTC-5 fijo, sin DST
  * Instante de referencia de los tests. Los gates de frecuencia y silencio
  * operan sobre "ahora", así que todos los fixtures deben derivar de aquí:
  * mezclar una fecha fija con Date.now() descuadra la aritmética de días.
+ *
+ * Es un instante FIJO, no `new Date()`. Con el reloj del proceso, el fixture
+ * `holidays: ['2026-10-05']` solo coincidía mientras la semana de `NOW`
+ * contuviera esa fecha: el test empezó a fallar el 2026-10-12 y nadie lo
+ * notó porque la puerta de verificación ya estaba en rojo. Un test de gate
+ * temporal no puede depender del día en que se ejecuta.
+ *
+ * El servicio recibe `now` por parámetro y no lee el reloj (`evaluate` y los
+ * gates individuales lo reciben), de modo que un instante fijo reproduce
+ * exactamente la misma aritmética de días que el reloj, pero siempre igual.
+ *
+ * 2026-10-05T15:00:00Z = lunes 2026-10-05 10:00 en America/Bogota.
  */
-const NOW = new Date();
+const NOW = new Date('2026-10-05T15:00:00.000Z');
+
+/**
+ * Fecha civil (YYYY-MM-DD) que el servicio ve para un instante dado, en la
+ * zona de presentación. Es la misma lectura que hace `localParts`: permite
+ * construir un festivo a partir del instante evaluado en lugar de escribir una
+ * fecha absoluta que solo coincide en una semana concreta.
+ */
+function isoDateInTZ(at: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(at);
+  const get = (type: 'year' | 'month' | 'day'): string =>
+    parts.find((p) => p.type === type)?.value ?? '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
 
 /**
  * Devuelve un instante que cae en el día de la semana indicado (0 = domingo)
@@ -253,7 +283,10 @@ describe('EligibilityService', () => {
 
     it('cuenta por sentAt, no por createdAt', async () => {
       await service.checkAutomaticFrequency('cu-1', NOW);
-      const arg = prisma.message.findFirst.mock.calls[0][0] as {
+      // `mock.calls` es `any[][]`: se tipa como `unknown[][]` para no operar
+      // sobre `any` al leer los argumentos de la llamada.
+      const findFirstCalls = prisma.message.findFirst.mock.calls as unknown[][];
+      const arg = findFirstCalls[0][0] as {
         where: Record<string, unknown>;
         orderBy: Record<string, unknown>;
         select: Record<string, unknown>;
@@ -264,11 +297,100 @@ describe('EligibilityService', () => {
 
     it('filtra AUTOMATIC + OUTBOUND: no cuenta MANUAL ni INCOMING', async () => {
       await service.checkAutomaticFrequency('cu-1', NOW);
-      const arg = prisma.message.findFirst.mock.calls[0][0] as {
+      // `mock.calls` es `any[][]`: se tipa como `unknown[][]` para no operar
+      // sobre `any` al leer los argumentos de la llamada.
+      const findFirstCalls = prisma.message.findFirst.mock.calls as unknown[][];
+      const arg = findFirstCalls[0][0] as {
         where: Record<string, unknown>;
       };
       expect(arg.where.type).toBe(MessageType.AUTOMATIC);
       expect(arg.where.direction).toBe('OUTBOUND');
+    });
+
+    it('aisla por cliente: el envío de otro cliente no bloquea a cu-1', async () => {
+      await service.checkAutomaticFrequency('cu-1', NOW);
+      // `mock.calls` es `any[][]`: se tipa como `unknown[][]` para no operar
+      // sobre `any` al leer los argumentos de la llamada.
+      const findFirstCalls = prisma.message.findFirst.mock.calls as unknown[][];
+      const arg = findFirstCalls[0][0] as { where: Record<string, unknown> };
+      // El contador de frecuencia es POR CLIENTE: sin este filtro, un envío a
+      // un cliente bloquearía a todos los demás de la organización.
+      expect(arg.where.customerId).toBe('cu-1');
+    });
+
+    /**
+     * S1 — el presupuesto de 15 días es COMPARTIDO ENTRE CANALES.
+     *
+     * Decisión de David (22-10-2026), condicionada a no romper RF-04/RF-05.
+     * RF-08 (pit.md:266) dice «máximo un mensaje automático saliente cada 15
+     * días… el control debe ser global entre campañas». RF-05 (pit.md:224)
+     * se subordina explícitamente: «se debe respetar el horario permitido, la
+     * frecuencia global y las políticas».
+     *
+     * Estas pruebas fijan la garantía ESTRUCTURAL de S1: el `where` no puede
+     * contener `channel`. Si alguien lo añadiera, pasaría a S2 (presupuesto
+     * por canal) sin que este fichero lo delatara.
+     */
+    describe('S1 · el límite de 15 días es compartido entre canales', () => {
+      it('el where NO filtra channel (garantía estructural de S1)', async () => {
+        await service.checkAutomaticFrequency('cu-1', NOW);
+        // `mock.calls` es `any[][]`: se tipa como `unknown[][]` para no operar
+        // sobre `any` al leer los argumentos de la llamada.
+        const findFirstCalls = prisma.message.findFirst.mock
+          .calls as unknown[][];
+        const arg = findFirstCalls[0][0] as {
+          where: Record<string, unknown>;
+        };
+        // S1 exige que el presupuesto se cuente SIN distinción de canal. Un
+        // `channel` en el `where` convertiría el límite en por-canal (S2).
+        expect(arg.where).not.toHaveProperty('channel');
+      });
+
+      it('un SMS automático consumido bloquea el siguiente envío (cambio de canal)', async () => {
+        // El último automático saliente fue por SMS. El siguiente, sea del canal
+        // que sea, debe quedar bloqueado: es el mismo presupuesto.
+        prisma.message.findFirst.mockResolvedValue({ sentAt: daysAgo(3) });
+
+        await expect(
+          service.checkAutomaticFrequency('cu-1', NOW),
+        ).resolves.toMatchObject({ allowed: false, blockedBy: 'G3' });
+      });
+
+      it('un WhatsApp automático consumido también bloquea el siguiente', async () => {
+        prisma.message.findFirst.mockResolvedValue({ sentAt: daysAgo(1) });
+
+        await expect(
+          service.checkAutomaticFrequency('cu-1', NOW),
+        ).resolves.toMatchObject({ allowed: false, blockedBy: 'G3' });
+      });
+
+      it('el cambio de canal no reinicia la ventana: día 16 sigue siendo el primero elegible', async () => {
+        for (const d of [0, 5, 10, 14, 15]) {
+          prisma.message.findFirst.mockResolvedValue({ sentAt: daysAgo(d) });
+          await expect(
+            service.checkAutomaticFrequency('cu-1', NOW),
+          ).resolves.toMatchObject({ allowed: false, blockedBy: 'G3' });
+        }
+
+        prisma.message.findFirst.mockResolvedValue({ sentAt: daysAgo(16) });
+        await expect(
+          service.checkAutomaticFrequency('cu-1', NOW),
+        ).resolves.toMatchObject({ allowed: true });
+      });
+
+      it('los mensajes QUEUED o fallidos (sentAt null) no consumen el presupuesto', async () => {
+        // RF-08 exige «no considerar un fallo definitivo como un envío exitoso
+        // sin evidencia». El filtro `sentAt: { not: null }` es lo que lo
+        // garantiza; si se relajara, un fallo bloquearía 15 días sin haber
+        // llegado nada a ningún cliente.
+        await service.checkAutomaticFrequency('cu-1', NOW);
+        const findFirstCalls = prisma.message.findFirst.mock
+          .calls as unknown[][];
+        const arg = findFirstCalls[0][0] as {
+          where: Record<string, unknown>;
+        };
+        expect(arg.where.sentAt).toEqual({ not: null });
+      });
     });
   });
 
@@ -301,7 +423,10 @@ describe('EligibilityService', () => {
 
     it('considera el MANUAL más reciente, no el más antiguo', async () => {
       await service.checkManualSilence('cu-1', NOW);
-      const arg = prisma.message.findFirst.mock.calls[0][0] as {
+      // `mock.calls` es `any[][]`: se tipa como `unknown[][]` para no operar
+      // sobre `any` al leer los argumentos de la llamada.
+      const findFirstCalls = prisma.message.findFirst.mock.calls as unknown[][];
+      const arg = findFirstCalls[0][0] as {
         where: Record<string, unknown>;
         orderBy: Record<string, unknown>;
       };
@@ -378,7 +503,9 @@ describe('EligibilityService', () => {
         input({
           now: monday,
           cycleId: 'cy-1',
-          holidays: ['2026-10-05'],
+          // El festivo se deriva del instante evaluado: un literal absoluto
+          // solo coincidía durante la semana que contenía esa fecha.
+          holidays: [isoDateInTZ(monday)],
         }),
       );
       expect(res.blockedBy).toBe('G6');

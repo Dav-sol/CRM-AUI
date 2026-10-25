@@ -17,9 +17,20 @@ function jsonResponse(body: unknown, status = 200): Response {
     ok: status >= 200 && status < 300,
     status,
     statusText: `status-${status}`,
-    json: async () => body,
-    text: async () => JSON.stringify(body),
+    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(JSON.stringify(body)),
   } as unknown as Response;
+}
+
+/**
+ * `mock.calls` de un `jest.Mock` sin genéricos es `any[][]`. Se tipa una
+ * sola vez para que las aserciones sobre la URL y el `init` no operen sobre
+ * `any` (y para que `init.method` / `init.body` tengan el tipo real).
+ */
+type FetchCall = [string, RequestInit];
+
+function fetchCalls(): FetchCall[] {
+  return (global.fetch as jest.Mock).mock.calls as FetchCall[];
 }
 
 describe('PancakePublicApi', () => {
@@ -30,7 +41,10 @@ describe('PancakePublicApi', () => {
   let permit: { assert: jest.Mock; evaluate: jest.Mock };
 
   beforeEach(() => {
-    permit = { assert: jest.fn(), evaluate: jest.fn(() => ({ allowed: true })) };
+    permit = {
+      assert: jest.fn(),
+      evaluate: jest.fn(() => ({ allowed: true })),
+    };
     client = new PancakeClient({ ...CONFIG });
     api = new PancakePublicApi(client, CONFIG.pageId, permit as never);
     global.fetch = jest.fn();
@@ -49,7 +63,7 @@ describe('PancakePublicApi', () => {
       unreadFirst: true,
     });
     expect(result.conversations[0].id).toBe('c-1');
-    const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
+    const [url, init] = fetchCalls()[0];
     expect(init.method).toBe('GET');
     expect(String(url)).toContain(
       '/v2/pages/waba_1146111635255630/conversations',
@@ -63,7 +77,7 @@ describe('PancakePublicApi', () => {
     );
     const result = await api.getConversationMessages('c-1', 30);
     expect(result.messages[0].id).toBe('m-1');
-    const [url] = (global.fetch as jest.Mock).mock.calls[0];
+    const [url] = fetchCalls()[0];
     expect(String(url)).toContain(
       '/v1/pages/waba_1146111635255630/conversations/c-1/messages',
     );
@@ -76,7 +90,7 @@ describe('PancakePublicApi', () => {
     );
     const result = await api.getMessageTemplates();
     expect(result[0].id).toBe('t-1');
-    const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
+    const [url, init] = fetchCalls()[0];
     expect(String(url)).toContain(
       'https://botcake.io/api/public_api/v1/pages/waba_1146111635255630/message_templates',
     );
@@ -123,9 +137,12 @@ describe('PancakePublicApi', () => {
       senderId: 'user-1',
     });
     expect(result.id).toBe('msg-1');
-    const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
+    const [url, init] = fetchCalls()[0];
     expect(init.method).toBe('POST');
-    const body = JSON.parse(init.body);
+    // El cuerpo de esta llamada es siempre un JSON serializado: se estrecha a
+    // `string` (no `String()`, que aplicaría el stringification por defecto de
+    // `BodyInit`) y el resultado de `JSON.parse` se tipa para no propagar `any`.
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
     expect(body).toMatchObject({
       action: 'reply_inbox',
       template_id: 'tpl-1',
@@ -146,8 +163,11 @@ describe('PancakePublicApi', () => {
       'user-1',
     );
     expect(result.id).toBe('msg-2');
-    const [, init] = (global.fetch as jest.Mock).mock.calls[0];
-    const body = JSON.parse(init.body);
+    const [, init] = fetchCalls()[0];
+    // El cuerpo de esta llamada es siempre un JSON serializado: se estrecha a
+    // `string` (no `String()`, que aplicaría el stringification por defecto de
+    // `BodyInit`) y el resultado de `JSON.parse` se tipa para no propagar `any`.
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
     expect(body).toEqual({
       action: 'reply_inbox',
       message: 'Hola',

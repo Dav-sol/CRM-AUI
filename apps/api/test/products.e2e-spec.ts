@@ -6,6 +6,7 @@ import * as bcrypt from 'bcrypt';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/core/database/prisma.service';
 import { configureApp } from './../src/app.setup';
+import { deleteFixtureAudits } from './helpers/fixture-cleanup';
 
 interface ProductRow {
   id: string;
@@ -62,7 +63,9 @@ describe('Products (e2e) — US1..US7', () => {
 
     prisma = app.get(PrismaService);
 
-    await prisma.audit.deleteMany({ where: { module: 'products' } });
+    await deleteFixtureAudits(prisma, {
+      slugs: ['prod-org-1', 'prod-org-2'],
+    });
     await prisma.purchase.deleteMany({
       where: { organization: { slug: { in: ['prod-org-1', 'prod-org-2'] } } },
     });
@@ -198,7 +201,9 @@ describe('Products (e2e) — US1..US7', () => {
   });
 
   afterAll(async () => {
-    await prisma.audit.deleteMany({ where: { module: 'products' } });
+    await deleteFixtureAudits(prisma, {
+      slugs: ['prod-org-1', 'prod-org-2'],
+    });
     await prisma.purchase.deleteMany({
       where: { organizationId: { in: [org1Id, org2Id] } },
     });

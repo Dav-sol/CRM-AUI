@@ -556,7 +556,7 @@ describe('ImportsService', () => {
 
       expect(prisma.import.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ status: 'PENDING' }),
+          data: expect.objectContaining({ status: 'PENDING' }) as object,
         }),
       );
       expect(processor.process).toHaveBeenCalledWith(

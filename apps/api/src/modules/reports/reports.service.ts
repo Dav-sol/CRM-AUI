@@ -68,6 +68,38 @@ export interface MessageReport {
   rows: ReportRow[];
 }
 
+/**
+ * Etiqueta de agrupacion de un informe.
+ *
+ * LAS TRES AGRUPACIONES SE CALCULAN EN UTC. La salida es texto producido por
+ * `toISOString()`, asi que el recalculo de la semana tiene que hacerse tambien
+ * en UTC: con getters locales (`getDate()`/`getDay()`) el dia de la semana se
+ * tomaba de la ZONA DEL PROCESO y la etiqueta dependia del entorno. El
+ * contenedor de la API corre en UTC y el host en `America/Bogota`, de modo que
+ * la misma fila podia etiquetarse en semanas distintas segun donde se
+ * ejecutase. Es el mismo patron que `campaigns.service.ts` corrigio con
+ * `addDaysUtc` (RNF-07).
+ *
+ * La SEMANTICA NO CAMBIA: la semana empieza en domingo (`getUTCDay()` devuelve
+ * 0 = domingo), igual que antes, y las agrupaciones `day` y `month` ya usaban
+ * UTC. Lo unico que cambia es que el resultado ya no depende del reloj del
+ * proceso.
+ */
+export function reportBucketLabel(
+  date: Date,
+  groupBy: 'day' | 'week' | 'month',
+): string {
+  if (groupBy === 'day') {
+    return date.toISOString().slice(0, 10);
+  }
+  if (groupBy === 'week') {
+    const d = new Date(date.getTime());
+    d.setUTCDate(d.getUTCDate() - d.getUTCDay());
+    return d.toISOString().slice(0, 10);
+  }
+  return date.toISOString().slice(0, 7);
+}
+
 @Injectable()
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -86,18 +118,6 @@ export class ReportsService {
     if (dto.from) where.gte = new Date(dto.from);
     if (dto.to) where.lte = new Date(dto.to);
     return Object.keys(where).length > 0 ? where : undefined;
-  }
-
-  private truncateDate(date: Date, groupBy: 'day' | 'week' | 'month'): string {
-    if (groupBy === 'day') {
-      return date.toISOString().slice(0, 10);
-    }
-    if (groupBy === 'week') {
-      const d = new Date(date);
-      d.setDate(d.getDate() - d.getDay());
-      return d.toISOString().slice(0, 10);
-    }
-    return date.toISOString().slice(0, 7);
   }
 
   // ---------------------------------------------------------------------------
@@ -150,7 +170,7 @@ export class ReportsService {
     // Group by period
     const groups = new Map<string, number>();
     for (const c of allCustomers) {
-      const key = this.truncateDate(c.createdAt, groupBy);
+      const key = reportBucketLabel(c.createdAt, groupBy);
       groups.set(key, (groups.get(key) ?? 0) + 1);
     }
 
@@ -211,7 +231,7 @@ export class ReportsService {
 
     const groups = new Map<string, { count: number; value: number }>();
     for (const p of allPurchases) {
-      const key = this.truncateDate(p.purchaseDate, groupBy);
+      const key = reportBucketLabel(p.purchaseDate, groupBy);
       const existing = groups.get(key) ?? { count: 0, value: 0 };
       existing.count += 1;
       existing.value += Number(p.value);
@@ -236,9 +256,23 @@ export class ReportsService {
   // Campaigns report
   // ---------------------------------------------------------------------------
 
+  /**
+   * Reporte de campanhas.
+   *
+   * `_dto` se conserva por contrato con el controlador, que lo pasa siempre.
+   *
+   * HALLAZGO ABIERTO (no corregido aqui, requiere autorizacion): este metodo
+   * es el UNICO de los cinco que NO aplica el rango `from`/`to` del
+   * `QueryReportDto` (`customers`, `purchases`, `automations` y `messages` si
+   * lo hacen via `buildDateRange`). El contrato publicado en
+   * `specs/api/paths/reports.yaml` declara `from` y `to` como parametros de
+   * `/reports/campaigns`, de modo que hoy la API acepta los filtros y devuelve
+   * datos sin filtrar. Corregirlo cambia la salida del endpoint en
+   * produccion, por lo que queda fuera del alcance de la repair de lint.
+   */
   async campaigns(
     user: AuthUser,
-    dto: QueryReportDto,
+    _dto: QueryReportDto,
   ): Promise<CampaignReport> {
     const organizationId = this.requireOrg(user);
 
@@ -477,7 +511,7 @@ export class ReportsService {
       { total: number; sent: number; failed: number }
     >();
     for (const m of allMessages) {
-      const key = this.truncateDate(m.createdAt, groupBy);
+      const key = reportBucketLabel(m.createdAt, groupBy);
       const existing = groups.get(key) ?? { total: 0, sent: 0, failed: 0 };
       existing.total += 1;
       if (['SENT', 'DELIVERED', 'READ'].includes(m.status)) existing.sent += 1;

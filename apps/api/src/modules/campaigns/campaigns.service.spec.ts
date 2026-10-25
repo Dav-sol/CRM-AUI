@@ -9,6 +9,27 @@ import { AuditIdentityService } from '../auth/audit.identity.service';
 import { ConfiguracionesService } from '../configuraciones/configuraciones.service';
 import { CampaignsService } from './campaigns.service';
 
+/**
+ * Fechas relativas al instante de la prueba.
+ *
+ * El servicio de campañas compara las fechas de las etapas contra
+ * `max(campaign.startAt, now)`. Lo que un caso necesita fijar NO es una fecha
+ * absoluta, sino la POSICIÓN de esa fecha respecto de "ahora" (futura o
+ * pasada). Con fechas absolutas, un caso que usaba "2027-01-01" como compra
+ * futura dejaba de tener sentido el 2027-01-01: el fallo lo producía el reloj,
+ * no el test, y no se detecta en la revisión del diff.
+ *
+ * Es el mismo patrón que ya usa el repositorio en
+ * `user-sessions.service.spec.ts` (`new Date(Date.now() + 3600_000)`).
+ */
+const DAY_MS = 86_400_000;
+
+/** Instante situado `d` días respecto de ahora (negativo = pasado). */
+const daysFromNow = (d: number): Date => new Date(Date.now() + d * DAY_MS);
+
+/** Lo mismo, en ISO. */
+const isoDaysFromNow = (d: number): string => daysFromNow(d).toISOString();
+
 const orgUser: AuthUser = {
   id: 'u-1',
   uuid: 'uu-1',
@@ -163,10 +184,17 @@ describe('CampaignsService', () => {
         findUnique: jest.fn().mockResolvedValue(null),
       },
       $transaction: jest.fn(async (fns: unknown) => {
-        if (typeof fns === 'function') return fns(prisma);
+        if (typeof fns === 'function') {
+          // `fns` llega como `unknown`: se estrecha a un callback concreto
+          // para no llamar a un `Function` sin tipo (`no-unsafe-call`) ni
+          // devolver `any` (`no-unsafe-return`).
+          const fn = fns as (tx: unknown) => unknown;
+          return await fn(prisma);
+        }
         if (Array.isArray(fns)) {
           for (const fn of fns) await fn;
         }
+        return undefined;
       }),
     };
     auditService = { record: jest.fn().mockResolvedValue(undefined) };
@@ -277,7 +305,7 @@ describe('CampaignsService', () => {
           templateD3: 'd3',
           templateD180: 'd180',
           templateD365: 'd365',
-        }),
+        }) as object,
       });
     });
 
@@ -356,8 +384,8 @@ describe('CampaignsService', () => {
           where: { uuid: 'cu-1', organizationId: 'org-1', deletedAt: null },
           include: {
             followUpSequence: expect.objectContaining({
-              select: expect.objectContaining({ uuid: true }),
-            }),
+              select: expect.objectContaining({ uuid: true }) as object,
+            }) as object,
           },
         }),
       );
@@ -440,7 +468,7 @@ describe('CampaignsService', () => {
         response: {
           error: {
             code: 'VALIDATION_ERROR',
-            message: expect.stringContaining('At least one field'),
+            message: expect.stringContaining('At least one field') as string,
           },
         },
       });
@@ -511,7 +539,7 @@ describe('CampaignsService', () => {
         response: {
           error: {
             code: 'VALIDATION_ERROR',
-            message: expect.stringContaining('ACTIVE'),
+            message: expect.stringContaining('ACTIVE') as string,
           },
         },
       });
@@ -556,7 +584,9 @@ describe('CampaignsService', () => {
         response: {
           error: {
             code: 'VALIDATION_ERROR',
-            message: expect.stringContaining('Invalid message variables'),
+            message: expect.stringContaining(
+              'Invalid message variables',
+            ) as string,
           },
         },
       });
@@ -575,12 +605,18 @@ describe('CampaignsService', () => {
         response: {
           error: {
             code: 'VALIDATION_ERROR',
-            message: expect.stringContaining('without an audience'),
+            message: expect.stringContaining('without an audience') as string,
           },
         },
       });
     });
     it('activates campaign and generates automations inside a transaction', async () => {
+      // Las dos compras se anclan a un instante UNICO: el ciclo toma su
+      // `startDate` de la fecha de compra, asi que la asercion tiene que
+      // comparar contra el mismo objeto, no contra una segunda llamada al
+      // reloj (que difiere en milisegundos).
+      const purchaseDatePu1 = daysFromNow(-60);
+      const purchaseDatePu2 = daysFromNow(-59);
       prisma.campaign.findFirst.mockResolvedValue(approvedCampaign());
       let txRef:
         | {
@@ -599,12 +635,12 @@ describe('CampaignsService', () => {
                 {
                   id: 'pu-1',
                   customerId: 'cu-a',
-                  purchaseDate: new Date('2026-08-01T12:00:00.000Z'),
+                  purchaseDate: purchaseDatePu1,
                 },
                 {
                   id: 'pu-2',
                   customerId: 'cu-b',
-                  purchaseDate: new Date('2026-08-02T12:00:00.000Z'),
+                  purchaseDate: purchaseDatePu2,
                 },
               ]),
             },
@@ -640,7 +676,7 @@ describe('CampaignsService', () => {
         data: {
           purchaseId: 'pu-1',
           status: 'ACTIVE',
-          startDate: new Date('2026-08-01T12:00:00.000Z'),
+          startDate: purchaseDatePu1,
         },
         select: { id: true },
       });
@@ -648,7 +684,7 @@ describe('CampaignsService', () => {
         data: {
           purchaseId: 'pu-2',
           status: 'ACTIVE',
-          startDate: new Date('2026-08-02T12:00:00.000Z'),
+          startDate: purchaseDatePu2,
         },
         select: { id: true },
       });
@@ -679,7 +715,8 @@ describe('CampaignsService', () => {
     });
 
     it('generates one automation per stage with the stage template snapshot (HG-FUS-02)', async () => {
-      const warrantyExpires = new Date('2027-08-01T12:00:00.000Z');
+      // Vencimiento dentro de la garantia: la etapa D-30 cae en el futuro.
+      const warrantyExpires = daysFromNow(300);
       prisma.campaign.findFirst.mockResolvedValue(
         approvedCampaign({
           followUpSequence: {
@@ -704,10 +741,23 @@ describe('CampaignsService', () => {
           },
         }),
       );
+      // La forma del `tx` refleja la del mock de la línea siguiente: el
+      // servicio usa `tx.purchase.findMany` (no `count`) dentro de la
+      // transacción, y `tx.automation` aporta `count`, `create` y `createMany`.
       let txRef:
         | {
-            purchase: { findMany: jest.Mock; count: jest.Mock };
-            automation: { create: jest.Mock; createMany: jest.Mock };
+            campaign: { updateMany: jest.Mock };
+            purchase: { findMany: jest.Mock };
+            commercialCycle: {
+              findMany: jest.Mock;
+              create: jest.Mock;
+              update: jest.Mock;
+            };
+            automation: {
+              count: jest.Mock;
+              create: jest.Mock;
+              createMany: jest.Mock;
+            };
           }
         | undefined;
       prisma.$transaction.mockImplementation(
@@ -730,7 +780,7 @@ describe('CampaignsService', () => {
                     {
                       id: 'pu-1',
                       customerId: 'cu-a',
-                      purchaseDate: new Date('2026-08-01T12:00:00.000Z'),
+                      purchaseDate: daysFromNow(-60),
                     },
                   ]);
                 },
@@ -771,10 +821,11 @@ describe('CampaignsService', () => {
         }) as unknown,
       });
       // scheduledDate = warrantyExpiresAt + offsetDays
-      const firstCall = txRef!.automation.create.mock.calls[0][0] as {
+      const createCalls = txRef!.automation.create.mock.calls as unknown[][];
+      const firstCall = createCalls[0][0] as {
         data: { scheduledDate: Date };
       };
-      const secondCall = txRef!.automation.create.mock.calls[1][0] as {
+      const secondCall = createCalls[1][0] as {
         data: { scheduledDate: Date };
       };
       const expectedMinus30 = new Date(warrantyExpires);
@@ -830,7 +881,7 @@ describe('CampaignsService', () => {
                     {
                       id: 'pu-1',
                       customerId: 'cu-a',
-                      purchaseDate: new Date('2026-08-01T12:00:00.000Z'),
+                      purchaseDate: daysFromNow(-60),
                     },
                   ]);
                 },
@@ -859,6 +910,10 @@ describe('CampaignsService', () => {
     });
 
     it('generates PURCHASE_DATE stages even when warrantyExpiresAt is null (HG-SEM-05)', async () => {
+      // Compra 30 días en el futuro: la etapa PURCHASE_DATE +0 cae en el
+      // futuro y por eso se genera (si la compra estuviera en el pasado, la
+      // etapa se omitiría por HG-SEM-03 y el caso no probaría nada).
+      const purchaseDate = daysFromNow(30);
       prisma.campaign.findFirst.mockResolvedValue(
         approvedCampaign({
           followUpSequence: {
@@ -891,7 +946,7 @@ describe('CampaignsService', () => {
             {
               id: 'pu-1',
               customerId: 'cu-a',
-              purchaseDate: '2027-01-01T12:00:00.000Z',
+              purchaseDate: purchaseDate.toISOString(),
             },
             null,
           );
@@ -908,9 +963,7 @@ describe('CampaignsService', () => {
         { data: { scheduledDate: Date; messageTemplate: string } },
       ];
       expect(call.data.messageTemplate).toBe('p');
-      expect(call.data.scheduledDate.getTime()).toBe(
-        new Date('2027-01-01T12:00:00.000Z').getTime(),
-      );
+      expect(call.data.scheduledDate.getTime()).toBe(purchaseDate.getTime());
     });
 
     it('skips PURCHASE_DATE stages computed after the purchase warranty expiry (lifecycle cap)', async () => {
@@ -959,10 +1012,10 @@ describe('CampaignsService', () => {
             {
               id: 'pu-1',
               customerId: 'cu-a',
-              purchaseDate: '2027-01-01T12:00:00.000Z',
+              purchaseDate: isoDaysFromNow(30),
             },
-            // Garantía de 30 días: la revisión +60 (2027-03-02) queda fuera.
-            new Date('2027-01-31T12:00:00.000Z'),
+            // Garantía de 30 días: la revisión +60 queda fuera del ciclo.
+            daysFromNow(60),
           );
           txAutomationCreate = tx.automation.create;
           return fn(tx);
@@ -1004,7 +1057,7 @@ describe('CampaignsService', () => {
             {
               id: 'pu-1',
               customerId: 'cu-a',
-              purchaseDate: '2027-01-01T12:00:00.000Z',
+              purchaseDate: isoDaysFromNow(30),
             },
             null,
           );
@@ -1045,9 +1098,9 @@ describe('CampaignsService', () => {
             {
               id: 'pu-1',
               customerId: 'cu-a',
-              purchaseDate: '2026-01-01T12:00:00.000Z',
+              purchaseDate: isoDaysFromNow(-400),
             },
-            new Date('2026-01-01T12:00:00.000Z'),
+            daysFromNow(-30),
           );
           txAutomationCreate = tx.automation.create;
           return fn(tx);
@@ -1100,7 +1153,7 @@ describe('CampaignsService', () => {
             {
               id: 'pu-1',
               customerId: 'cu-a',
-              purchaseDate: '2026-01-01T12:00:00.000Z',
+              purchaseDate: isoDaysFromNow(-400),
             },
             warrantyExpired,
           );
@@ -1146,9 +1199,9 @@ describe('CampaignsService', () => {
             {
               id: 'pu-1',
               customerId: 'cu-a',
-              purchaseDate: '2026-01-01T12:00:00.000Z',
+              purchaseDate: isoDaysFromNow(-400),
             },
-            new Date('2026-01-01T12:00:00.000Z'),
+            daysFromNow(-30),
           );
           txAutomationCreate = tx.automation.create;
           return fn(tx);
@@ -1198,9 +1251,9 @@ describe('CampaignsService', () => {
             {
               id: 'pu-1',
               customerId: 'cu-a',
-              purchaseDate: '2026-01-01T12:00:00.000Z',
+              purchaseDate: isoDaysFromNow(-400),
             },
-            new Date('2026-01-01T12:00:00.000Z'),
+            daysFromNow(-30),
           );
           txAutomationCreate = tx.automation.create;
           return fn(tx);
@@ -1277,7 +1330,7 @@ describe('CampaignsService', () => {
               {
                 id: 'pu-1',
                 customerId: 'cu-a',
-                purchaseDate: '2026-09-01T12:00:00.000Z',
+                purchaseDate: isoDaysFromNow(-1),
               },
               warrantyExpiresAt,
             );
@@ -1413,7 +1466,7 @@ describe('CampaignsService', () => {
             {
               id: 'pu-1',
               customerId: 'cu-a',
-              purchaseDate: '2026-01-01T12:00:00.000Z',
+              purchaseDate: isoDaysFromNow(-400),
             },
             null,
           );
@@ -1432,7 +1485,7 @@ describe('CampaignsService', () => {
       // startAt must stay in the future: the reference is max(startAt, now), so
       // a past startAt would legitimately schedule the repurchase at `now`.
       // The warranty expires 2026-01-01, so the stage remains in the past.
-      const startAt = new Date('2027-06-01T12:00:00.000Z');
+      const startAt = daysFromNow(60);
       prisma.campaign.findFirst.mockResolvedValue(
         approvedCampaign({
           startAt,
@@ -1459,9 +1512,9 @@ describe('CampaignsService', () => {
             {
               id: 'pu-1',
               customerId: 'cu-a',
-              purchaseDate: '2026-01-01T12:00:00.000Z',
+              purchaseDate: isoDaysFromNow(-400),
             },
-            new Date('2026-01-01T12:00:00.000Z'),
+            daysFromNow(-30),
           );
           txAutomationCreate = tx.automation.create;
           return fn(tx);
@@ -1497,7 +1550,7 @@ describe('CampaignsService', () => {
                 {
                   id: 'pu-1',
                   customerId: 'cu-a',
-                  purchaseDate: new Date('2026-08-01T12:00:00.000Z'),
+                  purchaseDate: daysFromNow(-60),
                 },
               ]),
             },
@@ -1530,6 +1583,9 @@ describe('CampaignsService', () => {
     });
 
     it('reopens a CANCELLED cycle to ACTIVE before attaching the automation', async () => {
+      // El ciclo reabierto toma su `startDate` de la fecha de compra: un
+      // unico instante para el fixture y para la asercion.
+      const reopenedCycleStartDate = daysFromNow(-60);
       prisma.campaign.findFirst.mockResolvedValue(approvedCampaign());
       let txRef:
         | {
@@ -1548,7 +1604,7 @@ describe('CampaignsService', () => {
                 {
                   id: 'pu-1',
                   customerId: 'cu-a',
-                  purchaseDate: new Date('2026-08-01T12:00:00.000Z'),
+                  purchaseDate: reopenedCycleStartDate,
                 },
               ]),
             },
@@ -1578,7 +1634,7 @@ describe('CampaignsService', () => {
         where: { id: 'cy-1' },
         data: {
           status: 'ACTIVE',
-          startDate: new Date('2026-08-01T12:00:00.000Z'),
+          startDate: reopenedCycleStartDate,
           endDate: null,
         },
       });
@@ -1973,7 +2029,9 @@ describe('CampaignsService', () => {
       });
       expect(prisma.campaign.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ followUpSequenceId: 'seq-1' }),
+          data: expect.objectContaining({
+            followUpSequenceId: 'seq-1',
+          }) as object,
         }),
       );
     });
@@ -2003,7 +2061,7 @@ describe('CampaignsService', () => {
 
       expect(prisma.campaign.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ followUpSequenceId: null }),
+          data: expect.objectContaining({ followUpSequenceId: null }) as object,
         }),
       );
     });
@@ -2018,13 +2076,15 @@ describe('CampaignsService', () => {
         followUpSequenceId: 'seq-2',
       });
 
-      const result = await service.update(orgUser, 'cu-1', {
+      await service.update(orgUser, 'cu-1', {
         followUpSequenceId: 'seq-uuid-2',
       });
 
       expect(prisma.campaign.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ followUpSequenceId: 'seq-2' }),
+          data: expect.objectContaining({
+            followUpSequenceId: 'seq-2',
+          }) as object,
         }),
       );
     });
@@ -2040,7 +2100,7 @@ describe('CampaignsService', () => {
 
       expect(prisma.campaign.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ followUpSequenceId: null }),
+          data: expect.objectContaining({ followUpSequenceId: null }) as object,
         }),
       );
     });
@@ -2117,7 +2177,9 @@ describe('CampaignsService', () => {
         response: {
           error: {
             code: 'VALIDATION_ERROR',
-            message: expect.stringContaining('Invalid message variables'),
+            message: expect.stringContaining(
+              'Invalid message variables',
+            ) as string,
           },
         },
       });
@@ -2138,7 +2200,7 @@ describe('CampaignsService', () => {
         response: {
           error: {
             code: 'VALIDATION_ERROR',
-            message: expect.stringContaining('no messages'),
+            message: expect.stringContaining('no messages') as string,
           },
         },
       });
@@ -2152,7 +2214,7 @@ describe('CampaignsService', () => {
         response: {
           error: {
             code: 'VALIDATION_ERROR',
-            message: expect.stringContaining('without an audience'),
+            message: expect.stringContaining('without an audience') as string,
           },
         },
       });
@@ -2326,6 +2388,9 @@ describe('CampaignsService', () => {
           ],
         }),
       );
+      // Un unico instante para el vencimiento y para la asercion de la etapa
+      // de pre-vencimiento (vencimiento - 30 dias).
+      const inlineWarrantyExpires = daysFromNow(300);
       const createCalls: Array<Record<string, unknown>> = [];
       prisma.$transaction.mockImplementation(
         async (fn: (tx: unknown) => Promise<unknown>) => {
@@ -2342,7 +2407,7 @@ describe('CampaignsService', () => {
                     return Promise.resolve([
                       {
                         id: 'pu-1',
-                        warrantyExpiresAt: new Date('2027-08-01T00:00:00.000Z'),
+                        warrantyExpiresAt: inlineWarrantyExpires,
                       },
                     ]);
                   }
@@ -2350,7 +2415,7 @@ describe('CampaignsService', () => {
                     {
                       id: 'pu-1',
                       customerId: 'cus-1',
-                      purchaseDate: new Date('2026-08-01T12:00:00.000Z'),
+                      purchaseDate: daysFromNow(-60),
                     },
                   ]);
                 },
@@ -2366,9 +2431,9 @@ describe('CampaignsService', () => {
               create: jest
                 .fn()
                 .mockImplementation(
-                  async ({ data }: { data: Record<string, unknown> }) => {
+                  ({ data }: { data: Record<string, unknown> }) => {
                     createCalls.push(data);
-                    return { id: 'au-1' };
+                    return Promise.resolve({ id: 'au-1' });
                   },
                 ),
             },
@@ -2386,7 +2451,7 @@ describe('CampaignsService', () => {
       expect(result.automationCount).toBe(1);
       expect(createCalls).toHaveLength(1);
       expect(createCalls[0].scheduledDate).toEqual(
-        new Date('2027-07-02T00:00:00.000Z'),
+        new Date(inlineWarrantyExpires.getTime() - 30 * DAY_MS),
       );
       expect(createCalls[0].purpose).toBe('TRANSACTIONAL');
       expect(createCalls[0].messageTemplate).toBe('Garantía de {productName}');
@@ -2413,7 +2478,9 @@ describe('CampaignsService', () => {
         response: {
           error: {
             code: 'VALIDATION_ERROR',
-            message: expect.stringContaining('Invalid message variables'),
+            message: expect.stringContaining(
+              'Invalid message variables',
+            ) as string,
           },
         },
       });
@@ -2429,7 +2496,7 @@ describe('CampaignsService', () => {
       id: 'pu-9',
       customerId: 'cu-a',
       organizationId: 'org-1',
-      purchaseDate: new Date('2027-06-01T12:00:00.000Z'),
+      purchaseDate: daysFromNow(-1),
       customer: { deletedAt: null, noContactAt: null },
     };
 
@@ -2457,9 +2524,9 @@ describe('CampaignsService', () => {
         {
           id: 'pu-9',
           customerId: 'cu-a',
-          purchaseDate: '2027-06-01T12:00:00.000Z',
+          purchaseDate: isoDaysFromNow(-1),
         },
-        new Date('2027-12-01T12:00:00.000Z'),
+        daysFromNow(179),
       );
     }
 
@@ -2620,7 +2687,7 @@ describe('CampaignsService', () => {
               {
                 id: 'pu-1',
                 customerId: 'cu-a',
-                purchaseDate: new Date('2026-08-01T12:00:00.000Z'),
+                purchaseDate: daysFromNow(-60),
               },
             ]),
           },
@@ -2675,9 +2742,12 @@ describe('CampaignsService', () => {
       expect(result.skippedByFrequency).toBe(1);
       expect(createMany).toHaveBeenCalledWith({ data: [] });
       // 30 días hacia atrás, no los 3 del env.
-      const where = tx.automation.count.mock.calls[0][0].where as {
-        OR: { executedDate: { gte: Date } }[];
-      };
+      const countCalls = tx.automation.count.mock.calls as unknown[][];
+      const where = (
+        countCalls[0][0] as {
+          where: { OR: { executedDate: { gte: Date } }[] };
+        }
+      ).where;
       const dias =
         (Date.now() - where.OR[1].executedDate.gte.getTime()) / 86_400_000;
       expect(dias).toBeGreaterThan(29);

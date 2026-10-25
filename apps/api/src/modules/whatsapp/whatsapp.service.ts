@@ -453,6 +453,45 @@ export class WhatsappService {
     let conversationUuid: string;
     try {
       const result = await this.prisma.$transaction(async (tx) => {
+        // G3-02: serializar por cliente antes de leer estado. La comprobación de
+        // G3-01 es correcta dentro de la transacción, pero sin un candado dos
+        // procesos pueden leer a la vez y ambos ver el mismo hueco → insertan
+        // dos mensajes. Bloquear la fila del cliente garantiza que el segundo
+        // espera a que el primero confirme su mensaje y entonces lo ve.
+        //
+        // El candado se toma siempre, aunque el cliente esté inactivo: una fila
+        // ausente no bloquearía nada y el resto de la transacción asume solo
+        // lectura hasta su propia escritura. Mismo patrón de serialización que
+        // follow-up-sequences.service.ts.
+        await tx.$queryRaw`SELECT id FROM "customers" WHERE id = ${customer.id} FOR UPDATE`;
+        // G3-01: mientras exista un AUTOMATIC OUTBOUND del mismo cliente todavía
+        // en vuelo —creado pero sin confirmación del proveedor, es decir
+        // QUEUED— no se crea otro. G3 consulta `sentAt NOT NULL` (un mensaje en
+        // cola no es un envío, §4.1), de modo que una segunda automatización del
+        // mismo cliente en el mismo tick no ve a la primera y la duplicaba. La
+        // misma ceguera provoca el duplicado tras un envío huérfano: F7 devuelve
+        // la automatización a ERROR y el reintento volvía a crear mensaje.
+        //
+        // Se comprueba ANTES de la transición AU-011 para no dejar la
+        // automatización en EXECUTING: al devolver null sigue SCHEDULED y el
+        // siguiente tick la reevalúa (diferible, no fallido).
+        const enVuelo = await tx.message.findFirst({
+          where: {
+            customerId: customer.id,
+            type: MessageType.AUTOMATIC,
+            direction: MessageDirection.OUTBOUND,
+            status: MessageStatus.QUEUED,
+            deletedAt: null,
+          },
+          select: { id: true },
+        });
+        if (enVuelo) {
+          this.logger.debug(
+            `automatic send deferred automation=${automation.uuid} reason=in_flight customer=${customer.id}`,
+          );
+          return null;
+        }
+
         // AU-011: single-row guarded transition — never executes twice.
         // P1 (demo D1): SCHEDULED/ERROR → EXECUTING; EXECUTED only after the
         // provider confirms the send.

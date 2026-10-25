@@ -26,8 +26,16 @@ paths:
     $ref: "./paths/invitations.yaml#/~1invitations"
   /invitations/accept:
     $ref: "./paths/invitations.yaml#/~1invitations~1accept"
+  /organizations/me:
+    $ref: "./paths/organizations.yaml#/~1organizations~1me"
   /organizations/{id}:
     $ref: "./paths/organizations.yaml#/~1organizations~1{id}"
+  /configuraciones/horarios:
+    $ref: "./paths/configuraciones.yaml#/~1configuraciones~1horarios"
+  /configuraciones/parametros:
+    $ref: "./paths/configuraciones.yaml#/~1configuraciones~1parametros"
+  /configuraciones/efectivas:
+    $ref: "./paths/configuraciones.yaml#/~1configuraciones~1efectivas"
   /customers:
     $ref: "./paths/customers.yaml#/~1customers"
   /customers/{id}:

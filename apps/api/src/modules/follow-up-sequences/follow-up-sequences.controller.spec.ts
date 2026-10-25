@@ -116,11 +116,13 @@ describe('FollowUpSequencesController', () => {
       (this: void) => unknown
     >;
 
-    const writeRoles = ['create', 'update', 'remove'].map((handler) =>
-      Reflect.getMetadata(ROLES_KEY, proto[handler]),
+    // `Reflect.getMetadata` devuelve `any`: se tipa el resultado para que el
+    // `map` no devuelva `any` (`no-unsafe-return`).
+    const writeRoles = (['create', 'update', 'remove'] as const).map(
+      (handler) => Reflect.getMetadata(ROLES_KEY, proto[handler]) as string[],
     );
-    const readRoles = ['list', 'detail'].map((handler) =>
-      Reflect.getMetadata(ROLES_KEY, proto[handler]),
+    const readRoles = (['list', 'detail'] as const).map(
+      (handler) => Reflect.getMetadata(ROLES_KEY, proto[handler]) as string[],
     );
 
     expect(writeRoles).toEqual([

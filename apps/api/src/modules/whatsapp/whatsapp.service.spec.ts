@@ -208,7 +208,11 @@ describe('WhatsappService', () => {
     const txMock = (overrides?: {
       updateManyCount?: number;
       existingConversation?: { id: string; uuid: string } | null;
+      inFlightMessage?: { id: string } | null;
     }) => ({
+      // G3-02: candado `SELECT ... FOR UPDATE` sobre la fila del cliente, que
+      // executeOneAutomation toma al abrir la transacción.
+      $queryRaw: jest.fn().mockResolvedValue([]),
       automation: {
         updateMany: jest
           .fn()
@@ -224,6 +228,11 @@ describe('WhatsappService', () => {
         }),
       },
       message: {
+        // G3-01: consulta de "en vuelo" que executeOneAutomation hace antes
+        // de crear el mensaje automático. `null` = no hay nada pendiente.
+        findFirst: jest
+          .fn()
+          .mockResolvedValue(overrides?.inFlightMessage ?? null),
         create: jest.fn().mockResolvedValue({
           id: 'msg-1',
           uuid: 'msg-uuid-1',
@@ -493,11 +502,9 @@ describe('WhatsappService', () => {
       for (const entry of cases) {
         const due = withCampaign(entry.days);
         prisma.automation.findMany.mockResolvedValue([due]);
-        let txMessageCreate: jest.Mock | undefined;
         prisma.$transaction.mockImplementation(
           async (fn: (tx: unknown) => Promise<unknown>) => {
             const tx = txMock();
-            txMessageCreate = tx.message.create;
             return fn(tx);
           },
         );
@@ -699,7 +706,7 @@ describe('WhatsappService', () => {
         where: { id: 'a-1', status: 'EXECUTING' },
         data: expect.objectContaining({
           status: 'EXECUTED',
-          executedDate: expect.any(Date),
+          executedDate: expect.any(Date) as Date,
         }) as object,
       });
     });
@@ -891,7 +898,7 @@ describe('WhatsappService', () => {
         expect.objectContaining({
           data: expect.objectContaining({
             status: 'SENT',
-            providerMessageId: expect.stringContaining('sim-'),
+            providerMessageId: expect.stringContaining('sim-') as string,
           }) as object,
         }),
       );
@@ -1871,7 +1878,7 @@ describe('WhatsappService', () => {
           data: expect.objectContaining({
             inReplyToAutomationId: 'auto-1',
             inReplyToCampaignId: 'camp-1',
-          }),
+          }) as object,
         }),
       );
     });
@@ -2868,6 +2875,8 @@ describe('WhatsappService', () => {
       prisma.$transaction.mockImplementation(
         async (fn: (t: unknown) => Promise<unknown>) =>
           fn({
+            // G3-02: candado `SELECT ... FOR UPDATE` sobre la fila del cliente.
+            $queryRaw: jest.fn().mockResolvedValue([]),
             automation: {
               updateMany: jest.fn().mockResolvedValue({ count: 1 }),
             },
@@ -2878,6 +2887,7 @@ describe('WhatsappService', () => {
                 .mockResolvedValue({ id: 'conv-1', uuid: 'conv-uuid-1' }),
             },
             message: {
+              findFirst: jest.fn().mockResolvedValue(null),
               create: jest
                 .fn()
                 .mockResolvedValue({ id: 'msg-1', uuid: 'msg-uuid-1' }),
@@ -2985,6 +2995,8 @@ describe('WhatsappService', () => {
 
     it('R1 · un bloqueo en el punto de salida no consume reintentos ni marca EXECUTED', async () => {
       const tx = {
+        // G3-02: candado `SELECT ... FOR UPDATE` sobre la fila del cliente.
+        $queryRaw: jest.fn().mockResolvedValue([]),
         automation: {
           updateMany: jest
             .fn()
@@ -2998,6 +3010,7 @@ describe('WhatsappService', () => {
             .mockResolvedValue({ id: 'conv-1', uuid: 'conv-uuid-1' }),
         },
         message: {
+          findFirst: jest.fn().mockResolvedValue(null),
           create: jest
             .fn()
             .mockResolvedValue({ id: 'msg-1', uuid: 'msg-uuid-1' }),
@@ -3112,6 +3125,449 @@ describe('WhatsappService', () => {
       expect(JSON.stringify(prisma.message.update.mock.calls)).toContain(
         'sim-',
       );
+    });
+  });
+});
+
+// --- G3-01: reproducencia del envío duplicado en vuelo -----------------------
+describe('G3-01 · una automatización en vuelo no permite un segundo envío', () => {
+  /**
+   * Reproduce la composición real scheduler → elegibilidad → creación de
+   * mensaje con DOS automatizaciones del MISMO cliente evaluadas por DOS
+   * workers concurrentes (dos ticks solapados o dos réplicas del API).
+   *
+   * Se usa el `EligibilityService` REAL, no el mock del arnés principal: el
+   * defecto vive en la COMPOSICIÓN. G3 consulta `messages` y el bucle crea
+   * filas; un mock de `evaluate` haría al test incapaz de fallar.
+   *
+   * Modelo: `store` representa `messages`. `message.create` añade la fila en
+   * QUEUED con `sentAt: null` (el proveedor aún no ha confirmado) y
+   * `message.findFirst` aplica el `where` real de G3
+   * (customerId + type + direction + sentAt NOT NULL + deletedAt NULL).
+   * `automation.updateMany` modela el guard AU-011: transición condicionada
+   * por `status`, que es POR AUTOMATIZACIÓN y no por cliente.
+   */
+  type Stored = {
+    id: string;
+    customerId: string | null;
+    type: string;
+    direction: string;
+    status: string;
+    sentAt: Date | null;
+    deletedAt: Date | null;
+  };
+
+  const buildWorld = () => {
+    const store: Stored[] = [];
+    const autoStatus = new Map<string, string>([
+      ['a-1', 'SCHEDULED'],
+      ['a-2', 'SCHEDULED'],
+    ]);
+
+    // Filtro modelado tal como lo emite el código real. Prisma OMITE del
+    // `where` las claves con valor `undefined`, de modo que un filtro ausente
+    // NO restringe: `customerId: undefined` casa con cualquier fila. Se modela
+    // aquí para que "identidad ausente" no pueda convertirse por accidente en
+    // autorización de envío.
+    type WhereMensaje = {
+      customerId?: string | null;
+      type?: string;
+      direction?: string;
+      status?: string | { in: string[] };
+      deletedAt?: Date | null;
+      sentAt?: { not: null };
+    };
+
+    const coincide = (
+      w: WhereMensaje,
+      campo: keyof WhereMensaje,
+      valor: unknown,
+    ): boolean => w[campo] === undefined || w[campo] === valor;
+
+    const message = {
+      findFirst: jest.fn((args: { where: WhereMensaje }) => {
+        const w = args.where ?? {};
+        const hit = store
+          .filter(
+            (m) =>
+              coincide(w, 'customerId', m.customerId) &&
+              coincide(w, 'type', m.type) &&
+              coincide(w, 'direction', m.direction) &&
+              coincide(w, 'status', m.status) &&
+              coincide(w, 'deletedAt', m.deletedAt) &&
+              (!w.sentAt || !('not' in w.sentAt) || m.sentAt !== null),
+          )
+          .sort(
+            (a, b) => (b.sentAt?.getTime() ?? 0) - (a.sentAt?.getTime() ?? 0),
+          )[0];
+        return hit ? { id: hit.id, sentAt: hit.sentAt } : null;
+      }),
+      create: jest.fn(
+        (args: { data: Omit<Stored, 'id' | 'sentAt' | 'deletedAt'> }) => {
+          const row: Stored = {
+            id: `msg-${store.length + 1}`,
+            customerId: args.data.customerId ?? null,
+            type: args.data.type,
+            direction: args.data.direction,
+            status: args.data.status,
+            sentAt: null,
+            deletedAt: null,
+          };
+          store.push(row);
+          return { id: row.id, uuid: `u-${row.id}` };
+        },
+      ),
+      update: jest.fn(
+        (args: { where: { id: string }; data: Partial<Stored> }) => {
+          const row = store.find((m) => m.id === args.where.id);
+          if (row) Object.assign(row, args.data);
+          return row ?? {};
+        },
+      ),
+    };
+
+    // El `where` real del guard AU-011 usa `status: { in: [...] }`.
+    type WhereAutomatizacion = {
+      id: string;
+      status?: string | { in: string[] };
+    };
+
+    const automation = {
+      findMany: jest.fn(),
+      updateMany: jest.fn(
+        (args: { where: WhereAutomatizacion; data: { status: string } }) => {
+          // Guard AU-011: transición condicionada POR AUTOMATIZACIÓN.
+          const w = args.where;
+          const prev = autoStatus.get(w.id);
+          if (w.status !== undefined) {
+            const permitido =
+              typeof w.status === 'object' && Array.isArray(w.status.in)
+                ? prev !== undefined && w.status.in.includes(prev)
+                : prev === w.status;
+            if (!permitido) return { count: 0 };
+          }
+          autoStatus.set(w.id, args.data.status);
+          return { count: 1 };
+        },
+      ),
+    };
+
+    const conversation = {
+      findFirst: jest.fn().mockResolvedValue(null),
+      create: jest.fn((args: { data: Record<string, unknown> }) => ({
+        id: `cv-${store.length}`,
+        uuid: `cvv-${store.length}`,
+        ...args.data,
+      })),
+    };
+
+    // Se declara antes que `prisma` para no referenciarlo en su propio
+    // inicializador (TS7022). G3-02: `tx.$queryRaw` ejecuta el candado
+    // `SELECT ... FOR UPDATE` de la fila del cliente (tagged template).
+    const tx = {
+      automation,
+      message,
+      conversation,
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    };
+
+    const prisma = {
+      message,
+      // G2: opt-out. `noContactAt: null` => sin bloqueo.
+      customer: {
+        findUnique: jest.fn().mockResolvedValue({ noContactAt: null }),
+      },
+      // G8 (startDate) y G1 (lifecyclePausedAt) leen la misma fila.
+      commercialCycle: {
+        findUnique: jest.fn().mockResolvedValue({
+          startDate: new Date('2026-01-15T12:00:00.000Z'),
+          lifecyclePausedAt: null,
+        }),
+      },
+      // G7 no aplica: la plantilla no es de mantenimiento.
+      lifecycleConsent: { findFirst: jest.fn().mockResolvedValue(null) },
+      automation,
+      conversation,
+      $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) =>
+        fn(tx),
+      ),
+    };
+
+    const eligibility = new EligibilityService(prisma as never);
+
+    // Proveedor por defecto: los tests que necesitan un comportamiento
+    // distinto por worker se lo pasan a `newService`.
+    const provider = { sendMessage: jest.fn() };
+
+    const newService = (
+      envio: { sendMessage: jest.Mock } = provider,
+    ): WhatsappService =>
+      new WhatsappService(
+        prisma as never,
+        { record: jest.fn() } as never,
+        { emit: jest.fn() } as never,
+        envio,
+        { sendMessage: jest.fn(), sendTemplate: jest.fn() } as never,
+        { get: jest.fn(() => null) } as never,
+        {
+          dentroDeHorario: jest.fn().mockResolvedValue(true),
+          timeZoneOrganizacion: jest.fn().mockResolvedValue('America/Bogota'),
+        } as never,
+        eligibility,
+        {} as never,
+        {
+          evaluate: jest.fn(() => ({ allowed: true })),
+          assert: jest.fn(),
+        } as never,
+      );
+
+    return { store, autoStatus, tx, prisma, provider, newService };
+  };
+
+  /**
+   * El bucle usa `new Date()` (no recibe `now`), así que G5 —ventana horaria—
+   * evalúa el reloj del PROCESO. Se fija a un lunes 12:00 de Bogotá, dentro de
+   * la ventana por defecto 08:00-19:30, para que G5 no sea lo que salte y el
+   * test aísle exactamente el gate G3.
+   */
+  const FIXED_NOW = new Date('2026-10-05T17:00:00.000Z'); // lunes, 12:00 COT
+
+  beforeEach(() => {
+    jest.useFakeTimers({
+      now: FIXED_NOW,
+      doNotFake: ['setImmediate', 'nextTick'],
+    });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  const dueFor = (id: string, uuid: string) => ({
+    id,
+    uuid,
+    organizationId: 'org-1',
+    purchaseId: `pu-${id}`,
+    commercialCycleId: 'cc-1',
+    messageTemplate: 'Gracias por su compra',
+    scheduledDate: new Date(),
+    purchase: {
+      purchaseDate: new Date('2026-10-01T12:00:00.000Z'),
+      customer: {
+        id: 'cu-1',
+        uuid: 'cuu-1',
+        phone: '573001112233',
+        name: 'Maria Lopez',
+        status: 'ACTIVE',
+      },
+      product: { name: 'Refrigeradora', category: null },
+    },
+    organization: { name: 'Org Uno' },
+    campaignId: null,
+    campaign: null,
+  });
+
+  it('regresión: no crea un segundo mensaje mientras el primero sigue en vuelo (QUEUED, sentAt NULL)', async () => {
+    const { store, autoStatus, prisma, newService } = buildWorld();
+
+    // Worker 1: su proveedor queda colgado, así que A nunca llega a SENT y su
+    // fila permanece en QUEUED con sentAt = NULL.
+    let releaseA: (v: unknown) => void = () => undefined;
+    const hangA = new Promise((resolve) => {
+      releaseA = resolve;
+    });
+
+    const envio1 = { sendMessage: jest.fn().mockReturnValue(hangA) };
+    const envio2 = {
+      sendMessage: jest.fn().mockResolvedValue({
+        providerMessageId: 'wamid-2',
+        providerConversationId: null,
+      }),
+    };
+    const worker1 = newService(envio1);
+    const worker2 = newService(envio2);
+    prisma.automation.findMany.mockResolvedValue([
+      dueFor('a-1', 'au-1'),
+      dueFor('a-2', 'au-2'),
+    ]);
+
+    const run1 = worker1.executeDueAutomations();
+    // Deja que el worker 1 cree el mensaje de A y se quede esperando.
+    await new Promise((r) => setImmediate(r));
+
+    // Estado intermedio exigido por la misión: A en vuelo, sentAt = NULL.
+    expect(store).toHaveLength(1);
+    expect(store[0]).toMatchObject({
+      customerId: 'cu-1',
+      status: 'QUEUED',
+      sentAt: null,
+    });
+    expect(autoStatus.get('a-1')).toBe('EXECUTING');
+
+    // Worker 2 evalúa a B en ese mismo intervalo.
+    await worker2.executeDueAutomations();
+
+    // Sin la guarda, G3 filtra `sentAt NOT NULL`, la fila de A sigue en QUEUED
+    // y el guard AU-011 es por automatización y no por cliente: se creaba un
+    // segundo mensaje. La guarda de "en vuelo" lo difiere.
+    expect(store).toHaveLength(1);
+    expect(envio2.sendMessage).not.toHaveBeenCalled();
+    // B no se marca fallida: queda SCHEDULED para el siguiente tick.
+    expect(autoStatus.get('a-2')).toBe('SCHEDULED');
+
+    releaseA({ providerMessageId: 'wamid-1', providerConversationId: null });
+    await run1;
+  });
+
+  it('control: cuando A ya está SENT, G3 bloquea a B y no hay duplicado', async () => {
+    const { store, provider, prisma, newService } = buildWorld();
+    provider.sendMessage.mockResolvedValue({
+      providerMessageId: 'wamid-1',
+      providerConversationId: null,
+    });
+    const service = newService();
+    prisma.automation.findMany.mockResolvedValue([
+      dueFor('a-1', 'au-1'),
+      dueFor('a-2', 'au-2'),
+    ]);
+
+    await service.executeDueAutomations();
+
+    expect(store).toHaveLength(1);
+    expect(store[0].status).toBe('SENT');
+    expect(store[0].sentAt).toBeInstanceOf(Date);
+  });
+
+  it('identidad ausente no se convierte en autorización de envío (fail-closed)', async () => {
+    const { store, provider, prisma, newService } = buildWorld();
+
+    // Datos históricos reales: AUTOMATIC/OUTBOUND con customer_id NULL
+    // (8 163/8 163 en producción). Como Prisma omite del `where` un
+    // `customerId: undefined`, G3 los ve y debe BLOCKEAR, no permitir.
+    store.push({
+      id: 'hist-1',
+      customerId: null,
+      type: 'AUTOMATIC',
+      direction: 'OUTBOUND',
+      status: 'SENT',
+      sentAt: new Date(),
+      deletedAt: null,
+    });
+
+    const automation = dueFor('a-1', 'au-1');
+    automation.purchase.customer.id = undefined as never;
+    const service = newService();
+    prisma.automation.findMany.mockResolvedValue([automation]);
+
+    await service.executeDueAutomations();
+
+    expect(provider.sendMessage).not.toHaveBeenCalled();
+    expect(store.filter((m) => m.id.startsWith('msg-'))).toHaveLength(0);
+  });
+
+  it('un mensaje MANUAL en vuelo no bloquea un AUTOMATIC (la política manual no cambia)', async () => {
+    const { store, provider, prisma, newService } = buildWorld();
+
+    // Un MANUAL que el asesor acaba de encolar: en vuelo, pero no es
+    // automático, así que ni G3 ni la guarda de "en vuelo" pueden contarle.
+    store.push({
+      id: 'man-1',
+      customerId: 'cu-1',
+      type: 'MANUAL',
+      direction: 'OUTBOUND',
+      status: 'QUEUED',
+      sentAt: null,
+      deletedAt: null,
+    });
+    provider.sendMessage.mockResolvedValue({
+      providerMessageId: 'wamid-1',
+      providerConversationId: null,
+    });
+    const service = newService();
+    prisma.automation.findMany.mockResolvedValue([dueFor('a-1', 'au-1')]);
+
+    await service.executeDueAutomations();
+
+    expect(store.filter((m) => m.id.startsWith('msg-'))).toHaveLength(1);
+  });
+
+  describe('G3-02 · candado FOR UPDATE por cliente (serialización sin migración)', () => {
+    it('bloquea la fila del cliente ANTES de leer el estado en vuelo', async () => {
+      const { provider, prisma, tx, newService } = buildWorld();
+      provider.sendMessage.mockResolvedValue({
+        providerMessageId: 'wamid-1',
+        providerConversationId: null,
+      });
+      const service = newService();
+      prisma.automation.findMany.mockResolvedValue([dueFor('a-1', 'au-1')]);
+
+      await service.executeDueAutomations();
+
+      // El mismo mock `message` sirve a la lectura G3 del servicio de elegibilidad
+      // (fuera de la transacción) y a la consulta "en vuelo" de G3-01 (dentro).
+      // Se identifica la de "en vuelo" por su forma exacta —`status: 'QUEUED'` y
+      // `select: { id: true }`— y se compara contra ella: el candado debe
+      // precederla.
+      const idxEnVuelo = tx.message.findFirst.mock.calls.findIndex((call) => {
+        const args = call[0] as {
+          where?: { status?: unknown; deletedAt?: unknown };
+          select?: { id?: boolean };
+        };
+        return (
+          args?.where?.status === 'QUEUED' &&
+          args?.where?.deletedAt === null &&
+          args?.select?.id === true
+        );
+      });
+      expect(idxEnVuelo).toBeGreaterThanOrEqual(0);
+
+      const lockOrder = tx.$queryRaw.mock.invocationCallOrder[0];
+      const readOrder =
+        tx.message.findFirst.mock.invocationCallOrder[idxEnVuelo];
+      const writeOrder = tx.message.create.mock.invocationCallOrder[0];
+
+      // Sin candado previo, dos procesos leen a la vez el mismo hueco y ambos
+      // insertan: el orden debe ser candado -> lectura -> escritura.
+      expect(lockOrder).toBeLessThan(readOrder);
+      expect(readOrder).toBeLessThan(writeOrder);
+    });
+
+    it('el candado apunta a la fila del cliente exacto y usa FOR UPDATE', async () => {
+      const { provider, prisma, tx, newService } = buildWorld();
+      provider.sendMessage.mockResolvedValue({
+        providerMessageId: 'wamid-1',
+        providerConversationId: null,
+      });
+      const service = newService();
+      prisma.automation.findMany.mockResolvedValue([dueFor('a-1', 'au-1')]);
+
+      await service.executeDueAutomations();
+
+      // Tagged template: call[0] = strings, call[1] = interpolación.
+      const [strings, customerId] = tx.$queryRaw.mock.calls[0] as unknown as [
+        TemplateStringsArray,
+        string,
+      ];
+      expect(strings.join('?')).toContain('FOR UPDATE');
+      expect(strings.join('?')).toContain('"customers"');
+      expect(customerId).toBe('cu-1');
+    });
+
+    it('toma el candado aunque no haya mensaje previo (protección de carrera)', async () => {
+      const { provider, prisma, tx, newService } = buildWorld();
+      provider.sendMessage.mockResolvedValue({
+        providerMessageId: 'wamid-1',
+        providerConversationId: null,
+      });
+      const service = newService();
+      // Caso feliz: no existe ningún mensaje en vuelo. El candado debe tomarse
+      // igualmente; es lo que serializa a un segundo proceso que llegaría en
+      // paralelo.
+      prisma.automation.findMany.mockResolvedValue([dueFor('a-1', 'au-1')]);
+
+      await service.executeDueAutomations();
+
+      expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
     });
   });
 });

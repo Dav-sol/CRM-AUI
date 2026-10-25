@@ -225,3 +225,143 @@ pancake-whatsapp.provider,pancake.module}.ts` (+ `.spec.ts` de cada uno) ·
 `specs/API-Pancake/integration.md`.
 **Modificados**: `core/config/configuration.ts` · `core/config/env.validation.ts` ·
 `.env.example` · `whatsapp/whatsapp.module.ts` · `whatsapp/whatsapp.service.ts` (+ spec).
+
+---
+
+## PAN-02 · Viabilidad del sondeo incremental (25-10-2026)
+
+Fuente: `specs/API-Pancake/document.md` (OpenAPI 3.0.0, 28 rutas) + primitivas ya
+expuestas en `apps/api/src/modules/whatsapp/pancake/pancake.adapter.ts`.
+
+### Qué dice la propia documentación sobre el modelo de lectura
+
+La sección **«Uso previsto»** de este fichero ya fija el modelo: **lectura por
+sondeo** con `getConversations` y `getConversationMessages`. No existe ninguna
+otra vía de lectura (PAN-03). Luego la pregunta no es *si* se sondea, sino
+*si el sondeo puede ser incremental de forma fiable*.
+
+### Primitivas disponibles `[VERIFICADO]`
+
+| Ruta | Primitiva | Documentado en |
+| --- | --- | --- |
+| `GET /v2/pages/{page_id}/conversations` | `last_conversation_id` (cursor), `since`/`until` (segundos), `order_by: inserted_at \| updated_at`, filtros `type`/`tags`/`unread_first` | `document.md:270-346` |
+| `GET /v1/.../conversations/{id}/messages` | `current_count` — «índice desde el que recuperar. Devuelve los 30 mensajes previos» | `document.md:597,609-614` |
+| `GET /v1/pages/{page_id}/page_customers` | `since`/`until`/`page_number`/`page_size`/`order_by` | `document.md:1644,1669-1704` |
+| Campos de agua de `Conversation` | `inserted_at`, `updated_at` (ambos `date-time`) | `document.md:2977-2984` |
+| Límite de tasa | **5 llamadas/segundo por `page_id`** | `document.md:100`; ya aplicado vía `PANCAKE_MIN_INTERVAL_MS=250` |
+
+El adapter ya expone todo esto (`pancake.adapter.ts:55,74,88`), incluida la
+corrección `page_number`/`page_size` para `page_customers`.
+
+### Veredicto: **viable a nivel de conversación, NO viable a nivel de mensaje**
+
+#### G1 — la semántica de `since` no está especificada `[PENDIENTE — ambiguo]`
+
+La descripción completa del parámetro es *«Filter from a specific timestamp (in
+seconds)»* (`document.md:327`). El documento **no dice**:
+
+- si filtra por `inserted_at` o por `updated_at`;
+- si los límites son inclusivos o exclusivos;
+- si `since` sin `until` sigue limitando al lote de 60.
+
+Sin eso **no puede construirse una marca de agua exacta** sin elegir una
+interpretación. **No se inventa**: es ambigüedad del contrato, no del diseño.
+
+#### G2 — el cursor de conversaciones no es una instantánea estable `[VERIFICADO]`
+
+`last_conversation_id` devuelve «las 60 conversaciones **más recientemente
+actualizadas**» y, con el ID de la llamada anterior, «las **siguientes 60 más
+antiguas**» (`document.md:278,299`). Dos modos, cada uno con su coste:
+
+| `order_by` | Detecta conversaciones **nuevas** | Detecta conversaciones **actualizadas** | Estabilidad del cursor |
+| --- | --- | --- | --- |
+| `updated_at` | ✔ | ✔ | **Inestable**: una conversación que se actualiza durante el paginado **cambia de posición** y puede quedar fuera del tramo recorrido |
+| `inserted_at` | ✔ | ✘ | Estable (solo se añade al final), pero **una actualización sobre una conversación antigua jamás se ve** |
+
+**Ninguno de los dos modos ofrece at-least-once para «nuevo + actualizado» a la
+vez.** La respuesta tampoco trae `total` ni un campo de cursor: hay que tomar el
+`id` del último elemento (`document.md:347-358`).
+
+#### G3 — los mensajes no son sincronizables incrementalmente `[VERIFICADO]`
+
+Tres hechos encadenados:
+
+1. `Message` tiene **`inserted_at` pero NO `updated_at`** (`document.md:3902` y
+   listado completo del schema en `3848-4076`).
+2. El endpoint de mensajes **no acepta `since`**; solo `current_count`
+   (`document.md:597,609-614`), que es un **índice posicional** que **se
+   desplaza** cuando llegan mensajes nuevos.
+3. El estado del mensaje **cambia después de insertarse**: `is_removed`,
+   `is_hidden`, `is_parent_hidden`, `seen`, `edit_history`
+   (`document.md:3906-3977`) — todos **sin marca temporal de cambio**.
+
+**Consecuencia:** una estrategia `inserted_at > marca_de_agua` **no verá nunca**
+un mensaje retirado, oculto o marcado como leído después de su inserción, y la
+paginación por índice **puede saltar o repetir** mensajes bajo concurrencia.
+
+### Estado actual en el repositorio `[VERIFICADO]`
+
+- **No existe ningún bucle de sondeo.** `grep @Interval|@Cron` en `src/` → solo
+  `whatsapp.scheduler.ts` y `sms-scheduler.ts`, ambos de **automatizaciones**,
+  ninguno de lectura de conversaciones entrantes.
+- **`resolveConversation` solo consulta la primera página**: `getConversations()`
+  **sin cursor ni `since`** (`pancake-whatsapp.provider.ts:234`) → como mucho
+  60 conversaciones recientes. Además `catch {}` silencioso (línea 254). La
+  protege el flag `pancake.resolveConversationId`, que **es `false` por defecto**
+  (`configuration.ts:130`, `provider.ts:80`), así que hoy está **inactiva**.
+
+### Decisiones que se presentan `[PENDIENTE — no se elige ninguna]`
+
+| ID | Pregunta | Alternativas y consecuencias |
+| --- | --- | --- |
+| **D-05** | Modelo de descubrimiento de conversaciones | **(a)** `order_by=updated_at` + `since` → ve todo pero con saltos posibles (G2). **(b)** `order_by=inserted_at` + `since` → estable y sin saltos, pero **nunca ve actualizaciones**. **(c)** ambos en barridos separados → más llamadas contra un límite de 5/seg por página |
+| **D-06** | Estrategia de sincronización de mensajes | **(a)** leer los mensajes de cada conversación descubierta y reconciliar por `id` (cubre creaciones, **no** retiros). **(b)** además re-leer el tramo superior de conversaciones con frecuencia para capturar `is_removed`/`seen` (heurística, no garantía). **(c)** exigir a Pancake la spec de eventos (**PAN-03**) antes de decidir |
+| **D-07** | Frecuencia, ventana y *backfill* | **Sin decidir** — dependen de **D-05/D-06** y del límite de 5 llamadas/seg por página. **No se propone un número sin que David lo fije.** |
+
+**No se implementó nada**: ni bucle de sondeo, ni marca de agua, ni *backfill*.
+
+---
+
+## PAN-03 · Especificación oficial de eventos — **NO EXISTE** (25-10-2026)
+
+### Búsqueda realizada `[VERIFICADO]`
+
+| Fuente | `webhook` | `callback` | `event_type` | `push notification` |
+| --- | ---: | ---: | ---: | ---: |
+| `specs/API-Pancake/document.md` | **0** | 0 | 0 | 0 |
+| `specs/API-Pancake/integration.md` | **0** | 0 | 0 | 0 |
+
+Búsqueda de `subscri` en `document.md` → **4 coincidencias, todas**
+`subscription plan` (`document.md:4100,4144,4185,4227`): planes de pago de la
+página de Facebook, **no** suscripciones a eventos.
+
+Búsqueda de `incoming|real.?time|realtime|escuchar|notificación` en
+`integration.md` → **0 coincidencias**. La única mención de lectura es «Uso
+previsto: `getConversations`, `getConversationMessages`».
+
+### Qué sí documenta la API (y solo eso)
+
+| Ámbito | Estados documentados | Fuente |
+| --- | --- | --- |
+| Envío | `success`/`error_code`/`message` vía **HTTP 200 + `success:false`** | `integration.md:179-187` |
+| Envío | `retryable` → 429/5xx reintentan; `retryable=false` → terminal | `integration.md:76-84` |
+| Mensaje | `seen`, `is_removed`, `is_hidden`, `is_parent_hidden`, `removed_by`, `edit_history` | `document.md:3906-3977` |
+| Conversación | `seen`, `snippet`, `message_count`, `updated_at` | `document.md:2964-2984` |
+
+`pancake.inbound.ts` (PAN-01) ya usa exactamente `is_removed` (línea 131) y la
+deduplicación por `id` (línea 147), sin inferir ningún estado adicional.
+
+### El bloqueo, con precisión
+
+> **No hay ninguna especificación de eventos de Pancake en el repositorio.**
+> Por tanto **no puede definirse un flujo de entrada por webhook** ni declarar
+> estados entregados por eventos sin **inventar** el contrato.
+
+- **Se puede** seguir el modelo de sondeo ya adoptado (PAN-02).
+- **No se puede** afirmar que Pancake notifique altas, bajas, lecturas o
+  retiros; **ningún estado de llegada** está documentado.
+- **No se puede** cerrar PAN-03 como contrato. Se queda **ABIERTO** en tanto no
+  se obtenga la especificación oficial de eventos de Pancake (documentación del
+  proveedor o confirmación escrita de su soporte).
+
+**No se rellenó ese hueco con suposiciones.** `[VERIFICADO]`

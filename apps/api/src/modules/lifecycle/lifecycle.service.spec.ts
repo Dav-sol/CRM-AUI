@@ -190,7 +190,9 @@ describe('LifecycleService', () => {
       await service.resume(CYCLE);
 
       expect(prisma.commercialCycle.updateMany).toHaveBeenCalledWith({
-        where: expect.objectContaining({ lifecyclePausedAt: { not: null } }),
+        where: expect.objectContaining({
+          lifecyclePausedAt: { not: null },
+        }) as object,
         data: { lifecyclePausedAt: null, pauseReason: null },
       });
     });
@@ -253,10 +255,10 @@ describe('LifecycleService', () => {
       await service.pause(CYCLE, LifecyclePauseReason.COMPLAINT, 'user-1');
       expect(prisma.commercialCycle.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ lifecyclePausedAt: null }),
+          where: expect.objectContaining({ lifecyclePausedAt: null }) as object,
           data: expect.objectContaining({
             pauseReason: LifecyclePauseReason.COMPLAINT,
-          }),
+          }) as object,
         }),
       );
     });
@@ -285,7 +287,7 @@ describe('LifecycleService', () => {
         where: { id: CYCLE },
         data: expect.objectContaining({
           pauseReason: LifecyclePauseReason.COMPLAINT,
-        }),
+        }) as object,
       });
     });
 
@@ -381,7 +383,7 @@ describe('LifecycleService', () => {
             status: CommercialCycleStatus.FINISHED,
             terminationReason: LifecycleTerminationReason.BATTERY_REPLACED,
             lifecyclePausedAt: null,
-          }),
+          }) as object,
         }),
       );
     });
@@ -398,12 +400,14 @@ describe('LifecycleService', () => {
           data: expect.objectContaining({
             terminationReason:
               LifecycleTerminationReason.DEFECTIVE_PRODUCT_RETURNED,
-          }),
+          }) as object,
         }),
       );
       expect(audit.record).toHaveBeenCalledWith(
         expect.objectContaining({
-          metadata: expect.objectContaining({ startsNewCycle: false }),
+          metadata: expect.objectContaining({
+            startsNewCycle: false,
+          }) as object,
         }),
       );
     });
@@ -417,7 +421,7 @@ describe('LifecycleService', () => {
       });
       expect(audit.record).toHaveBeenCalledWith(
         expect.objectContaining({
-          metadata: expect.objectContaining({ startsNewCycle: true }),
+          metadata: expect.objectContaining({ startsNewCycle: true }) as object,
         }),
       );
     });
@@ -486,7 +490,10 @@ describe('LifecycleService', () => {
       expect(arg.where.AND).toEqual(
         expect.arrayContaining([
           {
-            OR: [{ expiresAt: null }, { expiresAt: { gt: expect.any(Date) } }],
+            OR: [
+              { expiresAt: null },
+              { expiresAt: { gt: expect.any(Date) as Date } },
+            ],
           },
         ]),
       );
@@ -506,7 +513,7 @@ describe('LifecycleService', () => {
           data: expect.objectContaining({
             decision: ConsentDecision.GRANTED,
             source: ConsentSource.ADVISOR,
-          }),
+          }) as object,
         }),
       );
     });
@@ -515,7 +522,7 @@ describe('LifecycleService', () => {
       await service.revokeConsent({ customerId: 'cu-1', decidedBy: 'u-1' });
       expect(prisma.lifecycleConsent.updateMany).toHaveBeenCalledWith({
         where: { customerId: 'cu-1', revokedAt: null },
-        data: { revokedAt: expect.any(Date) },
+        data: { revokedAt: expect.any(Date) as Date },
       });
       expect(prisma.lifecycleConsent.create).not.toHaveBeenCalled();
     });
@@ -543,7 +550,7 @@ describe('LifecycleService', () => {
       await service.markReviewRequested(CYCLE);
       expect(prisma.commercialCycle.updateMany).toHaveBeenCalledWith({
         where: { id: CYCLE, reviewRequestedAt: null },
-        data: { reviewRequestedAt: expect.any(Date) },
+        data: { reviewRequestedAt: expect.any(Date) as Date },
       });
     });
 

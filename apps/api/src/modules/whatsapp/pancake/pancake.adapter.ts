@@ -6,6 +6,7 @@ import {
   PancakeListConversationsResponse,
   PancakeMessageTemplate,
   PancakeMessagesResponse,
+  PancakePageCustomersResponse,
   PancakeSendMessageResponse,
   PancakeTemplatesResponse,
   PancakeTemplateParams,
@@ -78,6 +79,31 @@ export class PancakePublicApi {
       `/pages/${this.pageId}/conversations/${conversationId}/messages`,
       this.v1,
       { current_count: currentCount },
+    );
+  }
+
+  // GET /v1/pages/{page_id}/page_customers (document.md:1644). ÚNICA fuente
+  // documentada que asocia `psid` con teléfonos: `Conversation` solo declara
+  // `has_phone`. Params documentados: since/until/page_number/page_size/order_by.
+  async getPageCustomers(
+    params: {
+      since?: number;
+      until?: number;
+      pageNumber?: number;
+      pageSize?: number;
+      orderBy?: 'inserted_at' | 'updated_at';
+    } = {},
+  ): Promise<PancakePageCustomersResponse> {
+    return this.client.get<PancakePageCustomersResponse>(
+      `/pages/${this.pageId}/page_customers`,
+      this.v1,
+      {
+        since: params.since,
+        until: params.until,
+        page_number: params.pageNumber,
+        page_size: params.pageSize,
+        order_by: params.orderBy,
+      },
     );
   }
 

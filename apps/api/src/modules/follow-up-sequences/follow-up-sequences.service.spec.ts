@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { FollowUpStageAnchor } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
@@ -17,14 +18,6 @@ const adminUser: AuthUser = {
   role: 'ADMINISTRADOR',
 };
 
-const operadorUser: AuthUser = {
-  id: 'u-3',
-  uuid: 'uu-3',
-  accountType: 'ORGANIZATION',
-  organizationId: 'org-1',
-  role: 'OPERADOR',
-};
-
 const platformUser: AuthUser = {
   id: 'u-2',
   uuid: 'uu-2',
@@ -33,22 +26,25 @@ const platformUser: AuthUser = {
   role: 'PLATFORM_OWNER',
 };
 
+// El `anchor` se declara con el enum de Prisma, no con un literal de cadena:
+// como literal se infería `string` y el objeto ya no era asignable a
+// `CreateFollowUpSequenceStageDto` (`FollowUpStageAnchor | undefined`).
 const validStages = [
   {
     name: 'Día 0',
-    anchor: 'WARRANTY_EXPIRY',
+    anchor: FollowUpStageAnchor.WARRANTY_EXPIRY,
     offsetDays: -360,
     template: 'Hola {customerName}',
   },
   {
     name: 'Mitad',
-    anchor: 'WARRANTY_EXPIRY',
+    anchor: FollowUpStageAnchor.WARRANTY_EXPIRY,
     offsetDays: -180,
     template: 'Chequeo gratuito',
   },
   {
     name: 'Renovación',
-    anchor: 'WARRANTY_EXPIRY',
+    anchor: FollowUpStageAnchor.WARRANTY_EXPIRY,
     offsetDays: -30,
     template: 'Plan Retorno',
   },
@@ -200,7 +196,7 @@ describe('FollowUpSequencesService', () => {
         response: {
           error: {
             code: 'VALIDATION_ERROR',
-            message: expect.stringContaining('Duplicate stage'),
+            message: expect.stringContaining('Duplicate stage') as string,
           },
         },
       });
@@ -292,7 +288,7 @@ describe('FollowUpSequencesService', () => {
         response: {
           error: {
             code: 'VALIDATION_ERROR',
-            message: expect.stringContaining('PURCHASE_DATE'),
+            message: expect.stringContaining('PURCHASE_DATE') as string,
           },
         },
       });
@@ -338,7 +334,7 @@ describe('FollowUpSequencesService', () => {
         response: {
           error: {
             code: 'VALIDATION_ERROR',
-            message: expect.stringContaining('between -365 and 730'),
+            message: expect.stringContaining('between -365 and 730') as string,
           },
         },
       });
@@ -371,7 +367,9 @@ describe('FollowUpSequencesService', () => {
         response: {
           error: {
             code: 'VALIDATION_ERROR',
-            message: expect.stringContaining('warrantyMonths must be one of'),
+            message: expect.stringContaining(
+              'warrantyMonths must be one of',
+            ) as string,
           },
         },
       });
@@ -546,7 +544,7 @@ describe('FollowUpSequencesService', () => {
         response: {
           error: {
             code: 'VALIDATION_ERROR',
-            message: expect.stringContaining('At least one field'),
+            message: expect.stringContaining('At least one field') as string,
           },
         },
       });
@@ -593,7 +591,7 @@ describe('FollowUpSequencesService', () => {
 
       expect(tx.followUpSequenceStage.updateMany).toHaveBeenCalledWith({
         where: { sequenceId: 'row-1', deletedAt: null },
-        data: { deletedAt: expect.any(Date), deletedBy: 'u-1' },
+        data: { deletedAt: expect.any(Date) as Date, deletedBy: 'u-1' },
       });
       expect(tx.followUpSequenceStage.createMany).toHaveBeenCalledWith({
         data: [
@@ -632,7 +630,9 @@ describe('FollowUpSequencesService', () => {
         service.update(adminUser, 'fus-1', { warrantyMonths: 24 }),
       ).rejects.toMatchObject({
         response: {
-          error: { message: expect.stringContaining('used by campaigns') },
+          error: {
+            message: expect.stringContaining('used by campaigns') as string,
+          },
         },
       });
       await expect(
@@ -641,7 +641,9 @@ describe('FollowUpSequencesService', () => {
         }),
       ).rejects.toMatchObject({
         response: {
-          error: { message: expect.stringContaining('used by campaigns') },
+          error: {
+            message: expect.stringContaining('used by campaigns') as string,
+          },
         },
       });
       expect(tx.followUpSequenceStage.updateMany).not.toHaveBeenCalled();
@@ -663,7 +665,7 @@ describe('FollowUpSequencesService', () => {
       ).rejects.toMatchObject({
         response: {
           error: {
-            message: expect.stringContaining('Duplicate stage'),
+            message: expect.stringContaining('Duplicate stage') as string,
           },
         },
       });
@@ -675,7 +677,9 @@ describe('FollowUpSequencesService', () => {
       ).rejects.toMatchObject({
         response: {
           error: {
-            message: expect.stringContaining('requires name and template'),
+            message: expect.stringContaining(
+              'requires name and template',
+            ) as string,
           },
         },
       });
@@ -710,7 +714,7 @@ describe('FollowUpSequencesService', () => {
       });
       expect(tx.followUpSequence.update).toHaveBeenCalledWith({
         where: { id: 'row-1' },
-        data: { deletedAt: expect.any(Date), deletedBy: 'u-1' },
+        data: { deletedAt: expect.any(Date) as Date, deletedBy: 'u-1' },
       });
       expect(auditService.record).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'follow_up_sequence.delete' }),
@@ -730,7 +734,7 @@ describe('FollowUpSequencesService', () => {
           error: {
             message: expect.stringContaining(
               'Cannot delete a sequence used by campaigns',
-            ),
+            ) as string,
           },
         },
       });

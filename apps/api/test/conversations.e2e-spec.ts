@@ -16,6 +16,8 @@ import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/core/database/prisma.service';
 import { configureApp } from './../src/app.setup';
 import { WHATSAPP_PROVIDER } from './../src/modules/whatsapp/whatsapp.provider';
+import { deleteFixtureAudits } from './helpers/fixture-cleanup';
+import { enableOutboundSendForTest } from './helpers/outbound-permit';
 
 describe('Conversations Inbox (e2e) — Flujo 07, US1..US10, HG-1..HG-8', () => {
   let app: INestApplication<App>;
@@ -33,6 +35,7 @@ describe('Conversations Inbox (e2e) — Flujo 07, US1..US10, HG-1..HG-8', () => 
     platform: 'conv-platform@platform.test',
   };
   let org1Id: string;
+  let restoreOutboundPermit: (() => void) | undefined;
   let org2Id: string;
   let advisor1Uuid: string;
   let advisor2Uuid: string;
@@ -77,7 +80,9 @@ describe('Conversations Inbox (e2e) — Flujo 07, US1..US10, HG-1..HG-8', () => 
     seedPrisma = new PrismaService();
     await seedPrisma.$connect();
 
-    await seedPrisma.audit.deleteMany({ where: { module: 'conversations' } });
+    await deleteFixtureAudits(seedPrisma, {
+      slugs: ['conv-org-1', 'conv-org-2'],
+    });
     await seedPrisma.conversationNote.deleteMany({
       where: { organization: { slug: { in: ['conv-org-1', 'conv-org-2'] } } },
     });
@@ -114,6 +119,12 @@ describe('Conversations Inbox (e2e) — Flujo 07, US1..US10, HG-1..HG-8', () => 
 
     org1Id = await createOrgSeed(seedPrisma, 'conv-org-1', 'Conv Org One');
     org2Id = await createOrgSeed(seedPrisma, 'conv-org-2', 'Conv Org Two');
+
+    // CRIT-16-B · política de envío exclusiva de este test (ver
+    // `helpers/outbound-permit.ts`). Debe fijarse ANTES de `.compile()` porque
+    // `load: [configuration]` congela `process.env` ahí mismo. Allowlist = solo
+    // las dos orgs de esta suite; proveedor mockeado y egreso cortado.
+    restoreOutboundPermit = enableOutboundSendForTest([org1Id, org2Id]);
 
     providerSend = jest.fn().mockImplementation(() => {
       providerSeq += 1;
@@ -289,8 +300,13 @@ describe('Conversations Inbox (e2e) — Flujo 07, US1..US10, HG-1..HG-8', () => 
   });
 
   afterAll(async () => {
-    await seedPrisma.audit.deleteMany({ where: { module: 'conversations' } });
-    await seedPrisma.audit.deleteMany({ where: { module: 'whatsapp' } });
+    // Restaura la política a su estado previo para no filtrarla a otras suites
+    // del mismo proceso (--runInBand comparte `process.env`).
+    restoreOutboundPermit?.();
+
+    await deleteFixtureAudits(seedPrisma, {
+      slugs: ['conv-org-1', 'conv-org-2'],
+    });
     await seedPrisma.conversationNote.deleteMany({
       where: { organizationId: { in: [org1Id, org2Id] } },
     });

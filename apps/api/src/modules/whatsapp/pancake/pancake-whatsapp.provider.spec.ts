@@ -11,8 +11,9 @@ function configService(values: Record<string, unknown>): ConfigService {
 
 describe('PancakeWhatsAppProvider', () => {
   it('builds the [pageID]_[phone] conversation and maps the send result', async () => {
+    const sendInboxMessage = jest.fn().mockResolvedValue({ id: 'msg-1' });
     const api = {
-      sendInboxMessage: jest.fn().mockResolvedValue({ id: 'msg-1' }),
+      sendInboxMessage,
     } as unknown as PancakePublicApi;
     const provider = new PancakeWhatsAppProvider(
       api,
@@ -25,7 +26,7 @@ describe('PancakeWhatsAppProvider', () => {
 
     const result = await provider.sendMessage('573001112233', 'Hola');
 
-    expect(api.sendInboxMessage).toHaveBeenCalledWith(
+    expect(sendInboxMessage).toHaveBeenCalledWith(
       'waba_1146111635255630_573001112233',
       'Hola',
       'user-1',
@@ -39,16 +40,18 @@ describe('PancakeWhatsAppProvider', () => {
   });
 
   it('resolves the real conversation id when resolveConversationId is enabled (H4, CO. case)', async () => {
+    const getConversations = jest.fn().mockResolvedValue({
+      conversations: [
+        {
+          id: 'waba_1146111635255630_CO.1372227101779105',
+          from: { id: 'wa_CO.1372227101779105' },
+        },
+      ],
+    });
+    const sendInboxMessage = jest.fn().mockResolvedValue({ id: 'msg-1' });
     const api = {
-      getConversations: jest.fn().mockResolvedValue({
-        conversations: [
-          {
-            id: 'waba_1146111635255630_CO.1372227101779105',
-            from: { id: 'wa_CO.1372227101779105' },
-          },
-        ],
-      }),
-      sendInboxMessage: jest.fn().mockResolvedValue({ id: 'msg-1' }),
+      getConversations,
+      sendInboxMessage,
     } as unknown as PancakePublicApi;
     const provider = new PancakeWhatsAppProvider(
       api,
@@ -61,8 +64,8 @@ describe('PancakeWhatsAppProvider', () => {
 
     const result = await provider.sendMessage('1372227101779105', 'Hola');
 
-    expect(api.getConversations).toHaveBeenCalled();
-    expect(api.sendInboxMessage).toHaveBeenCalledWith(
+    expect(getConversations).toHaveBeenCalled();
+    expect(sendInboxMessage).toHaveBeenCalledWith(
       'waba_1146111635255630_CO.1372227101779105',
       'Hola',
       undefined,
@@ -74,9 +77,11 @@ describe('PancakeWhatsAppProvider', () => {
   });
 
   it('falls back to the composed id when resolution finds no match', async () => {
+    const getConversations = jest.fn().mockResolvedValue({ conversations: [] });
+    const sendInboxMessage = jest.fn().mockResolvedValue({ id: 'msg-1' });
     const api = {
-      getConversations: jest.fn().mockResolvedValue({ conversations: [] }),
-      sendInboxMessage: jest.fn().mockResolvedValue({ id: 'msg-1' }),
+      getConversations,
+      sendInboxMessage,
     } as unknown as PancakePublicApi;
     const provider = new PancakeWhatsAppProvider(
       api,
@@ -89,17 +94,25 @@ describe('PancakeWhatsAppProvider', () => {
 
     const result = await provider.sendMessage('573001112233', 'Hola');
 
-    expect(api.sendInboxMessage).toHaveBeenCalledWith(
+    expect(sendInboxMessage).toHaveBeenCalledWith(
       'waba_1146111635255630_573001112233',
       'Hola',
       undefined,
       undefined,
     );
+    // El proveedor devuelve el id del proveedor tal cual lo devolvio Pancake
+    // (`providerMessageId: result.id`, `pancake-whatsapp.provider.ts`).
+    expect(result).toEqual({
+      providerMessageId: 'msg-1',
+      providerConversationId: 'waba_1146111635255630_573001112233',
+      status: 'SENT',
+    });
   });
 
   it('sends a WhatsApp template message via sendTemplateMessage', async () => {
+    const sendTemplate = jest.fn().mockResolvedValue({ id: 'msg-tpl' });
     const api = {
-      sendTemplate: jest.fn().mockResolvedValue({ id: 'msg-tpl' }),
+      sendTemplate,
     } as unknown as PancakePublicApi;
     const provider = new PancakeWhatsAppProvider(
       api,
@@ -115,7 +128,7 @@ describe('PancakeWhatsAppProvider', () => {
       templateParams: { BODY_PARAMS: { customer_name: 'Ana' } },
     });
 
-    expect(api.sendTemplate).toHaveBeenCalledWith(
+    expect(sendTemplate).toHaveBeenCalledWith(
       'c-1',
       {
         templateId: 'tpl-1',
@@ -128,8 +141,9 @@ describe('PancakeWhatsAppProvider', () => {
   });
 
   it('sendTemplate composes the conversation from the phone and uses the configured template', async () => {
+    const sendTemplate = jest.fn().mockResolvedValue({ id: 'msg-tpl' });
     const api = {
-      sendTemplate: jest.fn().mockResolvedValue({ id: 'msg-tpl' }),
+      sendTemplate,
     } as unknown as PancakePublicApi;
     const provider = new PancakeWhatsAppProvider(
       api,
@@ -147,7 +161,7 @@ describe('PancakeWhatsAppProvider', () => {
       organization_name: 'Org Uno',
     });
 
-    expect(api.sendTemplate).toHaveBeenCalledWith(
+    expect(sendTemplate).toHaveBeenCalledWith(
       'waba_1146111635255630_573001112233',
       {
         templateId: 'tpl-global',
@@ -170,16 +184,18 @@ describe('PancakeWhatsAppProvider', () => {
   });
 
   it('sendTemplate resolves the real conversation id when enabled (H4)', async () => {
+    const getConversations = jest.fn().mockResolvedValue({
+      conversations: [
+        {
+          id: 'waba_1146111635255630_CO.1372227101779105',
+          from: { id: 'wa_CO.1372227101779105' },
+        },
+      ],
+    });
+    const sendTemplate = jest.fn().mockResolvedValue({ id: 'msg-tpl' });
     const api = {
-      getConversations: jest.fn().mockResolvedValue({
-        conversations: [
-          {
-            id: 'waba_1146111635255630_CO.1372227101779105',
-            from: { id: 'wa_CO.1372227101779105' },
-          },
-        ],
-      }),
-      sendTemplate: jest.fn().mockResolvedValue({ id: 'msg-tpl' }),
+      getConversations,
+      sendTemplate,
     } as unknown as PancakePublicApi;
     const provider = new PancakeWhatsAppProvider(
       api,
@@ -193,7 +209,7 @@ describe('PancakeWhatsAppProvider', () => {
 
     await provider.sendTemplate('1372227101779105', { customer_name: 'Ana' });
 
-    expect(api.sendTemplate).toHaveBeenCalledWith(
+    expect(sendTemplate).toHaveBeenCalledWith(
       'waba_1146111635255630_CO.1372227101779105',
       expect.objectContaining({ templateId: 'tpl-global' }),
       undefined,
@@ -201,8 +217,9 @@ describe('PancakeWhatsAppProvider', () => {
   });
 
   it('sendTemplate fails terminally without PANCAKE_TEMPLATE_ID (H5)', async () => {
+    const sendTemplate = jest.fn();
     const api = {
-      sendTemplate: jest.fn(),
+      sendTemplate,
     } as unknown as PancakePublicApi;
     const provider = new PancakeWhatsAppProvider(
       api,
@@ -215,25 +232,27 @@ describe('PancakeWhatsAppProvider', () => {
     await expect(
       provider.sendTemplate('573001112233', {}),
     ).rejects.toMatchObject({ retryable: false });
-    expect(api.sendTemplate).not.toHaveBeenCalled();
+    expect(sendTemplate).not.toHaveBeenCalled();
   });
 
   it('sendTemplate aligns BODY_PARAMS with the template declared variables (Meta 132000)', async () => {
+    const getMessageTemplates = jest.fn().mockResolvedValue([
+      {
+        id: 'tpl-global',
+        name: 'google_reseas',
+        status: 'APPROVED',
+        components: [
+          {
+            type: 'BODY',
+            text: 'Hola {{customer_name}}, gracias por tu compra de {{product_name}}.',
+          },
+        ],
+      },
+    ]);
+    const sendTemplate = jest.fn().mockResolvedValue({ id: 'msg-tpl' });
     const api = {
-      getMessageTemplates: jest.fn().mockResolvedValue([
-        {
-          id: 'tpl-global',
-          name: 'google_reseas',
-          status: 'APPROVED',
-          components: [
-            {
-              type: 'BODY',
-              text: 'Hola {{customer_name}}, gracias por tu compra de {{product_name}}.',
-            },
-          ],
-        },
-      ]),
-      sendTemplate: jest.fn().mockResolvedValue({ id: 'msg-tpl' }),
+      getMessageTemplates,
+      sendTemplate,
     };
     const provider = new PancakeWhatsAppProvider(
       api as unknown as PancakePublicApi,
@@ -252,7 +271,7 @@ describe('PancakeWhatsAppProvider', () => {
 
     // organization_name is not declared by the template: sending it would
     // change the parameter count and Meta rejects the send.
-    expect(api.sendTemplate).toHaveBeenCalledWith(
+    expect(sendTemplate).toHaveBeenCalledWith(
       'waba_1146111635255630_573001112233',
       expect.objectContaining({
         templateParams: {
@@ -267,16 +286,18 @@ describe('PancakeWhatsAppProvider', () => {
   });
 
   it('sendTemplate fills declared variables the caller did not resolve', async () => {
+    const getMessageTemplates = jest.fn().mockResolvedValue([
+      {
+        id: 'tpl-global',
+        components: [
+          { type: 'BODY', text: '{{customer_name}} / {{product_name}}' },
+        ],
+      },
+    ]);
+    const sendTemplate = jest.fn().mockResolvedValue({ id: 'msg-tpl' });
     const api = {
-      getMessageTemplates: jest.fn().mockResolvedValue([
-        {
-          id: 'tpl-global',
-          components: [
-            { type: 'BODY', text: '{{customer_name}} / {{product_name}}' },
-          ],
-        },
-      ]),
-      sendTemplate: jest.fn().mockResolvedValue({ id: 'msg-tpl' }),
+      getMessageTemplates,
+      sendTemplate,
     };
     const provider = new PancakeWhatsAppProvider(
       api as unknown as PancakePublicApi,
@@ -289,7 +310,7 @@ describe('PancakeWhatsAppProvider', () => {
 
     await provider.sendTemplate('573001112233', { customer_name: 'Ana' });
 
-    expect(api.sendTemplate).toHaveBeenCalledWith(
+    expect(sendTemplate).toHaveBeenCalledWith(
       'waba_1146111635255630_573001112233',
       expect.objectContaining({
         templateParams: {
@@ -301,9 +322,11 @@ describe('PancakeWhatsAppProvider', () => {
   });
 
   it('sendTemplate keeps the caller params when definitions cannot be read', async () => {
+    const getMessageTemplates = jest.fn().mockRejectedValue(new Error('down'));
+    const sendTemplate = jest.fn().mockResolvedValue({ id: 'msg-tpl' });
     const api = {
-      getMessageTemplates: jest.fn().mockRejectedValue(new Error('down')),
-      sendTemplate: jest.fn().mockResolvedValue({ id: 'msg-tpl' }),
+      getMessageTemplates,
+      sendTemplate,
     };
     const provider = new PancakeWhatsAppProvider(
       api as unknown as PancakePublicApi,
@@ -323,7 +346,7 @@ describe('PancakeWhatsAppProvider', () => {
     ).resolves.toMatchObject({ providerMessageId: 'msg-tpl' });
 
     // A definition fetch problem must never block the send itself.
-    expect(api.sendTemplate).toHaveBeenCalledWith(
+    expect(sendTemplate).toHaveBeenCalledWith(
       'waba_1146111635255630_573001112233',
       expect.objectContaining({
         templateParams: {
@@ -339,13 +362,15 @@ describe('PancakeWhatsAppProvider', () => {
   });
 
   it('sendTemplate caches template definitions across sends', async () => {
+    const getMessageTemplates = jest
+      .fn()
+      .mockResolvedValue([
+        { id: 'tpl-global', components: [{ type: 'BODY', text: '{{a}}' }] },
+      ]);
+    const sendTemplate = jest.fn().mockResolvedValue({ id: 'msg-tpl' });
     const api = {
-      getMessageTemplates: jest
-        .fn()
-        .mockResolvedValue([
-          { id: 'tpl-global', components: [{ type: 'BODY', text: '{{a}}' }] },
-        ]),
-      sendTemplate: jest.fn().mockResolvedValue({ id: 'msg-tpl' }),
+      getMessageTemplates,
+      sendTemplate,
     };
     const provider = new PancakeWhatsAppProvider(
       api as unknown as PancakePublicApi,
@@ -359,7 +384,7 @@ describe('PancakeWhatsAppProvider', () => {
     await provider.sendTemplate('573001112233', { a: '1' });
     await provider.sendTemplate('573001112234', { a: '2' });
 
-    expect(api.getMessageTemplates).toHaveBeenCalledTimes(1);
+    expect(getMessageTemplates).toHaveBeenCalledTimes(1);
   });
 
   it('reports isConfigured() false without credentials', () => {

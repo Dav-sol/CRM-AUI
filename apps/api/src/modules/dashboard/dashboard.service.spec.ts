@@ -3,10 +3,29 @@ import { CampaignStatus, CampaignType } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import { DashboardService } from './dashboard.service';
 
+/**
+ * Inicios de mes UTC en los que puede caer la llamada.
+ *
+ * El servicio calcula el corte del mes con su PROPIO `new Date()`, unas
+ * microsegundos despues de que el test tome la referencia: si el reloj cruza
+ * el cambio de mes entre ambas llamadas, los dos valores difieren y el test
+ * fallaria sin que hubiera cambiado nada del codigo. Se aceptan por eso los
+ * dos inicios posibles (el actual y el siguiente), sin perder la asercion: el
+ * corte debe seguir siendo un inicio de mes UTC, y un servicio que usara el
+ * mes anterior o la hora local seguiria fallando.
+ */
+function utcMonthStarts(): Date[] {
+  const now = new Date();
+  return [
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)),
+  ];
+}
+
 describe('DashboardService', () => {
   let service: DashboardService;
   let prisma: {
-    customer: { count: jest.Mock };
+    customer: { count: jest.Mock; findMany: jest.Mock };
     purchase: {
       count: jest.Mock;
       aggregate: jest.Mock;
@@ -18,6 +37,7 @@ describe('DashboardService', () => {
     };
     message: { count: jest.Mock };
     conversation: { count: jest.Mock };
+    quote: { findMany: jest.Mock };
     campaign: { count: jest.Mock; findMany: jest.Mock };
     audit: { findMany: jest.Mock };
   };
@@ -155,35 +175,45 @@ describe('DashboardService', () => {
     });
 
     it('uses the UTC calendar month start for newThisMonth (customer.createdAt)', async () => {
-      const now = new Date();
-      const expected = new Date(
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
-      );
       await service.summary(orgUser);
+
+      // El servicio hace varias consultas `count`; se localiza la que lleva
+      // el corte de mes en vez de depender del orden de las llamadas.
+      const countCalls = prisma.customer.count.mock.calls as unknown[][];
+      const monthly = countCalls
+        .map((call) => call[0] as { where?: { createdAt?: { gte?: Date } } })
+        .find((call) => call.where?.createdAt?.gte !== undefined);
+      expect(monthly).toBeDefined();
+      const gte = monthly!.where!.createdAt!.gte!;
 
       expect(prisma.customer.count).toHaveBeenCalledWith({
         where: {
           organizationId: 'org-1',
           deletedAt: null,
-          createdAt: { gte: expected },
+          createdAt: { gte },
         },
       });
+      expect(utcMonthStarts()).toContainEqual(gte);
     });
 
     it('uses purchaseDate (not createdAt) for thisMonth purchases', async () => {
-      const now = new Date();
-      const expected = new Date(
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
-      );
       await service.summary(orgUser);
+
+      const countCalls = prisma.purchase.count.mock.calls as unknown[][];
+      const monthly = countCalls
+        .map((call) => call[0] as { where?: { purchaseDate?: { gte?: Date } } })
+        .find((call) => call.where?.purchaseDate?.gte !== undefined);
+      expect(monthly).toBeDefined();
+      const gte = monthly!.where!.purchaseDate!.gte!;
 
       expect(prisma.purchase.count).toHaveBeenCalledWith({
         where: {
           organizationId: 'org-1',
           deletedAt: null,
-          purchaseDate: { gte: expected },
+          purchaseDate: { gte },
         },
       });
+      expect(utcMonthStarts()).toContainEqual(gte);
     });
 
     it('runs all counts in parallel (Promise.all, no N+1)', async () => {
@@ -494,7 +524,7 @@ describe('DashboardService', () => {
           where: expect.objectContaining({
             organizationId: 'org-1',
             status: 'SCHEDULED',
-            scheduledDate: { gte: expect.any(Date) },
+            scheduledDate: { gte: expect.any(Date) as Date },
           }) as object,
         }),
       );

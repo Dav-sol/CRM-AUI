@@ -109,29 +109,36 @@ export function findInvalidVariables(template: string): string[] {
 }
 
 /**
- * `timeZone` es un parámetro opcional añadido para que la presentación no
- * dependa del reloj del proceso. La firma pública permanece compatible: los
- * llamadores existentes siguen funcionando y obtienen el valor por defecto.
+ * `timeZone` es un parámetro opcional que la presentación propaga para que no
+ * dependa del reloj del proceso (RNF-07). La firma pública permanece
+ * compatible: los llamadores existentes siguen funcionando.
+ *
+ * Las dos fechas del template son **civiles** (columna `DATE`), no instantes:
+ * su día es exactamente el que registró el negocio, así que se leen en UTC y
+ * NO se desplazan por la zona de la organización — 00:00 UTC en Bogotá es el día
+ * anterior —. Por eso la zona no altera hoy el resultado; queda propagada para
+ * las variables de tipo instante, que sí dependen de ella (ver
+ * `formatVariableDate`). `message-variables.spec.ts` fija esa invariante.
  */
 export function renderTemplate(
   template: string,
   vars: MessageTemplateVars,
-  timeZone?: string,
+  _timeZone?: string,
 ): string {
-  const zone = timeZone ?? DEFAULT_PRESENTATION_TIME_ZONE;
-  return template
-    .replace(/\{customerName\}/g, vars.customerName)
-    .replace(/\{productName\}/g, vars.productName)
-    .replace(/\{organizationName\}/g, vars.organizationName)
-    .replace(/\{brand\}/g, vars.brand)
-    // `purchaseDate` y `warrantyExpiresAt` son fechas CIVILES (columna `DATE`),
-    // no instantes: su día es el que registró el negocio. Aplicarles la zona de
-    // una organización los desplazaría un día hacia atrás, porque 00:00 UTC en
-    // Bogotá es el día anterior. `zone` se conserva en la firma por
-    // compatibilidad y por si el conjunto de variables crece con instantes.
-    .replace(
-      /\{warrantyExpiresAt\}/g,
-      formatCivilDateLong(vars.warrantyExpiresAt),
-    )
-    .replace(/\{purchaseDate\}/g, formatCivilDateLong(vars.purchaseDate));
+  return (
+    template
+      .replace(/\{customerName\}/g, vars.customerName)
+      .replace(/\{productName\}/g, vars.productName)
+      .replace(/\{organizationName\}/g, vars.organizationName)
+      .replace(/\{brand\}/g, vars.brand)
+      // `purchaseDate` y `warrantyExpiresAt` son fechas CIVILES (columna `DATE`),
+      // no instantes: su día es el que registró el negocio. Aplicarles la zona de
+      // una organización los desplazaría un día hacia atrás, porque 00:00 UTC en
+      // Bogotá es el día anterior.
+      .replace(
+        /\{warrantyExpiresAt\}/g,
+        formatCivilDateLong(vars.warrantyExpiresAt),
+      )
+      .replace(/\{purchaseDate\}/g, formatCivilDateLong(vars.purchaseDate))
+  );
 }

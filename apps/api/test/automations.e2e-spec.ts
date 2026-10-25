@@ -7,6 +7,7 @@ import * as bcrypt from 'bcrypt';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/core/database/prisma.service';
 import { configureApp } from './../src/app.setup';
+import { deleteFixtureAudits } from './helpers/fixture-cleanup';
 
 interface AutomationRow {
   uuid: string;
@@ -79,7 +80,9 @@ describe('Automations (e2e) — AU-001/AU-003 + US1..US8', () => {
     events = app.get(EventEmitter2);
     hash = await bcrypt.hash(password, 12);
 
-    await prisma.audit.deleteMany({ where: { module: 'automations' } });
+    await deleteFixtureAudits(prisma, {
+      slugs: ['auto-org-1', 'auto-org-2'],
+    });
     await prisma.message.deleteMany({
       where: { organization: { slug: { in: ['auto-org-1', 'auto-org-2'] } } },
     });
@@ -181,7 +184,9 @@ describe('Automations (e2e) — AU-001/AU-003 + US1..US8', () => {
   });
 
   afterAll(async () => {
-    await prisma.audit.deleteMany({ where: { module: 'automations' } });
+    await deleteFixtureAudits(prisma, {
+      slugs: ['auto-org-1', 'auto-org-2'],
+    });
     await prisma.message.deleteMany({
       where: { organizationId: { in: [org1Id, org2Id] } },
     });
@@ -400,9 +405,9 @@ describe('Automations (e2e) — AU-001/AU-003 + US1..US8', () => {
     // cliente: cada compra conserva su lifecycle y sus automatizaciones.
     expect(firstCycle?.status).toBe('ACTIVE');
     expect(firstCycle?.endDate).toBeFalsy();
-    expect(
-      firstCycle?.automations.every((a) => a.status === 'SCHEDULED'),
-    ).toBe(true);
+    expect(firstCycle?.automations.every((a) => a.status === 'SCHEDULED')).toBe(
+      true,
+    );
     expect(secondCycle?.status).toBe('ACTIVE');
     // Ninguna automatización de la compra anterior se cancela ni se emite evento.
     for (let i = 0; i < 10 && cancelledAutomationIds.length > 0; i++) {

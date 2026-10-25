@@ -6,6 +6,7 @@ import * as bcrypt from 'bcrypt';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/core/database/prisma.service';
 import { configureApp } from './../src/app.setup';
+import { deleteFixtureAudits } from './helpers/fixture-cleanup';
 
 interface PurchaseRow {
   id: string;
@@ -95,7 +96,9 @@ describe('Purchases (e2e) — US1..US6', () => {
 
     prisma = app.get(PrismaService);
 
-    await prisma.audit.deleteMany({ where: { module: 'purchases' } });
+    await deleteFixtureAudits(prisma, {
+      slugs: ['purch-org-1', 'purch-org-2'],
+    });
     // Delete children before purchase: purchases create automations and one
     // commercial cycle each, and those hold FKs to the purchase row
     // (automations.e2e-spec.ts uses this same order).
@@ -268,7 +271,9 @@ describe('Purchases (e2e) — US1..US6', () => {
   });
 
   afterAll(async () => {
-    await prisma.audit.deleteMany({ where: { module: 'purchases' } });
+    await deleteFixtureAudits(prisma, {
+      slugs: ['purch-org-1', 'purch-org-2'],
+    });
     // Same child-first order as beforeAll; otherwise this block throws
     // commercial_cycles_purchase_id_fkey and the fixture rows survive.
     await prisma.message.deleteMany({

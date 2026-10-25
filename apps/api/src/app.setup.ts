@@ -7,10 +7,12 @@ import { ValidationPipe } from './core/pipes/validation.pipe';
 
 export function configureApp(app: INestApplication): void {
   // Security headers
-  app.use(helmet({
-    contentSecurityPolicy: false, // Allow inline scripts for Next.js
-    crossOriginEmbedderPolicy: false,
-  }));
+  app.use(
+    helmet({
+      contentSecurityPolicy: false, // Allow inline scripts for Next.js
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
 
   // CORS
   app.enableCors({

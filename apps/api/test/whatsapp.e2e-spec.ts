@@ -18,6 +18,8 @@ import { PrismaService } from './../src/core/database/prisma.service';
 import { configureApp } from './../src/app.setup';
 import { WhatsappService } from './../src/modules/whatsapp/whatsapp.service';
 import { WHATSAPP_PROVIDER } from './../src/modules/whatsapp/whatsapp.provider';
+import { deleteFixtureAudits } from './helpers/fixture-cleanup';
+import { enableOutboundSendForTest } from './helpers/outbound-permit';
 
 describe('WhatsApp/Messaging (e2e) — Flujo 05/06/07, US1..US8, AU-005/AU-011', () => {
   let app: INestApplication<App>;
@@ -33,6 +35,7 @@ describe('WhatsApp/Messaging (e2e) — Flujo 05/06/07, US1..US8, AU-005/AU-011',
     admin2: 'whats-admin2@org2.test',
   };
   let org1Id: string;
+  let restoreOutboundPermit: (() => void) | undefined;
   let org2Id: string;
   let customer1Id: string;
   let customer1Uuid: string;
@@ -74,7 +77,9 @@ describe('WhatsApp/Messaging (e2e) — Flujo 05/06/07, US1..US8, AU-005/AU-011',
     seedPrisma = new PrismaService();
     await seedPrisma.$connect();
 
-    await seedPrisma.audit.deleteMany({ where: { module: 'whatsapp' } });
+    await deleteFixtureAudits(seedPrisma, {
+      slugs: ['whats-org-1', 'whats-org-2'],
+    });
     await seedPrisma.message.deleteMany({
       where: { organization: { slug: { in: ['whats-org-1', 'whats-org-2'] } } },
     });
@@ -116,6 +121,13 @@ describe('WhatsApp/Messaging (e2e) — Flujo 05/06/07, US1..US8, AU-005/AU-011',
     org1Id = await createOrgSeed(seedPrisma, 'whats-org-1', 'Whats Org One');
     org2Id = await createOrgSeed(seedPrisma, 'whats-org-2', 'Whats Org Two');
     process.env.WHATSAPP_DEFAULT_ORGANIZATION_ID = org1Id;
+
+    // CRIT-16-B · política de envío exclusiva de este test. Se fija ANTES de
+    // `.compile()` porque `load: [configuration]` congela `process.env` ahí.
+    // Allowlist = solo las dos orgs que esta suite acaba de crear; el proveedor
+    // se mockea justo debajo y el egreso está cortado en `jest-e2e.setup.ts`,
+    // de modo que no existe ruta hacia Pancake/Meta.
+    restoreOutboundPermit = enableOutboundSendForTest([org1Id, org2Id]);
 
     providerSend = jest.fn().mockImplementation(() => {
       providerSeq += 1;
@@ -298,7 +310,13 @@ describe('WhatsApp/Messaging (e2e) — Flujo 05/06/07, US1..US8, AU-005/AU-011',
   });
 
   afterAll(async () => {
-    await seedPrisma.audit.deleteMany({ where: { module: 'whatsapp' } });
+    // Restaura la política a su estado previo para no filtrarla a otras suites
+    // del mismo proceso (--runInBand comparte `process.env`).
+    restoreOutboundPermit?.();
+
+    await deleteFixtureAudits(seedPrisma, {
+      slugs: ['whats-org-1', 'whats-org-2'],
+    });
     await seedPrisma.message.deleteMany({
       where: { organizationId: { in: [org1Id, org2Id] } },
     });

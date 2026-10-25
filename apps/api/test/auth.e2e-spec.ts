@@ -8,6 +8,7 @@ import * as bcrypt from 'bcrypt';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/core/database/prisma.service';
 import { configureApp } from './../src/app.setup';
+import { deleteIdentityAuditsForUser } from './helpers/fixture-cleanup';
 
 describe('Auth (e2e) — US1 PLATFORM_OWNER login', () => {
   let app: INestApplication<App>;
@@ -534,7 +535,7 @@ describe('Auth (e2e) — identity audit logging (T065)', () => {
   });
 
   afterAll(async () => {
-    await prisma.audit.deleteMany({});
+    await deleteIdentityAuditsForUser(prisma, email);
     await prisma.userSession.deleteMany({ where: { user: { email } } });
     await prisma.user.deleteMany({ where: { email } });
     await app.close();
@@ -551,8 +552,17 @@ describe('Auth (e2e) — identity audit logging (T065)', () => {
       .send({ email, password })
       .expect(200);
 
+    // Acotado al usuario de esta prueba: sin ese filtro la aserción se
+    // sostenía con auditorías de login de otros tenants (o de una ejecución
+    // anterior) y podía dar un falso positivo. Ambos intentos de esta prueba
+    // —el rechazado y el aceptado— identifican al usuario, así que el filtro
+    // por usuario cubre los dos.
     const rows = await prisma.audit.findMany({
-      where: { module: 'identity', action: { startsWith: 'auth.login' } },
+      where: {
+        module: 'identity',
+        action: { startsWith: 'auth.login' },
+        user: { email },
+      },
     });
 
     expect(rows.some((r) => r.action === 'auth.login.success')).toBe(true);

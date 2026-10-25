@@ -155,7 +155,7 @@ describe('QuotesService', () => {
       expect.objectContaining({
         where: expect.objectContaining({
           status: QuoteStatus.ENVIADA,
-        }),
+        }) as object,
         data: { status: QuoteStatus.VENCIDA },
       }),
     );

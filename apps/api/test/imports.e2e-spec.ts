@@ -6,6 +6,7 @@ import * as bcrypt from 'bcrypt';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/core/database/prisma.service';
 import { configureApp } from './../src/app.setup';
+import { deleteFixtureAudits } from './helpers/fixture-cleanup';
 
 interface ImportJobRow {
   uuid: string;
@@ -107,7 +108,9 @@ describe('Imports (e2e) — US1..US12', () => {
     await prisma.import.deleteMany({
       where: { organization: { slug: { in: ['imp-org-1', 'imp-org-2'] } } },
     });
-    await prisma.audit.deleteMany({ where: { module: 'imports' } });
+    await deleteFixtureAudits(prisma, {
+      slugs: ['imp-org-1', 'imp-org-2'],
+    });
     await prisma.automation.deleteMany({
       where: { organization: { slug: { in: ['imp-org-1', 'imp-org-2'] } } },
     });
@@ -220,7 +223,9 @@ describe('Imports (e2e) — US1..US12', () => {
     await prisma.import.deleteMany({
       where: { organizationId: { in: [org1Id, org2Id] } },
     });
-    await prisma.audit.deleteMany({ where: { module: 'imports' } });
+    await deleteFixtureAudits(prisma, {
+      slugs: ['imp-org-1', 'imp-org-2'],
+    });
     await prisma.automation.deleteMany({
       where: { organizationId: { in: [org1Id, org2Id] } },
     });

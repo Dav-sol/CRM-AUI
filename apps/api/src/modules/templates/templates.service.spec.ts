@@ -1,6 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuthUser } from '../../core/decorators/current-user.decorator';
 import { AuditIdentityService } from '../auth/audit.identity.service';
@@ -37,8 +36,20 @@ function mockTemplate(overrides: Record<string, unknown> = {}) {
 
 describe('TemplatesService', () => {
   let service: TemplatesService;
-  let prisma: Record<string, jest.Mock>;
-  let audit: Record<string, jest.Mock>;
+  // Forma explícita del mock de Prisma: `Record<string, jest.Mock>` tipaba
+  // `prisma.template` como una función y hacía ilegibles sus delegates
+  // (`prisma.template.findMany` → TS2339). Se declara la forma real que el
+  // servicio usa, como en `imports.processor.spec.ts`.
+  let prisma: {
+    template: {
+      findMany: jest.Mock;
+      findFirst: jest.Mock;
+      count: jest.Mock;
+      create: jest.Mock;
+      update: jest.Mock;
+    };
+  };
+  let audit: { record: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -48,13 +59,19 @@ describe('TemplatesService', () => {
         count: jest.fn().mockResolvedValue(1),
         create: jest
           .fn()
-          .mockImplementation(({ data }) =>
+          .mockImplementation(({ data }: { data: Record<string, unknown> }) =>
             Promise.resolve(mockTemplate({ uuid: 'new-uuid', ...data })),
           ),
         update: jest
           .fn()
-          .mockImplementation(({ where, data }) =>
-            Promise.resolve(mockTemplate({ ...where, ...data })),
+          .mockImplementation(
+            ({
+              where,
+              data,
+            }: {
+              where: Record<string, unknown>;
+              data: Record<string, unknown>;
+            }) => Promise.resolve(mockTemplate({ ...where, ...data })),
           ),
       },
     };
@@ -78,7 +95,7 @@ describe('TemplatesService', () => {
       expect(result.meta.total).toBe(1);
       expect(prisma.template.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ organizationId: 'org-1' }),
+          where: expect.objectContaining({ organizationId: 'org-1' }) as object,
         }),
       );
     });
@@ -89,9 +106,11 @@ describe('TemplatesService', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             OR: expect.arrayContaining([
-              expect.objectContaining({ name: expect.any(Object) }),
-            ]),
-          }),
+              expect.objectContaining({
+                name: expect.any(Object) as object,
+              }) as object,
+            ]) as object,
+          }) as object,
         }),
       );
     });
@@ -100,7 +119,7 @@ describe('TemplatesService', () => {
       await service.findAll(orgUser, { category: 'CAMPAIGN' });
       expect(prisma.template.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ category: 'CAMPAIGN' }),
+          where: expect.objectContaining({ category: 'CAMPAIGN' }) as object,
         }),
       );
     });
@@ -109,7 +128,7 @@ describe('TemplatesService', () => {
       await service.findAll(orgUser, { tone: 'PROFESSIONAL' });
       expect(prisma.template.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ tone: 'PROFESSIONAL' }),
+          where: expect.objectContaining({ tone: 'PROFESSIONAL' }) as object,
         }),
       );
     });
@@ -118,7 +137,7 @@ describe('TemplatesService', () => {
       await service.findAll(orgUser, { angle: 'TRUST' });
       expect(prisma.template.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ angle: 'TRUST' }),
+          where: expect.objectContaining({ angle: 'TRUST' }) as object,
         }),
       );
     });
@@ -127,7 +146,9 @@ describe('TemplatesService', () => {
       await service.findAll(orgUser, { group: 'Bienvenida y postventa' });
       expect(prisma.template.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ group: 'Bienvenida y postventa' }),
+          where: expect.objectContaining({
+            group: 'Bienvenida y postventa',
+          }) as object,
         }),
       );
     });
@@ -195,7 +216,9 @@ describe('TemplatesService', () => {
       await service.remove(orgUser, 'uuid-tpl-1');
       expect(prisma.template.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+          data: expect.objectContaining({
+            deletedAt: expect.any(Date) as Date,
+          }) as object,
         }),
       );
     });
