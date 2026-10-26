@@ -149,6 +149,29 @@ describe('WhatsApp/Messaging (e2e) — Flujo 05/06/07, US1..US8, AU-005/AU-011',
     configureApp(app);
     await app.init();
 
+    // Determinismo horario (M-2). `executeDueAutomations()` evalúa G5 con
+    // `new Date()` y la ventana del lunes es 08:00-19:30 en la zona de la
+    // organización (America/Bogota). Sin fijar el reloj, la suite solo pasaba
+    // si se ejecutaba dentro de esa franja. Se fija un lunes a las 10:00
+    // locales; los timers reales NO se falsean para no afectar a Nest/Prisma.
+    jest.useFakeTimers({
+      now: new Date('2026-10-26T15:00:00.000Z'), // 10:00 America/Bogota
+      doNotFake: [
+        'setTimeout',
+        'clearTimeout',
+        'setInterval',
+        'clearInterval',
+        'setImmediate',
+        'clearImmediate',
+        'nextTick',
+        'queueMicrotask',
+        'performance',
+        'hrtime',
+        'requestAnimationFrame',
+        'cancelAnimationFrame',
+      ],
+    });
+
     prisma = app.get(PrismaService);
     events = app.get(EventEmitter2);
     whatsapp = app.get(WhatsappService);
@@ -313,6 +336,7 @@ describe('WhatsApp/Messaging (e2e) — Flujo 05/06/07, US1..US8, AU-005/AU-011',
     // Restaura la política a su estado previo para no filtrarla a otras suites
     // del mismo proceso (--runInBand comparte `process.env`).
     restoreOutboundPermit?.();
+    jest.useRealTimers();
 
     await deleteFixtureAudits(seedPrisma, {
       slugs: ['whats-org-1', 'whats-org-2'],
@@ -478,7 +502,7 @@ describe('WhatsApp/Messaging (e2e) — Flujo 05/06/07, US1..US8, AU-005/AU-011',
     });
   });
 
-  it('AS-007 — inbound from an unknown number creates a conversation with customerId null (HG-8)', async () => {
+  it('AS-007 — unknown number creates a PENDING contact and links the conversation (spec 018 · Q9/FR-013, supersede a HG-8)', async () => {
     const payload = {
       entry: [
         {
@@ -511,9 +535,28 @@ describe('WhatsApp/Messaging (e2e) — Flujo 05/06/07, US1..US8, AU-005/AU-011',
       .expect(200);
 
     const pending = await prisma.conversation.findFirst({
-      where: { organizationId: org1Id, customerId: null, status: 'OPEN' },
+      where: {
+        organizationId: org1Id,
+        status: 'OPEN',
+        customer: { codcli: 'W579111111111' },
+      },
+      select: {
+        customerId: true,
+        customer: {
+          select: { status: true, name: true, createdBy: true },
+        },
+      },
     });
     expect(pending).not.toBeNull();
+    // HG-8 (spec 017) fue reemplazado por la Decisión 4 de spec 018: el
+    // inbound de un número no vinculado crea un contacto PENDING y enlaza la
+    // conversación, para que el asesor pueda responder de inmediato.
+    expect(pending?.customerId).not.toBeNull();
+    expect(pending?.customer).toEqual({
+      status: 'PENDING',
+      name: 'Contacto WhatsApp +579111111111',
+      createdBy: null,
+    });
   });
 
   it('AS-008 — a replayed inbound webhook is a no-op (HG-13)', async () => {

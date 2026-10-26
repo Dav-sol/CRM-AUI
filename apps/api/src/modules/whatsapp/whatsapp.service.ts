@@ -571,7 +571,11 @@ export class WhatsappService {
         automation.organizationId,
         'customer_no_phone',
       );
-      await this.markAutomationFailed(automation.id);
+      // Fallo determinista de datos, no transitorio: reintentar no cambia el
+      // teléfono y genera una fila FAILED por intento. PIT `pit.md:866`
+      // («reintentos no generan duplicados») y spec 017 AS-002 (una sola
+      // automatización, un solo mensaje) exigen no re-elegir esta fila.
+      await this.markAutomationTerminal(automation.id);
       this.emit('AutomationFailed', null, automation.organizationId, {
         automationId: automation.uuid,
         purchaseId: automation.purchaseId,
