@@ -273,8 +273,15 @@ export class SmsExecutionService {
     await this.prisma.automation.update({
       where: { id: automationId },
       data: {
-        status: isTerminal ? 'ERROR' : 'ERROR',
-        retryCount: { increment: 1 },
+        status: 'ERROR',
+        // Política B (spec 017 Q8/A8 enmendada, 2026-10-26): un fallo terminal
+        // agota el presupuesto de reintentos — retryCount = MAX — para que el
+        // filtro del scheduler (`retryCount: { lt: MAX }`) no vuelva a elegir
+        // la fila. Es el mismo contrato que `markAutomationTerminal` de
+        // WhatsApp. Un fallo recuperable conserva el incremento acotado.
+        ...(isTerminal
+          ? { retryCount: MAX_AUTOMATION_RETRIES }
+          : { retryCount: { increment: 1 } }),
       },
     });
 
