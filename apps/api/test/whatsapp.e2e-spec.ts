@@ -378,7 +378,7 @@ describe('WhatsApp/Messaging (e2e) — Flujo 05/06/07, US1..US8, AU-005/AU-011',
     await seedPrisma.$disconnect();
   });
 
-  it('AS-001 — executes due SCHEDULED automations: OUTBOUND message, EXECUTED, events', async () => {
+  it('AS-001 — executes due SCHEDULED automations: OUTBOUND message, terminal states, events', async () => {
     const collected = collectEvents();
 
     await whatsapp.executeDueAutomations();
@@ -392,15 +392,48 @@ describe('WhatsApp/Messaging (e2e) — Flujo 05/06/07, US1..US8, AU-005/AU-011',
     expect(messages.map((m) => m.status)).toContain('FAILED');
     expect(messages.every((m) => m.direction === 'OUTBOUND')).toBe(true);
 
+    // Policy B (spec 017 Q8/A8 as amended 2026-10-26): a terminal failure ends
+    // the automation in ERROR with retryCount = MAX_AUTOMATION_RETRIES, NOT in
+    // EXECUTED. This expectation changed because the specification changed —
+    // it is not a green-seeking edit: the previous assertion (2 EXECUTED)
+    // encoded A8's original premise «retry is a future concern (out of scope
+    // v1)», which the bounded retry mechanism (G3-02) and policy B superseded.
     const executed = await prisma.automation.findMany({
       where: { organizationId: org1Id, status: 'EXECUTED' },
     });
-    expect(executed).toHaveLength(2);
+    expect(executed).toHaveLength(1);
+
+    const terminal = await prisma.automation.findMany({
+      where: { organizationId: org1Id, status: 'ERROR' },
+    });
+    expect(terminal).toHaveLength(1);
+    expect(terminal[0].retryCount).toBe(3); // MAX_AUTOMATION_RETRIES
+
+    // One FAILED message only: the terminal automation produced exactly one
+    // attempt, and the scheduler will not re-pick it (retryCount < 3 filter).
+    const failed = messages.filter((m) => m.status === 'FAILED');
+    expect(failed).toHaveLength(1);
+    expect(failed[0].automationId).toBe(terminal[0].id);
 
     expect(collected).toContain('MessageQueued');
     expect(collected).toContain('MessageSent');
     expect(collected).toContain('AutomationExecuted');
     expect(collected).toContain('AutomationFailed');
+
+    // Re-running the tick must not resurrect the terminal automation (policy
+    // B: «no further automatic retry is scheduled»). AS-002 covers the
+    // double-send guard; this covers the terminal state specifically.
+    await whatsapp.executeDueAutomations();
+    await delay(50);
+    const afterSecondTick = await prisma.message.findMany({
+      where: { organizationId: org1Id, type: 'AUTOMATIC' },
+    });
+    expect(afterSecondTick).toHaveLength(2);
+    const terminalAfter = await prisma.automation.findUnique({
+      where: { id: terminal[0].id },
+      select: { status: true, retryCount: true },
+    });
+    expect(terminalAfter).toEqual({ status: 'ERROR', retryCount: 3 });
   });
 
   it('AS-002 — AU-011: re-running never sends a second message', async () => {

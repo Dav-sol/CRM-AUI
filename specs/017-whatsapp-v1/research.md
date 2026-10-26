@@ -48,6 +48,8 @@ Inbound `from` number normalized to digits-only (strip non-digits, optional lead
 
 Persist QUEUED → call provider (after commit, FR-003) → on ack update SENT + `sentAt`; on provider status callback update DELIVERED/READ + timestamps; on send error update FAILED (message) + emit `MessageFailed`/`AutomationFailed`; automation stays EXECUTED (AU-004). Provider timeouts mapped to `PROVIDER_ERROR` (502) for REST manual sends and FAILED state for automatic (NR-011). **INFERENCIA** (mechanism not prescribed; consistent with AU-004/AU-011 and event list).
 
+**Superseded — policy B (2026-10-26).** The sentence «automation stays EXECUTED (AU-004)» is kept verbatim above because that is what this entry said; it no longer describes the contract. A failed send never marks the automation `EXECUTED`: it ends in `ERROR`. A retryable failure increments `retryCount` (bounded by `MAX_AUTOMATION_RETRIES = 3`, scheduler filter `retryCount < 3`), while a terminal failure — a deterministic data failure such as `customer_no_phone`, or an ambiguous/non-retryable Pancake error — sets `retryCount = MAX_AUTOMATION_RETRIES` so the scheduler never re-picks it. See spec Q8/A8 for the current contract and H5/G3-02 for the mechanism.
+
 ## R-012 — OpenAPI scaffolds (state)
 
 `specs/api/paths/messages.yaml`, `conversations.yaml` (0 bytes) + `specs/api/components/schemas/Message/` and `Conversation/` (7 files each, 0 bytes). Tags `Conversations` and `Messages` already defined (`info/tags.yaml:33-39`). Root `openapi.yaml` (a3ffbf8) wires paths via per-path `$ref` with `~1`-escaped JSON pointers. Webhook path is NOT part of the REST contract surface but documented in the spec (API_GUIDELINES §24 note). New paths follow the same wiring + re-run `api:lint`/`api:spectral`/`api:validate`.

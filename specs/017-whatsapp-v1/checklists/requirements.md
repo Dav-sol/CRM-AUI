@@ -7,7 +7,7 @@ Traceability: every requirement from the base specs and the approved HUMAN GATES
 | WR-01 | Ejecución automática de automatizaciones (Flujo 05, 05:144-164) | Scheduler executes due SCHEDULED automations → OUTBOUND Message, EXECUTED (US1, FR-001/002/003, AS-001) | ✅ Done |
 | WR-02 | Sin doble envío (AU-011, 03:263-267) | Single-row SCHEDULED→EXECUTED guard; concurrent ticks → single message (FR-002, NR-005, AS-002) | ✅ Done |
 | WR-03 | Solo clientes activos (AU-005, 03:215-218) | INACTIVE/BLOCKED → stays SCHEDULED, no message (FR-001, AS-003) | ✅ Done |
-| WR-04 | Ejecutada nunca se re-ejecuta (AU-004, 03:209-212) | EXECUTED automation never runs again (FR-002, AS-001/002) | ✅ Done |
+| WR-04 | Ejecutada nunca se re-ejecuta (AU-004, 03:209-212) | EXECUTED automation never runs again (FR-002, AS-001/002). Policy B (2026-10-26): a failed automation ends in `ERROR`, never in `EXECUTED`; retryable failures retry while `retryCount < 3`, terminal ones set `retryCount = MAX_AUTOMATION_RETRIES` and are never re-picked (spec Q8/A8, H5/G3-02) | ✅ Done |
 | WR-05 | Envío manual (Flujo 07 respuesta, 01-mvp.md:52) | POST /messages OUTBOUND MANUAL + provider (US2, FR-004, AS-004) | ✅ Done |
 | WR-06 | OPERADOR puede enviar (HG-11, Flujo 07) | Manual send for OPERADOR → 200/201 (FR-011, AS-005) | ✅ Done |
 | WR-07 | Recepción de mensajes (Flujo 06, 05:167-186) | Signed webhook → identify customer, INBOUND Message, conversation OPENED (US3, FR-005, AS-006) | ✅ Done |
