@@ -36,6 +36,12 @@ export interface PancakeMessageSender {
   /** `ID of the admin/staff account that sent the message`. */
   admin_id?: string | null;
   admin_name?: string | null;
+  /**
+   * Identificador del cliente dentro de Pancake. Lo trae el sobre de webhook
+   * (`developer.pancake.biz/openapi/webhook.yaml`), no la respuesta de lectura.
+   * Sirve para resolver `page_customer` sin adivinar por nombre.
+   */
+  page_customer_id?: string;
 }
 
 export interface PancakeMessage {
